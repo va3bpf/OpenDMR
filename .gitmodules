@@ -1,0 +1,3 @@
+[submodule "vocoder"]
+	path = vocoder
+	url = https://github.com/va3bpf/dmr-vocoder.git

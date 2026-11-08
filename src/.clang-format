@@ -1,0 +1,28 @@
+# OpenDMR code format (docs/coding-style.md). Format a file: clang-format -i <file>
+# The FreeRTOS kernel (freertos/*.c, freertos/include) keeps its own format: see freertos/.clang-format.
+BasedOnStyle: LLVM
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+BreakBeforeBraces: Linux
+InsertBraces: true
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+IndentCaseLabels: true
+PointerAlignment: Right
+SpaceBeforeParens: ControlStatements
+AlignConsecutiveMacros: Consecutive
+AlignTrailingComments: true
+AlignAfterOpenBracket: Align
+BinPackArguments: true
+BinPackParameters: true
+SortIncludes: Never
+IncludeBlocks: Preserve
+ReflowComments: false
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
