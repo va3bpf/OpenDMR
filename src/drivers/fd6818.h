@@ -40,6 +40,14 @@ void fd6818_init(void);      // pins and the power on settings
 void fd6818_post_init(void); // after the modem init
 void fd6818_set_fm(uint8_t rx_volume); // the FM settings; rx_volume: the factory analog receive level (0x48)
 void fd6818_set_dmr(void);             // the DMR settings (bandwidth: DMR whatever "wide" says, until fd6818_set_fm())
+// The analog demodulator (fd6818_set_fm() sets FM): AM, or SSB (USB and LSB alike, the tuning picks the sideband).
+// Receive only: AM and SSB use the 12.5 / 6.25 kHz filters whatever "wide" says.
+typedef enum {
+    FD6818_DEMOD_FM,
+    FD6818_DEMOD_AM,
+    FD6818_DEMOD_SSB,
+} fd6818_demod_t;
+void fd6818_set_demod(fd6818_demod_t demod);
 
 void fd6818_write(uint8_t reg, uint16_t value);
 uint16_t fd6818_read(uint8_t reg);

@@ -497,7 +497,7 @@ static bool do_action(keymap_action_t action)
             if (dmr) {
                 tx_target_toggle_timeslot(&channel);
                 ui_key_beep((tuned.flag2 & FLAG2_TIMESLOT_2) ? SOUND_KEY_FIRST_ITEM : SOUND_KEY); // back to TS1
-            } else {
+            } else if (channel.mode == CODEPLUG_MODE_FM) { // AM and SSB have their own filters
                 channel.flag4 ^= FLAG4_BANDWIDTH_25K;
                 ui_key_beep((channel.flag4 & FLAG4_BANDWIDTH_25K) ? SOUND_KEY_FIRST_ITEM : SOUND_KEY);
             }
@@ -507,9 +507,9 @@ static bool do_action(keymap_action_t action)
                 tx_target_clear_timeslot();
             }
             break;
-        case KEYMAP_MODE:
-            channel.mode = dmr ? CODEPLUG_MODE_FM : CODEPLUG_MODE_DMR;
-            ui_key_beep(dmr ? SOUND_KEY_FIRST_ITEM : SOUND_KEY);
+        case KEYMAP_MODE: // FM, AM, USB, LSB, DMR
+            channel.mode = codeplug_mode_step(channel.mode, 1);
+            ui_key_beep((channel.mode == CODEPLUG_MODE_FM) ? SOUND_KEY_FIRST_ITEM : SOUND_KEY);
             break;
         case KEYMAP_TG_OR_SQUELCH_UP:
         case KEYMAP_TG_OR_SQUELCH_DOWN: {
@@ -778,8 +778,11 @@ static void draw(void)
             panel.line_icon = ICONS_TONE;
             panel.line_text = line;
         }
-        bottom.mode = "FM";
-        bottom.item2 = ((channel.flag4 & FLAG4_BANDWIDTH_25K) ? "25K" : "12.5K");
+        bottom.mode = codeplug_mode_name(channel.mode);
+        bottom.item2 = (((channel.mode == CODEPLUG_MODE_FM) && (channel.flag4 & FLAG4_BANDWIDTH_25K)) ? "25K" : "12.5K");
+        if (codeplug_mode_is_ssb(channel.mode)) {
+            bottom.item2 = "3K";
+        }
         if (squelch_shown) {
             int sql = (channel.sql != 0) ? channel.sql : settings.squelch_defaults[radio_band_of(channel.rx_freq)];
 
@@ -794,7 +797,8 @@ static void draw(void)
 
     int power = (channel.libre_dmr_power != 0) ? (channel.libre_dmr_power - 1) : settings.tx_power_level;
 
-    bottom.item1 = bottom_bar_power_label((power < 10) ? power : 9);
+    bottom.item1 = codeplug_mode_can_transmit(channel.mode) ? bottom_bar_power_label((power < 10) ? power : 9)
+                                                             : text(TEXT_RX_ONLY); // AM, USB, LSB
 
     status_bar_draw(&status);
     channel_panel_draw(&panel);

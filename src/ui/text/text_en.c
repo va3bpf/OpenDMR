@@ -321,6 +321,7 @@ const char *const text_en[TEXT_COUNT] = {
     [TEXT_UI_TX_REFUSED] = "Can't transmit",
     [TEXT_UI_TX_TIMEOUT] = "TX timeout",
     [TEXT_UI_RX_ONLY_HINT] = "Set Rx only in CPS",
+    [TEXT_UI_RX_MODE_HINT] = "Switch to FM or DMR",
     [TEXT_UI_OUT_OF_BAND_HINT] = "Not in a TX band",
     [TEXT_UI_RELEASE_PTT] = "Release the PTT",
     [TEXT_UI_UNLOCK_HINT] = "SK2 + * to unlock",

@@ -321,6 +321,7 @@ const char *const text_zh[TEXT_COUNT] = {
     [TEXT_UI_TX_REFUSED] = "不能发射",
     [TEXT_UI_TX_TIMEOUT] = "发射超时",
     [TEXT_UI_RX_ONLY_HINT] = "CPS里设为仅接收",
+    [TEXT_UI_RX_MODE_HINT] = "切换到FM或DMR才能发射",
     [TEXT_UI_OUT_OF_BAND_HINT] = "不在发射频段",
     [TEXT_UI_RELEASE_PTT] = "请松开PTT",
     [TEXT_UI_UNLOCK_HINT] = "SK2 + * 解锁",

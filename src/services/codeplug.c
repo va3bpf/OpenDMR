@@ -292,9 +292,46 @@ static uint32_t channel_address(int number)
 }
 
 // The 56 stored bytes to numbers (frequencies in 10 Hz, tones as numbers)
+// The order of the mode key, and the analog modes as stored in opendmr_mode (codeplug.h)
+static const uint8_t mode_order[] = {CODEPLUG_MODE_FM, CODEPLUG_MODE_AM, CODEPLUG_MODE_USB, CODEPLUG_MODE_LSB,
+                                     CODEPLUG_MODE_DMR};
+// opendmr_mode: OPENDMR_MODE_TAG | 1 AM, 2 USB, 3 LSB; anything else FM (the byte was the GD-77's Tx signalling, 0 ..
+// 3 in an old codeplug: the tag keeps such a value from being taken for a mode)
+static const uint8_t analog_modes[] = {CODEPLUG_MODE_FM, CODEPLUG_MODE_AM, CODEPLUG_MODE_USB, CODEPLUG_MODE_LSB};
+#define ANALOG_MODES     ((uint8_t)(sizeof(analog_modes) / sizeof(analog_modes[0])))
+#define OPENDMR_MODE_TAG 0xA0
+#define MODE_ORDER   ((int)(sizeof(mode_order) / sizeof(mode_order[0])))
+
+const char *codeplug_mode_name(uint8_t mode)
+{
+    static const char *const names[CODEPLUG_MODES] = {
+        [CODEPLUG_MODE_FM] = "FM", [CODEPLUG_MODE_DMR] = "DMR", [CODEPLUG_MODE_AM] = "AM",
+        [CODEPLUG_MODE_USB] = "USB", [CODEPLUG_MODE_LSB] = "LSB",
+    };
+
+    return (mode < CODEPLUG_MODES) ? names[mode] : "FM";
+}
+
+uint8_t codeplug_mode_step(uint8_t mode, int direction)
+{
+    int at = 0;
+
+    while ((at < MODE_ORDER) && (mode_order[at] != mode)) {
+        at++;
+    }
+    at = (at + ((direction < 0) ? (MODE_ORDER - 1) : 1)) % MODE_ORDER;
+    return mode_order[at];
+}
+
 static void channel_from_codeplug(codeplug_channel_t *channel)
 {
-    channel->mode = ((channel->mode == 0) ? CODEPLUG_MODE_FM : CODEPLUG_MODE_DMR);
+    if (channel->mode != 0) {
+        channel->mode = CODEPLUG_MODE_DMR;
+    } else {
+        uint8_t index = (uint8_t)(channel->opendmr_mode ^ OPENDMR_MODE_TAG);
+
+        channel->mode = (index < ANALOG_MODES) ? analog_modes[index] : CODEPLUG_MODE_FM;
+    }
     channel->rx_freq = codeplug_bcd_to_int(channel->rx_freq);
     channel->tx_freq = codeplug_bcd_to_int(channel->tx_freq);
     channel->rx_tone = css_from_codeplug(channel->rx_tone);
@@ -309,7 +346,13 @@ static void channel_from_codeplug(codeplug_channel_t *channel)
 static void channel_to_codeplug(const codeplug_channel_t *channel, codeplug_channel_t *stored)
 {
     memcpy(stored, channel, CHANNEL_SIZE);
-    stored->mode = ((channel->mode == CODEPLUG_MODE_FM) ? 0 : 1);
+    stored->mode = ((channel->mode == CODEPLUG_MODE_DMR) ? 1 : 0);
+    stored->opendmr_mode = 0; // FM, DMR: as the CPS writes it
+    for (uint8_t i = 1; i < ANALOG_MODES; i++) {
+        if (analog_modes[i] == channel->mode) {
+            stored->opendmr_mode = (uint8_t)(OPENDMR_MODE_TAG | i);
+        }
+    }
     stored->rx_freq = int_to_bcd(channel->rx_freq);
     stored->tx_freq = int_to_bcd(channel->tx_freq);
     stored->rx_tone = css_to_codeplug(channel->rx_tone);

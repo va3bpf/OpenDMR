@@ -41,10 +41,36 @@
 #define CODEPLUG_NAME_LENGTH   16
 #define CODEPLUG_CSS_NONE      0xFFFF
 
+// The codeplug knows FM (0) and DMR (1). AM, USB and LSB (receive only) are stored as an analog channel (0, what the
+// CPS shows) with the mode in the byte the OpenGD77 format leaves unused (opendmr_mode: 0xA1 AM, 0xA2 USB, 0xA3 LSB,
+// anything else FM)
 typedef enum {
     CODEPLUG_MODE_FM = 0,
     CODEPLUG_MODE_DMR = 1,
+    CODEPLUG_MODE_AM = 2,
+    CODEPLUG_MODE_USB = 3,
+    CODEPLUG_MODE_LSB = 4,
+    CODEPLUG_MODES
 } codeplug_mode_t;
+
+static inline bool codeplug_mode_is_analog(uint8_t mode)
+{
+    return mode != CODEPLUG_MODE_DMR;
+}
+
+static inline bool codeplug_mode_is_ssb(uint8_t mode)
+{
+    return (mode == CODEPLUG_MODE_USB) || (mode == CODEPLUG_MODE_LSB);
+}
+
+// AM, USB and LSB are receive only: the FD6818 modulates FM only
+static inline bool codeplug_mode_can_transmit(uint8_t mode)
+{
+    return (mode == CODEPLUG_MODE_FM) || (mode == CODEPLUG_MODE_DMR);
+}
+
+const char *codeplug_mode_name(uint8_t mode);  // "FM", "DMR", "AM", "USB", "LSB"
+uint8_t codeplug_mode_step(uint8_t mode, int direction); // the mode key's order: FM, AM, USB, LSB, DMR, around
 
 // A channel as stored (56 bytes), then two values worked out when it is read
 typedef struct {
@@ -62,7 +88,7 @@ typedef struct {
     uint16_t rx_tone; // CTCSS: Hz * 10 once read; DCS: flags and octal digits; CODEPLUG_CSS_NONE
     uint16_t tx_tone;
     uint8_t location_lon2;
-    uint8_t unused1;
+    uint8_t opendmr_mode; // unused in the OpenGD77 format: AM, USB, LSB (codeplug_mode_t comment); read: as stored
     uint8_t libre_dmr_flag1;
     uint8_t rx_signaling;
     uint8_t arts_interval;
