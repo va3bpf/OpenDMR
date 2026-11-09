@@ -442,7 +442,7 @@ static void draw_panel(int i, int tx)
         snprintf(buffer, sizeof(buffer), "%s %d", text(TEXT_APRS_CHANNEL), path_ref(i));
         draw_text(lx, top + 8, buffer, &font_roboto17, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT_LABEL);
     }
-    snprintf(buffer, sizeof(buffer), "%s  %s", ((ch->mode == CODEPLUG_MODE_DMR) ? "DMR" : "FM"),
+    snprintf(buffer, sizeof(buffer), "%s  %s", codeplug_mode_name(ch->mode),
              bottom_bar_power_label((power < 10) ? power : 9));
     draw_text(FB_WIDTH - WIDGET_MARGIN, top + 8, buffer, &font_roboto17, FONT_ALIGN_RIGHT, THEME_COLOUR_TEXT_LABEL);
 

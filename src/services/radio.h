@@ -47,6 +47,7 @@ typedef enum {
     RADIO_TX_OK,
     RADIO_TX_NO_CHANNEL,
     RADIO_TX_RX_ONLY,
+    RADIO_TX_RX_MODE,     // AM, USB, LSB: receive only
     RADIO_TX_OUT_OF_BAND, // not a frequency of the radio, or out of the band limits of the settings
 } radio_tx_check_t;
 

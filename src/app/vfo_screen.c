@@ -117,6 +117,12 @@
 #define LABEL_GAP   10
 
 const uint16_t vfo_screen_steps[VFO_SCREEN_STEPS] = {250, 500, 625, 1000, 1250, 2500, 3000, 5000};
+#define SSB_STEP 10 // USB, LSB: the knob tunes 100 Hz a click whatever the VFO's step
+
+static unsigned step_of(const codeplug_channel_t *v)
+{
+    return codeplug_mode_is_ssb(v->mode) ? SSB_STEP : vfo_screen_steps[(v->vfo_flag5 >> VFO_STEP_SHIFT) % VFO_SCREEN_STEPS];
+}
 
 // The bands of the radio (codeplug_frequency_is_valid()), to go from the end of one to the next with the knob
 static const uint32_t band_edges[][2] = {{13700000, 18000000}, {20000000, 27997500}, {28000000, 52000000}};
@@ -296,7 +302,7 @@ void vfo_screen_leave(void)
 static void step_frequency(int steps, bool tx_frequency)
 {
     codeplug_channel_t *v = vfo();
-    int32_t increment = steps * (int32_t)vfo_screen_steps[(v->vfo_flag5 >> VFO_STEP_SHIFT) % VFO_SCREEN_STEPS];
+    int32_t increment = steps * (int32_t)step_of(v);
     uint32_t rx = v->rx_freq;
     uint32_t tx = v->tx_freq;
 
@@ -413,7 +419,7 @@ static bool scan_skipped(uint32_t frequency)
 static uint32_t scan_next(void)
 {
     codeplug_channel_t *v = vfo();
-    uint32_t step = vfo_screen_steps[(v->vfo_flag5 >> VFO_STEP_SHIFT) % VFO_SCREEN_STEPS];
+    uint32_t step = step_of(v);
     uint32_t low;
     uint32_t high;
     uint32_t f = v->rx_freq;
@@ -482,12 +488,12 @@ static void switch_vfo(void)
     editing_tx = false;
 }
 
-// The first choice of each gets the first item beep (uiVFOMode.c): FM, TS1, 25 kHz
+// The first choice of each gets the first item beep (uiVFOMode.c): FM, TS1, 25 kHz. The mode: FM, AM, USB, LSB, DMR
 static void toggle_mode(void)
 {
     codeplug_channel_t *v = vfo();
 
-    v->mode = ((v->mode == CODEPLUG_MODE_FM) ? CODEPLUG_MODE_DMR : CODEPLUG_MODE_FM);
+    v->mode = codeplug_mode_step(v->mode, 1);
     ui_key_beep((v->mode == CODEPLUG_MODE_FM) ? SOUND_KEY_FIRST_ITEM : SOUND_KEY);
     changed();
 }
@@ -501,6 +507,9 @@ static void toggle_ts_or_bandwidth(void)
         tx_target_toggle_timeslot(v);
         ui_key_beep((target.timeslot == 2) ? SOUND_KEY_FIRST_ITEM : SOUND_KEY); // back to TS1
         return;
+    }
+    if (v->mode != CODEPLUG_MODE_FM) {
+        return; // AM and SSB have their own filters
     }
     v->flag4 ^= FLAG4_BANDWIDTH_25K;
     ui_key_beep((v->flag4 & FLAG4_BANDWIDTH_25K) ? SOUND_KEY_FIRST_ITEM : SOUND_KEY);
@@ -527,9 +536,10 @@ static void change_power(int direction, bool to_user)
     }
 }
 
+// FM, AM, USB, LSB (the squelch, DTMF entry); else DMR
 static bool v_is_fm(void)
 {
-    return (vfo()->mode == CODEPLUG_MODE_FM);
+    return codeplug_mode_is_analog(vfo()->mode);
 }
 
 // uiVFOMode.c: from the band's default when the VFO has none (0), then its own (1 .. 21: 0 .. 100 %)
@@ -837,7 +847,7 @@ static void draw(void)
     bool swapped = ((held & (UI_MODIFIER_SK1 | UI_MODIFIER_SK2)) == (UI_MODIFIER_SK1 | UI_MODIFIER_SK2));
     uint32_t rx = (swapped ? v->tx_freq : v->rx_freq);
     uint32_t tx = (swapped ? v->rx_freq : v->tx_freq);
-    unsigned step = vfo_screen_steps[(v->vfo_flag5 >> VFO_STEP_SHIFT) % VFO_SCREEN_STEPS];
+    unsigned step = step_of(v);
     const char *selected = text(editing_tx ? TEXT_UI_TX : TEXT_UI_RX);
     char buffer[40];
     int32_t x;
@@ -919,9 +929,12 @@ static void draw(void)
 
     vfo_screen_signal(&meter);
     s_meter_draw(S_METER_Y, &meter);
-    bottom.mode = ((v->mode == CODEPLUG_MODE_DMR) ? "DMR" : "FM");
-    bottom.item1 = bottom_bar_power_label(power);
-    bottom.item2 = (((v->mode == CODEPLUG_MODE_FM) && (v->flag4 & FLAG4_BANDWIDTH_25K)) ? "25K" : "12.5K");
+    bottom.mode = codeplug_mode_name(v->mode);
+    bottom.item1 = codeplug_mode_can_transmit(v->mode) ? bottom_bar_power_label(power) : text(TEXT_RX_ONLY);
+    bottom.item2 = ((v->mode == CODEPLUG_MODE_FM) && (v->flag4 & FLAG4_BANDWIDTH_25K)) ? "25K" : "12.5K";
+    if (codeplug_mode_is_ssb(v->mode)) {
+        bottom.item2 = "3K";
+    }
     bottom_bar_draw(&bottom);
 }
 

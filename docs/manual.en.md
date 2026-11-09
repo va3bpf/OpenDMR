@@ -55,7 +55,7 @@ All of these can be changed in Options → Key settings (see [12](#12-lock-quick
 | # long | Reverse repeater (channel mode only) | Same |
 | * | Timeslot | Bandwidth 12.5 / 25 kHz |
 | * long | Back to the channel's own timeslot | — |
-| SK1 + * | FM / DMR | Same |
+| SK1 + * | Mode: FM → AM → USB → LSB → DMR | Same |
 | ▶ / ◀ | Talk group + / − (through the RX group list) | Squelch + / − |
 | SK2 + ▶ / ◀ | Power + / − | Same |
 | SK2 + ▶ long | User power | Same |
@@ -78,7 +78,7 @@ Also: SK2 + menu key opens the channel details directly; SK2 + a digit is a quic
   under it while receiving; the whole bar turns red while transmitting.
 - **Main area**: on the channel screen the zone and position, the channel name (large), the frequency, the talk
   group, the S meter.
-- **Bottom bar**: on the main screens the mode (`DMR`/`FM`), power and bandwidth; on lists what the two keys do.
+- **Bottom bar**: on the main screens the mode (`DMR`/`FM`/`AM`/`USB`/`LSB`), power and bandwidth; on lists what the two keys do.
 - **Lists** (menus, settings): the title bar shows the name and the position (`1/10`), the selected row is orange,
   7 rows a page, ▲ ▼ wrap around at the ends.
 
@@ -156,10 +156,15 @@ and B): **hold the back key** to switch, or choose in the VFO menu.
 | Change the transmit frequency | SK2 + knob, or SK2 + ▲ ▼ |
 | Type a frequency | Digits (e.g. `43500000`: it is set after the 8th digit, or with the menu key; the back key deletes one) |
 | Swap Rx and Tx while held | SK1 + SK2 |
-| FM / DMR | SK1 + * |
-| Squelch (FM) / talk group (DMR) | ▶ ◀ |
+| Mode: FM → AM → USB → LSB → DMR | SK1 + * |
+| Squelch (FM, AM, SSB) / talk group (DMR) | ▶ ◀ |
 
 The top line shows which frequency is being changed (`RX` or `TX`) and the step.
+
+**AM, USB and LSB are receive only** (the RF chip can only transmit FM): the bottom bar shows `Rx Only`, and the PTT
+shows "Switch to FM or DMR". Their squelch is on the signal strength (0 %: always open). In USB and LSB the knob
+tunes 100 Hz a click; tune to the suppressed carrier (e.g. 144.300 MHz), then a little either way until the voice
+sounds right. The mode is kept with the channel and the VFO; the CPS sees such a channel as analog.
 
 ### VFO quick menu (menu key)
 
