@@ -192,7 +192,7 @@ void dmr_compat_set_channel(const codeplug_channel_t *tuned)
     device.trxDMRModeRx = dmo ? DMR_MODE_DMO : DMR_MODE_RMO;
     device.trxDMRModeTx = device.trxDMRModeRx;
     device.currentBandWidthIs25kHz = false;
-    colour_code = tuned->tx_colour & 0x0F;
+    trxSetDMRColourCode(tuned->tx_colour & 0x0F);
     trxDMRID = codeplug_get_dmr_id();
 
     currentRxGroupData.NOT_IN_CODEPLUG_numTGsInGroup = 0;
@@ -226,9 +226,12 @@ uint8_t trxGetDMRColourCode(void)
     return colour_code;
 }
 
+// The modem's colour code too (OpenDM32 trx.c *LOCAL_CC): without it the HR_C7000 kept its reset value, 1, and sent and
+// received colour code 1 whatever the channel's (GitHub issue #3)
 void trxSetDMRColourCode(uint8_t code)
 {
-    colour_code = code;
+    colour_code = code & 0x0F;
+    *LOCAL_CC = colour_code;
 }
 
 int trxGetDMRTimeSlot(void)

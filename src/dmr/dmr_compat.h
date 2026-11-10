@@ -102,6 +102,7 @@
 #define REG_X03            (volatile uint32_t *)(MODEM_REG_BASE + 0x0378)
 #define REG_X04            (volatile uint32_t *)(MODEM_REG_BASE + 0x037C)
 #define CRC8_INIT          (volatile uint32_t *)(MODEM_REG_BASE + 0x0380)
+#define LOCAL_CC           (volatile uint32_t *)(MODEM_REG_BASE + 0x0384) // the colour code, Tx and Rx (OpenDM32 trx.c)
 #define VOICE_EMB_CTRL     (volatile uint32_t *)(MODEM_REG_BASE + 0x0388)
 #define SCRAMBLE_REG       (volatile uint32_t *)(MODEM_REG_BASE + 0x038C)
 #define RX_TYPE_INFO       (volatile uint32_t *)(MODEM_REG_BASE + 0x0390)
