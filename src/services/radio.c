@@ -688,13 +688,18 @@ static void rf_ramp_step(uint8_t level)
 }
 
 // 0x2b440: the LNA off, a wait by band (stock: 1.6 / 1.0 / 1.2 ms picked from a channel field, not mapped yet; here VHF /
-// 220 MHz / UHF, unverified), the Tx frequency, the PA switch, the ramp up
+// 220 MHz / UHF), the Tx frequency, the PA switch, the ramp up. The wait counts from the Tx interrupt, which comes
+// RF_CONTROL byte 1 bits ahead of the burst (modem.c RF_CONTROL_DIRECT, 0x1F: 3.2 ms): 1.6 ms puts the PA at full 0.87 ms
+// before the timeslot. With the old direct mode lead (0x0A) no wait was early enough (2026-11-10). Measured with a weak
+// signal (bit errors in the received bursts): VHF 1600 none; UHF 1600 left the first symbol of most bursts wrong, 1200
+// (the PA full 1.25 ms ahead) none. 220 MHz not measured.
+// Not const: tuned over the cable (dm32dbg.py mwb rf_on_waits ...)
+uint16_t rf_on_waits[3] = {1600, 1000, 1200};
+
 static void rf_on(void)
 {
-    static const uint16_t waits[3] = {1600, 1000, 1600}; // UHF 1600: the PA full 0.85 ms before the timeslot (1200: 1.25)
-
     lna(false, 0);
-    rf_wait(waits[radio_band_of(channel.tx_freq)]);
+    rf_wait(rf_on_waits[radio_band_of(channel.tx_freq)]);
     fd6818_dmr_burst_tx(channel.tx_freq);
     gpio_output((channel.tx_freq >= UHF_FROM) ? PIN_PA_UHF : PIN_PA_VHF, true);
     for (int i = 0; i < (int)sizeof(pa_ramp); i++) {
