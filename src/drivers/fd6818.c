@@ -123,10 +123,13 @@ static const fd6818_setting_t post_init_settings[] = {
 
 // FM, as the OpenDM32 releases (0x0304E8F0 in 20260711); 0x50 = 0x3B20 (the DMR value 0xBB20 gives a low deviation)
 // DMR, as the OpenDM32 releases (0x0304E8B1 in 20260711): 0x50 = 0xBB20, the FD6818 gives the HR_C7000 its raw
-// baseband (without bit 15 it keeps sending demodulated audio and no DMR sync is ever found)
+// baseband (without bit 15 it keeps sending demodulated audio and no DMR sync is ever found). 0x7E: the AGC automatic
+// (bit 15 clear; OpenDM32 0xB03F fixes it at the highest gain): with the gain fixed the RSSI tops out at about
+// -57 dBm (S8) however close the station, automatic it reads S9+40 like FM; the bad frames measured the same
+// (32 % fixed, 31 % automatic, the same weak signal, 2026-11-10)
 static const fd6818_setting_t dmr_settings[] = {
     {0x31, 0x0000}, {0x42, 0x6F5A}, {0x2A, 0x7400}, {0x47, 0x0000}, {0x30, 0x0000}, {0x13, 0x037E}, {0x47, 0x0140},
-    {0x48, 0xBBBF}, {0x7E, 0xB03F}, {0x2B, 0x0700}, {0x43, 0x4048}, {0x78, 0x6968}, {0x30, 0x0000}, {0x37, 0x1F1F},
+    {0x48, 0xBBBF}, {0x7E, 0x303F}, {0x2B, 0x0700}, {0x43, 0x4048}, {0x78, 0x6968}, {0x30, 0x0000}, {0x37, 0x1F1F},
     {0x50, 0xBB20}, {0x30, 0x0000}, {0x30, 0xBFF1}, {0x47, 0x0140}, {0x3F, 0x0000}, {0xC7, 0x0140}, {0x47, 0x0140},
 };
 

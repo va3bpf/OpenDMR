@@ -458,16 +458,28 @@ static void rx_beep_end_check(void)
 }
 
 // DMR: the signal and the noise for the S meter and the engine's SNR check (trxGetSNRMargindBm()); the engine does
-// the rest (the green LED, the speaker)
+// the rest (the green LED, the speaker). The receiver follows the timeslots: a reading in the other slot is the noise
+// floor, even under a steady carrier (measured: 120 and 85 in turn), so the S meter takes the highest of the last
+// DMR_PEAK_SAMPLES readings (100 ms at SAMPLE_MS: always one in the 30 ms slot of every 60 ms), not their average
+#define DMR_PEAK_SAMPLES 4
+
 static void dmr_signal(void)
 {
+    static uint8_t recent[DMR_PEAK_SAMPLES];
+    static uint8_t recent_index;
     uint8_t signal;
     uint8_t noise;
+    uint8_t peak = 0;
 
     fd6818_read_signal(&signal, &noise);
     signal_raw = signal;
     noise_raw = noise;
-    add_sample(signal);
+    recent[recent_index] = signal;
+    recent_index = (uint8_t)((recent_index + 1) % DMR_PEAK_SAMPLES);
+    for (int i = 0; i < DMR_PEAK_SAMPLES; i++) {
+        peak = (recent[i] > peak) ? recent[i] : peak;
+    }
+    add_sample(peak);
 }
 
 static void RAM_CODE squelch_check(void)
