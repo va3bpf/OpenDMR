@@ -171,6 +171,7 @@ void dmr_channel(const codeplug_channel_t *channel)
 
     uiDataGlobal.displayQSOState = QSO_DISPLAY_DEFAULT_SCREEN;
     dmr_compat_set_channel(channel);
+    HRC7000ClearColorCodeSynchronisation(); // as uiChannelMode.c after trxSetDMRColourCode()
     HRC7000UpdateRepeaterMode();
     CPU_CRITICAL_ENTER();
     HRC7000InitDigital();

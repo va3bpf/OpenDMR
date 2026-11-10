@@ -78,6 +78,8 @@
 #define SQUELCH_MAX        70
 #define SQUELCH_STEP       3
 #define SQUELCH_HYSTERESIS 3
+#define RSSI_SQUELCH_MIN_DBM (-128)
+#define RSSI_SQUELCH_STEP    3
 #define CSS_HOLD           6 // checks a receive tone may be missing before the speaker closes
 #define SIGNAL_SAMPLES     10
 #define SIGNAL_MOVE        2 // the shown signal follows the average when it moved this much
@@ -131,9 +133,21 @@ static volatile uint8_t signal_shown = 0;
 
 /* Channel facts */
 
+// FM: transmits, has the noise squelch and the tones
 static bool is_fm(void)
 {
     return has_channel && (channel.mode == CODEPLUG_MODE_FM);
+}
+
+// FM, AM, USB, LSB: the FD6818 demodulates, the speaker from its audio output
+static inline bool is_analog(void)
+{
+    return has_channel && codeplug_mode_is_analog(channel.mode);
+}
+
+static fd6818_demod_t demod_of(uint8_t mode)
+{
+    return (mode == CODEPLUG_MODE_AM) ? FD6818_DEMOD_AM : (codeplug_mode_is_ssb(mode) ? FD6818_DEMOD_SSB : FD6818_DEMOD_FM);
 }
 
 static bool is_wide(void)
@@ -152,6 +166,18 @@ static int squelch_level(void)
     int level = (channel.sql != 0) ? channel.sql : settings.squelch_defaults[radio_band_of(channel.rx_freq)];
 
     return SQUELCH_MAX - ((level - 1) * SQUELCH_STEP);
+}
+
+// AM and SSB: the FM noise reading means nothing there, the squelch is on the signal (raw RSSI, 1 dB a step): level 1
+// (0 %) always open, then from -128 dBm up by 3 dB a level (-71 dBm at 100 %). 0: open.
+static int RAM_CODE rssi_squelch_level(void)
+{
+    int level = (channel.sql != 0) ? channel.sql : settings.squelch_defaults[radio_band_of(channel.rx_freq)];
+
+    if (level <= 1) {
+        return 0;
+    }
+    return RSSI_SQUELCH_MIN_DBM + ((level - 2) * RSSI_SQUELCH_STEP) + ((channel.rx_freq >= UHF_FROM) ? 167 : 177);
 }
 
 /* Pins */
@@ -282,7 +308,7 @@ static void receive_on(void)
     gpio_output(PIN_PA_UHF, false);
     lna(true, channel.rx_freq);
     fd6818_receive(wide);
-    if (is_fm()) {
+    if (is_analog()) {
         modem_fm_receive(wide, factory_cal_rx_dac_gain());
     }
     fd6818_set_frequency(channel.rx_freq, wide);
@@ -295,7 +321,7 @@ static void eco_reset(void);
 static void apply_channel(void)
 {
     const factory_cal_t *cal = factory_cal_get();
-    bool was_fm = is_fm();
+    bool was_analog = is_analog();
 
     eco_reset(); // the channel is set up receiving: the power saving starts over
 
@@ -307,23 +333,23 @@ static void apply_channel(void)
 
     // The FM squelch of the channel left; in DMR the engine has the speaker and the LED, and the FD6818 audio register
     // its DMR setting (the FM value there stops the baseband to the HR_C7000: no DMR sync after a retune)
-    if (was_fm) {
+    if (was_analog) {
         squelch_close();
     }
     settled_at = xTaskGetTickCount() + pdMS_TO_TICKS(TUNE_SETTLE_MS);
     // FM as the stock firmware: the speaker from the FD6818's audio output; through the baseband (switch low, as the
     // DMR receive needs it) the CPU, flash and display activity was heard in the FM audio
     taskENTER_CRITICAL();
-    audio_sw_fm = is_fm();
+    audio_sw_fm = is_analog();
     audio_switch();
     taskEXIT_CRITICAL();
     // The mic to the FD6818 for FM (high), to the modem's codec for DMR (low), set with the mode as the stock firmware
     // does: switched at each DMR transmission, it put a DC step and a click (to -32000) into the first 100 ms of the
     // capture, sent as a pop at the start of every transmission
-    gpio_output(PIN_MIC_MUT, is_fm());
+    gpio_output(PIN_MIC_MUT, is_analog());
     memset(samples, 0, sizeof(samples));
     signal_shown = 0;
-    if (dmr_on && (!has_channel || is_fm())) {
+    if (dmr_on && (!has_channel || is_analog())) {
         dmr_leave();
         dmr_on = false;
     }
@@ -335,10 +361,14 @@ static void apply_channel(void)
         return;
     }
 
-    if (is_fm()) {
-        // FM set up (trxSetModeAndBandwidth()): the baseband, the FD6818 FM table and level, then the channel
+    if (is_analog()) {
+        // FM set up (trxSetModeAndBandwidth()): the baseband, the FD6818 FM table and level, then the channel; AM and
+        // SSB the same, then their demodulator
         modem_fm_receive(is_wide(), factory_cal_rx_dac_gain());
         fd6818_set_fm(factory_cal_analog_rx_volume());
+        if (!is_fm()) {
+            fd6818_set_demod(demod_of(channel.mode));
+        }
         modem_set_frequency_calibration(cal->valid, cal->osc_tune, factory_cal_mod_bias(channel.tx_freq));
         receive_on();
     } else {
@@ -428,38 +458,60 @@ static void rx_beep_end_check(void)
 }
 
 // DMR: the signal and the noise for the S meter and the engine's SNR check (trxGetSNRMargindBm()); the engine does
-// the rest (the green LED, the speaker)
+// the rest (the green LED, the speaker). The receiver follows the timeslots: a reading in the other slot is the noise
+// floor, even under a steady carrier (measured: 120 and 85 in turn), so the S meter takes the highest of the last
+// DMR_PEAK_SAMPLES readings (100 ms at SAMPLE_MS: always one in the 30 ms slot of every 60 ms), not their average
+#define DMR_PEAK_SAMPLES 4
+
 static void dmr_signal(void)
 {
+    static uint8_t recent[DMR_PEAK_SAMPLES];
+    static uint8_t recent_index;
     uint8_t signal;
     uint8_t noise;
+    uint8_t peak = 0;
 
     fd6818_read_signal(&signal, &noise);
     signal_raw = signal;
     noise_raw = noise;
-    add_sample(signal);
+    recent[recent_index] = signal;
+    recent_index = (uint8_t)((recent_index + 1) % DMR_PEAK_SAMPLES);
+    for (int i = 0; i < DMR_PEAK_SAMPLES; i++) {
+        peak = (recent[i] > peak) ? recent[i] : peak;
+    }
+    add_sample(peak);
 }
 
 static void RAM_CODE squelch_check(void)
 {
     uint8_t signal;
     uint8_t noise;
-    int level = squelch_level();
+    bool fm = is_fm();
+    int level = fm ? squelch_level() : rssi_squelch_level();
     // the receive tone of the channel, unless the analog filter of the quick menu is "none" (trxAnalogFilterLevel)
-    bool tone = (channel.rx_tone != CODEPLUG_CSS_NONE) && (settings.analog_filter_level != 0);
+    bool tone = fm && (channel.rx_tone != CODEPLUG_CSS_NONE) && (settings.analog_filter_level != 0);
+    bool open;
+    bool close;
 
     fd6818_read_signal(&signal, &noise);
     signal_raw = signal;
     noise_raw = noise;
     add_sample(signal);
 
-    if (!carrier && (noise < level) && ((int32_t)(xTaskGetTickCount() - settled_at) >= 0)) {
+    if (fm) {
+        open = (noise < level);
+        close = (noise > (level + SQUELCH_HYSTERESIS));
+    } else {
+        open = (signal >= level);
+        close = (signal < (level - SQUELCH_HYSTERESIS));
+    }
+    if (!carrier && open && ((int32_t)(xTaskGetTickCount() - settled_at) >= 0)) {
         carrier = true;
         css_missing = 0;
         fd6818_af_out(true);
         leds_green(true);
         post_signal();
-    } else if (carrier && (noise > (level + SQUELCH_HYSTERESIS))) {
+    } else if (carrier && close) {
         if (speaker) {
             rx_beep_end();
         }
@@ -648,13 +700,18 @@ static void rf_ramp_step(uint8_t level)
 }
 
 // 0x2b440: the LNA off, a wait by band (stock: 1.6 / 1.0 / 1.2 ms picked from a channel field, not mapped yet; here VHF /
-// 220 MHz / UHF, unverified), the Tx frequency, the PA switch, the ramp up
+// 220 MHz / UHF), the Tx frequency, the PA switch, the ramp up. The wait counts from the Tx interrupt, which comes
+// RF_CONTROL byte 1 bits ahead of the burst (modem.c RF_CONTROL_DIRECT, 0x1F: 3.2 ms): 1.6 ms puts the PA at full 0.87 ms
+// before the timeslot. With the old direct mode lead (0x0A) no wait was early enough (2026-11-10). Measured with a weak
+// signal (bit errors in the received bursts): VHF 1600 none; UHF 1600 left the first symbol of most bursts wrong, 1200
+// (the PA full 1.25 ms ahead) none. 220 MHz not measured.
+// Not const: tuned over the cable (dm32dbg.py mwb rf_on_waits ...)
+uint16_t rf_on_waits[3] = {1600, 1000, 1200};
+
 static void rf_on(void)
 {
-    static const uint16_t waits[3] = {1600, 1000, 1600}; // UHF 1600: the PA full 0.85 ms before the timeslot (1200: 1.25)
-
     lna(false, 0);
-    rf_wait(waits[radio_band_of(channel.tx_freq)]);
+    rf_wait(rf_on_waits[radio_band_of(channel.tx_freq)]);
     fd6818_dmr_burst_tx(channel.tx_freq);
     gpio_output((channel.tx_freq >= UHF_FROM) ? PIN_PA_UHF : PIN_PA_VHF, true);
     for (int i = 0; i < (int)sizeof(pa_ramp); i++) {
@@ -858,7 +915,7 @@ bool radio_aprs_sent(void)
 static bool vox_wanted(void)
 {
     return has_channel && (channel.flag4 & FLAG4_VOX) && !(channel.flag4 & FLAG4_RX_ONLY) &&
-           (settings.vox_threshold != 0);
+           codeplug_mode_can_transmit(channel.mode) && (settings.vox_threshold != 0);
 }
 
 static void vox_post(bool press)
@@ -1101,7 +1158,7 @@ static void RAM_CODE radio_task(void *arg)
         }
         if (rx_off) {
             // the receiver off (power saving): nothing to read
-        } else if (is_fm() && !transmitting) {
+        } else if (is_analog() && !transmitting) {
             squelch_check();
         } else if (dmr_on) {
             dmr_signal();
@@ -1186,6 +1243,9 @@ radio_tx_check_t radio_tx_check(void)
     }
     if (c->flag4 & FLAG4_RX_ONLY) {
         return RADIO_TX_RX_ONLY;
+    }
+    if (!codeplug_mode_can_transmit(c->mode)) {
+        return RADIO_TX_RX_MODE;
     }
     if (!codeplug_frequency_is_valid(c->tx_freq) || !in_band_limits(c->tx_freq)) {
         return RADIO_TX_OUT_OF_BAND;

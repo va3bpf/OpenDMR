@@ -36,6 +36,7 @@
 #include "hw.h"
 #include "vocoder.h"
 #include "ambe.h"
+#include "rx_capture.h"
 
 extern uint8_t __vocoder_ram_start[], __vocoder_ram_end[], __vocoder_flash_start[];
 
@@ -80,7 +81,7 @@ void vocoderDecodeFrame(const uint8_t *in9, int16_t *pcm)
         ambe_dec_init(&decoder);
         decoder_ready = 1;
     }
-    ambe_dec_frame(&decoder, in9, pcm);
+    rx_capture_frame(in9, ambe_dec_frame(&decoder, in9, pcm)); // debug: the frames to the flash (rx_capture.h)
 }
 
 void vocoderEncodeFrame(const int16_t *pcm, uint8_t *out9)
@@ -98,6 +99,7 @@ void vocoderReset(void)
         decoder_ready = 0;
         encoder_ready = 0;
     }
+    rx_capture_new_call();
 }
 
 uint32_t vocoder_bench(uint32_t what_n, const uint8_t *data)

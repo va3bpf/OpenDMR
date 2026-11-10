@@ -33,6 +33,7 @@
 #include "hw.h"
 #include "hal.h"
 #include "leds.h"
+#include "settings.h"
 
 #define PIN_LED_GREEN 32
 #define PIN_LED_RED   33
@@ -43,12 +44,18 @@ void leds_init(void)
     gpio_output(PIN_LED_RED, false);
 }
 
+// Options -> LEDs off (SETTINGS_BIT_ALL_LEDS_DISABLED): both stay dark; the next change after the option is set
+static inline bool RAM_CODE allowed(bool on)
+{
+    return on && ((settings.bitfield_options & SETTINGS_BIT_ALL_LEDS_DISABLED) == 0);
+}
+
 void RAM_CODE leds_green(bool on)
 {
-    gpio_output(PIN_LED_GREEN, on);
+    gpio_output(PIN_LED_GREEN, allowed(on));
 }
 
 void RAM_CODE leds_red(bool on)
 {
-    gpio_output(PIN_LED_RED, on);
+    gpio_output(PIN_LED_RED, allowed(on));
 }

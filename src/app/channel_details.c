@@ -284,9 +284,9 @@ static void change(int item, int direction, bool fast, uint8_t modifiers)
         case ITEM_TX:
             apply_shift(direction);
             break;
-        case ITEM_MODE: // RIGHT: FM, LEFT: DMR (DMR is 12.5 kHz)
-            edit.mode = (on ? CODEPLUG_MODE_FM : CODEPLUG_MODE_DMR);
-            if (!on) {
+        case ITEM_MODE: // FM, AM, USB, LSB, DMR (DMR is 12.5 kHz)
+            edit.mode = codeplug_mode_step(edit.mode, direction);
+            if (edit.mode == CODEPLUG_MODE_DMR) {
                 set_bit(&edit.flag4, FLAG4_BANDWIDTH_25K, false);
             }
             break;
@@ -448,7 +448,7 @@ static void format_item(int item, char *label, size_t label_size, char *out, siz
             format_frequency(edit.tx_freq, out, size);
             break;
         case ITEM_MODE:
-            snprintf(out, size, "%s", (fm ? "FM" : "DMR"));
+            snprintf(out, size, "%s", codeplug_mode_name(edit.mode));
             break;
         case ITEM_DMR_ID:
             if (fm) {

@@ -72,6 +72,24 @@
 #define BANDWIDTH_25 0x3028
 #define BANDWIDTH_12 0x4008
 #define BANDWIDTH_DMR 0x4048 // DMR (always 12.5 kHz): with the FM value the repeater downlink wasn't decoded
+#define BANDWIDTH_SSB 0x3658 // 6.25 kHz mode, RF filter 3 kHz (BK4819_FILTER_BW_NARROWER of the UV-K5 firmware)
+
+// The demodulator (BK4819: 0x47 bits 11:8 the AF output), as RADIO_SetModulation() of the UV-K5 firmware (egzumer):
+// FM 1, AM 7, USB 5 ("baseband 2") with the IF at 0, the chip then a product detector. LSB is the same setting: with
+// the IF at 0 both sidebands come through, the tuning picks one (fagci's firmware does the same). AFC off but in FM.
+#define AF_MUTED  0x6042
+#define AF_FM     0x1
+#define AF_AM     0x7
+#define AF_SSB    0x5
+#define REG_IF    0x3D
+#define REG_AFC   0x73
+#define AFC_OFF   0x0010
+#define REG_AGC_TOP  0x14 // the lowest gain of the AGC table
+#define REG_AGC_THR  0x49 // the AGC thresholds
+#define AGC_TOP_FM   0x0019
+#define AGC_THR_FM   0x2A38
+#define AGC_TOP_AM   0x0000
+#define AGC_THR_AM   ((50 << 7) | 32) // BK4819_InitAGC(true)
 
 #define CTCSS_SCALE 20649 // register = Hz * 20.64888 (the DCS bit rate 134.4 Hz is 0x0AD7)
 #define DCS_TONE    0x0AD7
@@ -105,18 +123,31 @@ static const fd6818_setting_t post_init_settings[] = {
 
 // FM, as the OpenDM32 releases (0x0304E8F0 in 20260711); 0x50 = 0x3B20 (the DMR value 0xBB20 gives a low deviation)
 // DMR, as the OpenDM32 releases (0x0304E8B1 in 20260711): 0x50 = 0xBB20, the FD6818 gives the HR_C7000 its raw
-// baseband (without bit 15 it keeps sending demodulated audio and no DMR sync is ever found)
+// baseband (without bit 15 it keeps sending demodulated audio and no DMR sync is ever found). 0x7E: the AGC automatic
+// (bit 15 clear; OpenDM32 0xB03F fixes it at the highest gain): with the gain fixed the RSSI tops out at about
+// -57 dBm (S8) however close the station, automatic it reads S9+40 like FM; the bad frames measured the same
+// (32 % fixed, 31 % automatic, the same weak signal, 2026-11-10)
 static const fd6818_setting_t dmr_settings[] = {
     {0x31, 0x0000}, {0x42, 0x6F5A}, {0x2A, 0x7400}, {0x47, 0x0000}, {0x30, 0x0000}, {0x13, 0x037E}, {0x47, 0x0140},
-    {0x48, 0xBBBF}, {0x7E, 0xB03F}, {0x2B, 0x0700}, {0x43, 0x4048}, {0x78, 0x6968}, {0x30, 0x0000}, {0x37, 0x1F1F},
+    {0x48, 0xBBBF}, {0x7E, 0x303F}, {0x2B, 0x0700}, {0x43, 0x4048}, {0x78, 0x6968}, {0x30, 0x0000}, {0x37, 0x1F1F},
     {0x50, 0xBB20}, {0x30, 0x0000}, {0x30, 0xBFF1}, {0x47, 0x0140}, {0x3F, 0x0000}, {0xC7, 0x0140}, {0x47, 0x0140},
 };
 
 static bool dmr = false; // the DMR settings are in: its bandwidth setting
+static fd6818_demod_t demod = FD6818_DEMOD_FM;
+static uint16_t af_on = AF_MUTED | (AF_FM << 8); // 0x6142: the receive audio out
+static uint16_t if_default;  // 0x3D and 0x2F as the chip starts (fd6818_post_init()), for FM
+static uint16_t reg_2f_default;
 
 static uint16_t bandwidth(bool wide)
 {
-    return dmr ? BANDWIDTH_DMR : (wide ? BANDWIDTH_25 : BANDWIDTH_12);
+    if (dmr) {
+        return BANDWIDTH_DMR;
+    }
+    if (demod == FD6818_DEMOD_SSB) {
+        return BANDWIDTH_SSB;
+    }
+    return (wide && (demod == FD6818_DEMOD_FM)) ? BANDWIDTH_25 : BANDWIDTH_12;
 }
 
 static const fd6818_setting_t fm_settings[] = {
@@ -252,6 +283,8 @@ void fd6818_init(void)
 void fd6818_post_init(void)
 {
     WRITE_TABLE(post_init_settings);
+    if_default = fd6818_read(REG_IF);
+    reg_2f_default = fd6818_read(0x2F);
 }
 
 // The FM table, then the receive level as the stock firmware (0x300f148: 0x31E0 | level)
@@ -260,6 +293,27 @@ void fd6818_set_fm(uint8_t rx_volume)
     dmr = false;
     WRITE_TABLE(fm_settings);
     fd6818_write(REG_VOLUME, 0x31E0 | (rx_volume & 0x0F));
+    fd6818_set_demod(FD6818_DEMOD_FM);
+}
+
+// AM as the UV-K5 firmwares with the "AM fix" registers (armel/uv-k1-k5v3-firmware-custom PR 15, fagci's hawk5): the
+// AM AGC, 0x31 bit 0, the noise gate times, the 300 Hz high pass off; FM back to the FM table's values
+void fd6818_set_demod(fd6818_demod_t new_demod)
+{
+    bool am = (new_demod == FD6818_DEMOD_AM);
+
+    demod = new_demod;
+    af_on = (uint16_t)(AF_MUTED | ((am ? AF_AM : ((new_demod == FD6818_DEMOD_SSB) ? AF_SSB : AF_FM)) << 8));
+    fd6818_write(REG_AF, AF_MUTED);
+    fd6818_write(REG_IF, (new_demod == FD6818_DEMOD_SSB) ? 0 : if_default);
+    fd6818_write(REG_AFC, (uint16_t)((fd6818_read(REG_AFC) & ~AFC_OFF) | ((new_demod == FD6818_DEMOD_FM) ? 0 : AFC_OFF)));
+    fd6818_write(0x31, (uint16_t)((fd6818_read(0x31) & ~1u) | (am ? 1u : 0u)));
+    fd6818_write(0x42, am ? 0x6F5C : 0x6F5A);
+    fd6818_write(0x2A, am ? 0x7434 : 0x7400);
+    fd6818_write(0x2B, am ? 0x0600 : 0xC000);
+    fd6818_write(0x2F, am ? 0x9990 : reg_2f_default);
+    fd6818_write(REG_AGC_TOP, am ? AGC_TOP_AM : AGC_TOP_FM);
+    fd6818_write(REG_AGC_THR, am ? AGC_THR_AM : AGC_THR_FM);
 }
 
 // AT1846sSetMode(RADIO_MODE_DIGITAL)
@@ -494,7 +548,7 @@ void fd6818_tx_fsk(const uint8_t *data, uint32_t length, bool wide)
 
 void RAM_CODE fd6818_af_out(bool on)
 {
-    fd6818_write(REG_AF, on ? 0x6142 : 0x6042);
+    fd6818_write(REG_AF, on ? af_on : AF_MUTED);
 }
 
 /* CTCSS and DCS */
