@@ -81,7 +81,11 @@
 #define WORK_MODE_FM       0x80
 #define WORK_MODE_FM_TX    0xEE // stock, transmitting FM
 #define RF_MODE_DIRECT     0x03269860 // RF_MODE bit 11 in direct mode (stock 0x301d9c0)
-#define RF_CONTROL_DIRECT  0x00040A0A
+// RF_CONTROL: byte 0 the receive start, byte 1 the Tx interrupt ahead of the burst, in bits (104 us). Direct mode had
+// 0x0A (1.04 ms), too short for the PA to settle before the data: the first voice frame of each burst came out bad
+// (measured 2026-11-10: 77 % of them at UHF). 0x1F as the stock repeater mode (3.2 ms) with the stock 1.6 ms wait puts
+// the PA at full 0.87 ms before the timeslot: 2 %.
+#define RF_CONTROL_DIRECT  0x00041F0A
 #define DEFAULT_SIG_CENTER 0x6D6C0000 // without a factory table: the radio the port was developed on
 #define DEFAULT_MOD_BIAS   0x01F0FFFF
 

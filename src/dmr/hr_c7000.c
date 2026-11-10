@@ -108,7 +108,7 @@ void HRC7000SetRepeaterMode(bool rmo)
 {
 	repeaterMode = rmo;
 	*RF_MODE = (rmo ? 0x03269060 : 0x03269860);
-	*RF_CONTROL = (rmo ? 0x00041F1A : 0x00040A0A);
+	*RF_CONTROL = (rmo ? 0x00041F1A : 0x00041F0A); // direct: the Tx lead of repeater mode (modem.c RF_CONTROL_DIRECT)
 }
 
 static void hrc7000RepeaterRxReset(void);
@@ -2889,7 +2889,7 @@ void HRC7000SetDMR(void)
 	DM32_TRACE(0x20D);
 	}
 	// As in the OpenDM32 releases (HRC7000SetDMR at 0x303E16C in 20260711):
-	// RF_CONTROL / RF_MODE keep their HRC7000Init() values (0x00040A0A / 0x03269860) in DMR too,
+	// RF_CONTROL / RF_MODE keep their HRC7000Init() values (0x00041F0A / 0x03269860) in DMR too,
 	// the DAC is powered up (HRC7000SetFMRx() powers it down), the DMR mic gain is re-applied
 	// (FM uses the same GCR_ADCL register), and the layer 2 timeslots are switched off and on again.
 	HRC7000SetDMRModemCalibration();
