@@ -48,6 +48,7 @@
 #include "fm_radio.h"
 #include "radio.h"
 #include "gps.h"
+#include "rx_capture.h"
 #include "sound.h"
 #include "flash.h"
 #include "systime.h"
@@ -108,6 +109,7 @@ int main(void)
     input_start();
     radio_start();
     gps_start();
+    rx_capture_start(); // debug: the received AMBE frames to the flash
     sound_start();
     sound_play_boot();
     ui_set_event_hook(screen_hooks);

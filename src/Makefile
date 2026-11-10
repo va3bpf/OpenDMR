@@ -22,6 +22,11 @@ CPU     := -mcpu=ck803s
 VOCODER := ../vocoder/c/ambe
 INCDIRS := $(VOCODER) config hal drivers dmr graphics graphics/fonts ui ui/text ui/widgets services app freertos/include freertos/portable/CK803
 CFLAGS  := $(CPU) $(addprefix -I,$(INCDIRS)) -O2 -Wall -ffunction-sections -fdata-sections -MMD -MP
+# Debug: every received AMBE frame to the data flash (services/rx_capture.h, read with tools/debug/rx_capture.py):
+# make clean && make RX_CAPTURE=1. Off by default (9 KB of RAM, writes below the window)
+ifeq ($(RX_CAPTURE),1)
+CFLAGS  += -DRX_CAPTURE
+endif
 ASFLAGS := $(CPU) $(addprefix -I,$(INCDIRS)) -MMD -MP
 LDFLAGS := $(CPU) -nostartfiles -Wl,--gc-sections -Wl,--undefined=vocoder_bench -Wl,--undefined=serial_update_marker -Wl,-Map,$(TARGET).map -T ckcpu.ld
 LIBS    := -lm -lc -lgcc
