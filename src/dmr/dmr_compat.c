@@ -283,7 +283,7 @@ void dmr_compat_frequency_calibration(void)
 {
     const factory_cal_t *cal = factory_cal_get();
 
-    modem_set_frequency_calibration(cal->valid, cal->osc_tune, factory_cal_mod_bias(channel.tx_freq));
+    modem_set_frequency_calibration(cal->valid, cal->osc_tune, cal->rx_adjust, factory_cal_mod_bias(channel.tx_freq));
 }
 
 /* Settings and the codeplug */

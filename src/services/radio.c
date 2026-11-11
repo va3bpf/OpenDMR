@@ -361,7 +361,7 @@ static void apply_channel(void)
         if (!is_fm()) {
             fd6818_set_demod(demod_of(channel.mode));
         }
-        modem_set_frequency_calibration(cal->valid, cal->osc_tune, factory_cal_mod_bias(channel.tx_freq));
+        modem_set_frequency_calibration(cal->valid, cal->osc_tune, cal->rx_adjust, factory_cal_mod_bias(channel.tx_freq));
         receive_on();
     } else {
         // DMR (trxSetModeAndBandwidth(), trxSetFrequency()): the FD6818 DMR table the first time, the engine stopped
@@ -371,7 +371,7 @@ static void apply_channel(void)
         } else {
             fd6818_set_dmr();
         }
-        modem_set_frequency_calibration(cal->valid, cal->osc_tune, factory_cal_mod_bias(channel.tx_freq));
+        modem_set_frequency_calibration(cal->valid, cal->osc_tune, cal->rx_adjust, factory_cal_mod_bias(channel.tx_freq));
         receive_on();
         if (dmr_on) {
             dmr_channel(&channel);
@@ -753,7 +753,7 @@ static void rf_task_main(void *arg)
             const factory_cal_t *cal = factory_cal_get();
 
             rf_off();
-            modem_set_frequency_calibration(cal->valid, cal->osc_tune, factory_cal_mod_bias(channel.tx_freq));
+            modem_set_frequency_calibration(cal->valid, cal->osc_tune, cal->rx_adjust, factory_cal_mod_bias(channel.tx_freq));
         }
         if (asked & RF_SETUP) {
             // radioSetTx(): the band of the Tx frequency, the modem's DMR calibration, the mic to the modem (vocoder)
