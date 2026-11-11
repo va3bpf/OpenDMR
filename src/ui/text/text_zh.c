@@ -408,4 +408,8 @@ const char *const text_zh[TEXT_COUNT] = {
     [TEXT_CPS_DMR_IDS] = "DMR ID 库",
     [TEXT_CPS_CODEPLUG] = "码表",
     [TEXT_CPS_KEEP_CABLE] = "请勿拔下写频线",
+    [TEXT_DEFAULT_POWER] = "默认功率",
+    [TEXT_POWER_TO_ALL] = "功率应用到全部",
+    [TEXT_POWER_TO_ALL_ASK] = "所有信道和VFO",
+    [TEXT_POWER_TO_ALL_DONE] = "已设置信道数",
 };

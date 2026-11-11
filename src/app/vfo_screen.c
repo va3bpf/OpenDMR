@@ -92,7 +92,7 @@
 
 #define FREQ_DIGITS     8 // xxx.xxxxx MHz: the frequency in 10 Hz
 #define FREQ_DOT_AFTER  3
-#define POWER_LEVEL_MAX 8 // 5 W; 9 is the user power ("+W-")
+#define POWER_LEVEL_MAX 8 // 10 W; 9 is the user power ("+W-")
 #define POWER_USER      9
 #define SQUELCH_MIN     1 // codeplug sql: 0 the band default, 1 .. 21: 0 .. 100 %
 #define SQUELCH_MAX     21
@@ -164,9 +164,18 @@ codeplug_channel_t *vfo_screen_vfo(int vfo)
     vfo = (vfo == 1) ? 1 : 0;
     if (!loaded[vfo]) {
         codeplug_read_vfo(vfo, &vfos[vfo]);
+        if (vfos[vfo].libre_dmr_power == 0) {
+            vfos[vfo].libre_dmr_power = (uint8_t)(settings.tx_power_level + 1); // its own from the default power on
+        }
         loaded[vfo] = true;
     }
     return &vfos[vfo];
+}
+
+void vfo_screen_reload(void)
+{
+    loaded[0] = loaded[1] = false;
+    dirty = false;
 }
 
 void vfo_screen_save(int vfo)
@@ -181,7 +190,7 @@ static codeplug_channel_t *vfo(void)
 
 static void send_to_radio(void)
 {
-    memcpy(&tuned, vfo(), sizeof(tuned));
+    memcpy(&tuned, vfo(), sizeof(tuned)); // with the VFO's own power (0: the radio's), as vfo_power() shows
     tx_target_apply(&tuned, &target);
     radio_set_channel(&tuned);
 }
@@ -516,9 +525,19 @@ static void toggle_ts_or_bandwidth(void)
     changed();
 }
 
+// The power of a VFO: its own (libre_dmr_power 1 - 10, kept with it), else (0, as written before) the radio's
+static int vfo_power(const codeplug_channel_t *v)
+{
+    int level = (v->libre_dmr_power != 0) ? (v->libre_dmr_power - 1) : settings.tx_power_level;
+
+    return (level <= POWER_USER) ? level : POWER_USER;
+}
+
+// Each VFO its own power: A and B apart
 static void change_power(int direction, bool to_user)
 {
-    int level = settings.tx_power_level;
+    codeplug_channel_t *v = vfo();
+    int level = vfo_power(v);
 
     if (to_user) {
         level = POWER_USER;
@@ -527,9 +546,10 @@ static void change_power(int direction, bool to_user)
     } else {
         level = (level > 0) ? (((level > POWER_LEVEL_MAX) ? POWER_LEVEL_MAX : level) - 1) : 0;
     }
-    if (level != settings.tx_power_level) {
-        settings.tx_power_level = (uint8_t)level;
-        settings_changed();
+    if (level != vfo_power(v) || (v->libre_dmr_power == 0)) {
+        v->libre_dmr_power = (uint8_t)(level + 1);
+        send_to_radio();
+        changed();
     }
     if (level == 0) {
         ui_key_beep(SOUND_KEY_FIRST_ITEM); // the lowest power (uiChannelMode.c / uiVFOMode.c)
@@ -925,7 +945,7 @@ static void draw(void)
 
     s_meter_data_t meter = {.compact = true, .active = true};
     bottom_bar_data_t bottom = {0};
-    int power = (settings.tx_power_level <= POWER_USER) ? settings.tx_power_level : POWER_USER;
+    int power = vfo_power(v);
 
     vfo_screen_signal(&meter);
     s_meter_draw(S_METER_Y, &meter);

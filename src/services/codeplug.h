@@ -259,6 +259,9 @@ int codeplug_write_new_channel(const codeplug_channel_t *channel);
 bool codeplug_read_vfo(int vfo, codeplug_channel_t *channel);
 bool codeplug_write_vfo(int vfo, const codeplug_channel_t *channel);
 
+// The power (libre_dmr_power: 1 - 10) into every channel in use and both VFOs; the channel count, -1: error
+int codeplug_set_all_power(uint8_t power);
+
 // The frequency (10 Hz) is in one of the bands of the radio (RADIO_HARDWARE_FREQUENCY_BANDS of the main firmware)
 bool codeplug_frequency_is_valid(uint32_t frequency);
 

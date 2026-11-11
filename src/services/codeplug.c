@@ -464,6 +464,27 @@ bool codeplug_write_vfo(int vfo, const codeplug_channel_t *channel)
     return flash_write(ADDR_VFO_A + (vfo * CHANNEL_SIZE), (const uint8_t *)&stored, CHANNEL_SIZE);
 }
 
+// The power byte of every channel in use and of both VFOs, in one batch: a sector erased once, and only when one of
+// its bytes changes (a few seconds for a full codeplug); the number of channels
+int codeplug_set_all_power(uint8_t power)
+{
+    const uint32_t at = offsetof(codeplug_channel_t, libre_dmr_power);
+    int count = 0;
+    bool ok = true;
+
+    flash_batch_start();
+    for (int number = CODEPLUG_CHANNELS_MIN; ok && (number <= CODEPLUG_CHANNELS_MAX); number++) {
+        if (codeplug_channel_in_use(number)) {
+            ok = flash_write(channel_address(number) + at, &power, 1);
+            count++;
+        }
+    }
+    for (int vfo = CODEPLUG_VFO_A; ok && (vfo <= CODEPLUG_VFO_B); vfo++) {
+        ok = flash_write(ADDR_VFO_A + (vfo * CHANNEL_SIZE) + at, &power, 1);
+    }
+    return (flash_batch_end() && ok) ? count : -1;
+}
+
 /*
  * ---- Contacts, DTMF contacts, RX group lists ----
  * From codeplug.c codeplugInitContactsCache(), codeplugContactSaveDataForIndex(), codeplugRxGroupGetDataForIndex()...

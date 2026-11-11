@@ -389,9 +389,14 @@ these settings.**
 | VHF / 220 / UHF Squelch | Default squelch of the channels of each band |
 | PTT latch | One press of the PTT starts transmitting, another one stops |
 | Allow PC | Off / On / PTT (a private call heard: the PTT calls back) |
-| User Power | PA drive of the "user" power level (steps of 10 with SK2 held) |
+| Default Power | Power of a new channel and of a VFO used the first time (each keeps its own after), and of old channels set to "radio" |
+| Power To All | The default power into every channel and VFO A / B (asked first) |
+| User Power | PA drive of the "user" power level (+W-), 0 - 4100 (steps of 10 with SK2 held) |
 | DMR crc | Off: DMR data CRC errors are ignored |
-| Mode | 5 W or 10 W radio |
+
+Power levels: 50mW, 500mW, 1W, 2W, 3W, 4W, 5W, 7W, 10W, +W-. 1W / 4W / 10W are the factory calibration of the stock
+Low / Middle / High; the others are estimated from them, not measured. Each channel, VFO A and VFO B has its own power:
+SK2 + ▶ ◀ changes the one in use, and it is kept.
 
 ### Display options
 
