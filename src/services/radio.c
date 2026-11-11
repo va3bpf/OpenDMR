@@ -94,7 +94,7 @@
 #define TX_TONE_GAIN_STEP 12  // the air level 1 .. 10 to the Tone1 gain (the UV-K5 firmware sends its tones at 66)
 #define TAIL_MS           300 // the stock firmware sends the tail this long (0x300DD44)
 
-#define POWER_LEVELS 10 // 50 mW ... 5 W, then the user power
+#define POWER_LEVELS 10 // 50 mW ... 10 W, then the user power
 #define POWER_USER   9
 #define PA_DRIVE_MAX 4095
 
@@ -224,54 +224,46 @@ static void RAM_CODE audio_amp(bool on)
     taskEXIT_CRITICAL();
 }
 
-/* The transmit power: the factory points 250 mW, 1 W, 5 W and the fractions of the OpenDM32 releases between them */
+/* The transmit power. The factory table has the stock Low, Middle and High (rated 1 W, 4 W, 10 W): the stock firmware
+ * (v1.01.048, 0x0301A7C4) takes the drive of the level straight from it. The levels between go by the square root of
+ * the power (the RF amplitude follows the drive), 50 and 500 mW below 1 W on the slope from 1 W to 4 W: estimates,
+ * unmeasured. Levels 2, 5 and 8 are the factory points (before, 1, 4 and 8, named 250 mW, 1 W and 5 W: wrongly). */
+
+typedef struct {
+    uint8_t from;      // factory point: 0 Low (1 W), 1 Middle (4 W), 2 High (10 W)
+    int16_t per_mille; // of the way to the next point, (sqrt(P) - sqrt(P from)) / (sqrt(P next) - sqrt(P from))
+} power_step_t;
+
+static const power_step_t power_steps[POWER_USER] = { // finer at the low end, coarser up high
+    {0, -776}, // 50 mW
+    {0, -293}, // 500 mW
+    {0, 0},    // 1 W
+    {0, 414},  // 2 W
+    {0, 732},  // 3 W
+    {1, 0},    // 4 W
+    {1, 203},  // 5 W
+    {1, 556},  // 7 W
+    {2, 0},    // 10 W
+};
 
 static uint16_t pa_drive(uint32_t frequency)
 {
-    // [0] 50 mW of 250 mW, [1] [2] 500 / 750 mW between 250 mW and 1 W, [3] [4] [5] 2 / 3 / 4 W between 1 W and 5 W
-    static const uint16_t fractions[3][6] = {
-        {900, 410, 760, 340, 600, 810}, // VHF, per mille
-        {900, 420, 750, 310, 550, 780}, // 220 MHz
-        {900, 430, 740, 270, 510, 750}, // UHF
-    };
-    const uint16_t *f = fractions[radio_band_of(frequency)];
     uint16_t points[FACTORY_CAL_LEVELS];
     int level = (channel.libre_dmr_power != 0) ? (channel.libre_dmr_power - 1) : settings.tx_power_level;
-    int32_t very_low;
-    int32_t low;
-    int32_t mid;
     int32_t drive;
 
-    factory_cal_pa_drive(frequency, points);
-    very_low = points[0];
-    low = points[1];
-    mid = points[2];
+    level = CLAMP(level, 0, POWER_LEVELS - 1);
+    if (level == POWER_USER) {
+        drive = settings.user_power;
+    } else {
+        const power_step_t *step = &power_steps[level];
+        int32_t from;
+        int32_t next;
 
-    switch (CLAMP(level, 0, POWER_LEVELS - 1)) {
-        case 0:
-            drive = (very_low * f[0]) / 1000;
-            break;
-        case 1:
-            drive = very_low;
-            break;
-        case 2:
-        case 3:
-            drive = very_low + (((low - very_low) * f[level - 1]) / 1000);
-            break;
-        case 4:
-            drive = low;
-            break;
-        case 5:
-        case 6:
-        case 7:
-            drive = low + (((mid - low) * f[level - 2]) / 1000);
-            break;
-        case 8:
-            drive = mid;
-            break;
-        default: // POWER_USER
-            drive = settings.user_power;
-            break;
+        factory_cal_pa_drive(frequency, points);
+        from = points[step->from];
+        next = (step->from < (FACTORY_CAL_LEVELS - 1)) ? points[step->from + 1] : from;
+        drive = from + (((next - from) * step->per_mille) / 1000);
     }
     return (uint16_t)CLAMP(drive, 0, PA_DRIVE_MAX);
 }

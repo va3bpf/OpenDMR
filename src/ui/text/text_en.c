@@ -408,4 +408,8 @@ const char *const text_en[TEXT_COUNT] = {
     [TEXT_CPS_DMR_IDS] = "DMR ID database",
     [TEXT_CPS_CODEPLUG] = "Codeplug",
     [TEXT_CPS_KEEP_CABLE] = "Keep the cable in",
+    [TEXT_DEFAULT_POWER] = "Default Power",
+    [TEXT_POWER_TO_ALL] = "Power To All",
+    [TEXT_POWER_TO_ALL_ASK] = "All channels + VFOs",
+    [TEXT_POWER_TO_ALL_DONE] = "Channels set",
 };

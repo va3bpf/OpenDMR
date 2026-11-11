@@ -73,7 +73,7 @@
 
 #define S_METER_Y 200 // under the channel panel, as the main firmware
 
-#define POWER_LEVEL_MAX      8 // 5 W; 9 is the user power ("+W-")
+#define POWER_LEVEL_MAX      8 // 10 W; 9 is the user power ("+W-")
 #define POWER_USER           9
 #define SQUELCH_MIN          1 // codeplug sql: 0 the band default, 1 .. 21: 0 .. 100 %
 #define SQUELCH_MAX          21
@@ -420,22 +420,24 @@ static void zone_step(int step)
     }
 }
 
-// increasePowerLevel(), decreasePowerLevel(): the channel's own power, else the radio's
+// increasePowerLevel(), decreasePowerLevel(): the channel's own power, kept in the codeplug. A channel without one
+// (0: written so) starts from the radio's default power and has its own from then on
 static void power_step(int direction, bool to_user)
 {
-    bool own = (channel.libre_dmr_power != 0);
-    int level = own ? (channel.libre_dmr_power - 1) : settings.tx_power_level;
+    int level = (channel.libre_dmr_power != 0) ? (channel.libre_dmr_power - 1) : settings.tx_power_level;
+    codeplug_channel_t stored;
 
     if (to_user) {
         level = POWER_USER;
     } else {
         level = CLAMP(((level > POWER_LEVEL_MAX) ? POWER_LEVEL_MAX : level) + direction, 0, POWER_LEVEL_MAX);
     }
-    if (own) {
+    if (channel.libre_dmr_power != (uint8_t)(level + 1)) {
         channel.libre_dmr_power = (uint8_t)(level + 1);
-    } else if (level != settings.tx_power_level) {
-        settings.tx_power_level = (uint8_t)level;
-        settings_changed();
+        if ((channel_screen_channel > 0) && codeplug_get_channel(channel_screen_channel, &stored)) {
+            stored.libre_dmr_power = channel.libre_dmr_power; // only the power: other changes here stay passing
+            codeplug_write_channel(channel_screen_channel, &stored);
+        }
     }
     if (level == 0) {
         ui_key_beep(SOUND_KEY_FIRST_ITEM);

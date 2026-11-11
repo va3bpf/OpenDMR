@@ -328,6 +328,7 @@ static void vfo_to_new_channel(void)
         number++;
     }
     memcpy(&channel, vfo_screen_vfo(vfo_screen_current()), sizeof(channel));
+    channel.libre_dmr_power = (uint8_t)(settings.tx_power_level + 1); // a new channel: the default power
     snprintf(name, sizeof(name), "%s %d", text(TEXT_NEW_CHANNEL), number);
     memset(channel.name, 0xFF, CODEPLUG_NAME_LENGTH);
     memcpy(channel.name, name, MIN(strlen(name), (size_t)CODEPLUG_NAME_LENGTH));

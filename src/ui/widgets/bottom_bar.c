@@ -32,7 +32,7 @@
 
 const char *bottom_bar_power_label(int level)
 {
-    static const char *const labels[] = {"50mW", "250mW", "500mW", "750mW", "1W", "2W", "3W", "4W", "5W", "+W-"};
+    static const char *const labels[] = {"50mW", "500mW", "1W", "2W", "3W", "4W", "5W", "7W", "10W", "+W-"};
     int count = (int)(sizeof(labels) / sizeof(labels[0]));
 
     return labels[(level < 0) ? 0 : ((level >= count) ? (count - 1) : level)];
