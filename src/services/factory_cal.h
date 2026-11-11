@@ -34,15 +34,17 @@
 
 // The factory calibration of the stock firmware, read only (functions/calibration.c dm32ReadFactory()). It is in the
 // 25Q128 below the window of this firmware: the 4 KB sector between 0x1000 and 0xC9000 whose last byte is 0x02 and
-// whose frequency tables start in the UHF and VHF bands (codeplug data can end with the same tag). Layout (reverse
-// engineered from OpenGD77_DM32_20260711):
-//   0x016          reference oscillator tune
-//   0x017 - 0x01B  UHF modulation bias at the 5 UHF calibration frequencies
+// whose frequency tables start in the UHF and VHF bands (codeplug data can end with the same tag). The fields read
+// (the stock CPS Test Mode row in brackets; the whole table: docs/factory-calibration.md):
+//   0x016          reference oscillator tune (TX Freq Adjust)
+//   0x017 - 0x01B  UHF modulation bias at the 5 UHF calibration frequencies (4FSK(400))
+//   0x027 - 0x028  receive frequency adjust, little endian (RX Freq Adjust)
 //   0x040 - 0x04E  UHF PA DAC / 16: the stock Low (1 W), Middle (4 W), High (10 W), 5 points each
-//   0x0A6 - 0x0AA  VHF modulation bias
+//   0x0A6 - 0x0AA  VHF modulation bias (4FSK(136))
 //   0x0D0 - 0x0DE  VHF PA DAC / 16
 //   0x20A, 0x20B   receive levels: analog (1 - 15), digital (1 - 63)
 //   0x300, 0x328   UHF, VHF calibration frequencies: 5 little endian BCD uint32 each, 10 Hz units
+// These are all the bytes that differ between two radios; the rest of the table holds the same defaults in both.
 // NOTHING IS WRITTEN: a wrong table would break the tuning of the radio.
 
 #define FACTORY_CAL_POINTS 5
@@ -58,7 +60,8 @@ typedef struct {
     bool valid;
     uint32_t sector;
     uint8_t osc_tune;
-    uint8_t rx_levels[2];                                                      // analog, digital
+    uint16_t rx_adjust; // osc_tune + 384 where the table doesn't have it
+    uint8_t rx_levels[2];                                                     // analog, digital
     uint32_t freqs[FACTORY_CAL_BANDS][FACTORY_CAL_POINTS];                     // 10 Hz units
     uint8_t power[FACTORY_CAL_BANDS][FACTORY_CAL_LEVELS * FACTORY_CAL_POINTS]; // PA DAC / 16, level after level
     uint8_t bias[FACTORY_CAL_BANDS][FACTORY_CAL_POINTS];

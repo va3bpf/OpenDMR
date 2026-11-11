@@ -109,7 +109,7 @@ static void row_text(int index, char *name, size_t name_size, char *value, size_
             return;
         case 1:
             snprintf(name, name_size, "%s", text(TEXT_OSC_TUNE));
-            snprintf(value, value_size, "%u", cal.osc_tune);
+            snprintf(value, value_size, "TX %u  RX %u", cal.osc_tune, cal.rx_adjust);
             return;
         case 2:
             snprintf(name, name_size, "%s", text(TEXT_RX_LEVEL));

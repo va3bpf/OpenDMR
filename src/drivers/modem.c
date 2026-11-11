@@ -128,20 +128,20 @@ void modem_init(void)
     ADC_CONTROL |= 0x41C3;
 
     RF_CONTROL = RF_CONTROL_DIRECT;
-    modem_set_frequency_calibration(false, 0, 0);
+    modem_set_frequency_calibration(false, 0, 0, 0);
     RF_MODE = RF_MODE_DIRECT;
     DEV_LIMITER = 0x0000FF00;
     RSSI_BIAS_VALUE = 0x00001381;
     WORK_MODE = WORK_MODE_FM;
 }
 
-void modem_set_frequency_calibration(bool valid, uint8_t osc_tune, uint16_t mod_bias)
+void modem_set_frequency_calibration(bool valid, uint8_t osc_tune, uint16_t rx_adjust, uint16_t mod_bias)
 {
     if (valid) {
         uint32_t osc = osc_tune;
 
-        SIG_CENTER = (osc << 24) | (osc << 16);            // Tx frequency
-        RF_MOD_BIAS_CTRL = ((osc + 384) << 16) | mod_bias; // Rx frequency
+        SIG_CENTER = (osc << 24) | (osc << 16);                    // Tx frequency
+        RF_MOD_BIAS_CTRL = ((uint32_t)rx_adjust << 16) | mod_bias; // Rx frequency, the 4FSK level
     } else {
         SIG_CENTER = DEFAULT_SIG_CENTER;
         RF_MOD_BIAS_CTRL = DEFAULT_MOD_BIAS;
