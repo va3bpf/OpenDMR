@@ -29,6 +29,15 @@
 #include "widgets.h"
 #include "draw.h"
 #include "fonts.h"
+#include "aprs.h"
+
+// "@" while the APRS beaconing is on (SK1 + 1), at the bottom right, before the right-aligned item
+static void draw_aprs_mark(int32_t right, int32_t y)
+{
+    if (aprs_is_active()) {
+        draw_text(right, y, "@", &font_roboto17_bold, FONT_ALIGN_RIGHT, THEME_COLOUR_ACCENT);
+    }
+}
 
 const char *bottom_bar_power_label(int level)
 {
@@ -63,9 +72,13 @@ void bottom_bar_draw(const bottom_bar_data_t *data)
         draw_text(x, text_y, data->item2, font, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT_LABEL);
     }
 
+    int32_t right = FB_WIDTH - WIDGET_MARGIN;
+
     if (data->right) {
-        draw_text(FB_WIDTH - WIDGET_MARGIN, text_y, data->right, font, FONT_ALIGN_RIGHT, THEME_COLOUR_TEXT_LABEL);
+        draw_text(right, text_y, data->right, font, FONT_ALIGN_RIGHT, THEME_COLOUR_TEXT_LABEL);
+        right -= font_text_width(font, data->right) + 10;
     }
+    draw_aprs_mark(right, text_y);
 }
 
 void bottom_bar_draw_soft_keys(const char *left, const char *right)
@@ -82,7 +95,11 @@ void bottom_bar_draw_soft_keys(const char *left, const char *right)
         draw_text(WIDGET_MARGIN, text_y, left, font, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT);
     }
 
+    int32_t edge = FB_WIDTH - WIDGET_MARGIN;
+
     if (right) {
-        draw_text(FB_WIDTH - WIDGET_MARGIN, text_y, right, font, FONT_ALIGN_RIGHT, THEME_COLOUR_TEXT);
+        draw_text(edge, text_y, right, font, FONT_ALIGN_RIGHT, THEME_COLOUR_TEXT);
+        edge -= font_text_width(font, right) + 12;
     }
+    draw_aprs_mark(edge, text_y);
 }

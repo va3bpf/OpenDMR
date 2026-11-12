@@ -930,7 +930,8 @@ static void aprs_transmit(void)
 
 bool radio_aprs_send(const uint8_t *bits, uint16_t bit_count, bool baud300)
 {
-    if (aprs_bits || !requested_valid || (requested.mode != CODEPLUG_MODE_FM) || transmitting || tx_wanted) {
+    if (aprs_bits || !requested_valid || (requested.mode != CODEPLUG_MODE_FM) || transmitting || tx_wanted ||
+        (radio_tx_check() != RADIO_TX_OK)) {
         return false;
     }
     aprs_bit_count = bit_count;
