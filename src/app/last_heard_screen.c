@@ -29,9 +29,10 @@
 /*
  * OpenDMR, screen: the last heard list (menuLastHeard.c, DM-32 layout, docs/ui-design.md 5.8). Two-line rows:
  * the caller ("callsign first name"), under it the talk group or the private call and the timeslot, on the right how
- * long ago. UP / DOWN move (with SK2: to the first / the last), the left key transmits to that talk group from now on
- * (with SK2: a private call to the caller), # held clears the list. Again once a minute (the times) and when the list
- * changes (UI_DATA_LAST_HEARD). Nothing is heard until the DMR receive comes: "List empty".
+ * long ago. A caller whose call carried a position shows the distance and direction from ours after the timeslot
+ * (position.c). UP / DOWN move (with SK2: to the first / the last), the left key transmits to that talk group from now
+ * on (with SK2: a private call to the caller), # held clears the list. Again once a minute (the times) and when the
+ * list changes (UI_DATA_LAST_HEARD). Nothing is heard until the DMR receive comes: "List empty".
  */
 
 #include <stdio.h>
@@ -43,6 +44,7 @@
 #include "systime.h"
 #include "last_heard.h"
 #include "contacts.h"
+#include "position.h"
 #include "last_heard_screen.h"
 
 #define REFRESH_MS      60000 // the times are in minutes
@@ -186,6 +188,7 @@ static void draw_row(int row, const last_heard_entry_t *e, bool selected, uint32
     char caller[CALLER_SIZE];
     char sub[SUB_SIZE];
     char elapsed[ELAPSED_SIZE];
+    char location[24];
     uint32_t called = e->tg_or_pc & CODEPLUG_CONTACT_ID_MAX;
     uint32_t minutes = (now - e->time_ms) / 60000UL;
     int length;
@@ -202,6 +205,14 @@ static void draw_row(int row, const last_heard_entry_t *e, bool selected, uint32
     }
     if ((e->timeslot <= 1) && (length > 0) && (length < (int)sizeof(sub))) {
         snprintf(&sub[length], sizeof(sub) - length, "  TS%u", (unsigned)(e->timeslot + 1));
+    }
+    if (e->has_location) {
+        size_t used = strlen(sub);
+
+        position_format_short(location, sizeof(location), e->latitude_e5, e->longitude_e5);
+        if (used < (sizeof(sub) - 1)) {
+            snprintf(&sub[used], sizeof(sub) - used, "  %s", location);
+        }
     }
     if (minutes < 60) {
         snprintf(elapsed, sizeof(elapsed), "%lu %s", (unsigned long)minutes, text(TEXT_UI_MINUTES_SHORT));

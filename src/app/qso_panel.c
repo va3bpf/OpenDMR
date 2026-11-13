@@ -27,7 +27,9 @@
  */
 
 /*
- * OpenDMR, the DMR caller panel (uiUtilities.c renderQSODataDM32(), DM-32 drawing; docs/manual dmr-rx).
+ * OpenDMR, the DMR caller panel (uiUtilities.c renderQSODataDM32(), DM-32 drawing; docs/manual dmr-rx). The caller's
+ * position, when its call carries an ETSI GPS Info LC, goes on the ID line: the distance and direction from ours, or
+ * its coordinates when ours is not known (position.c).
  */
 
 #include <stdio.h>
@@ -41,6 +43,7 @@
 #include "codeplug.h"
 #include "last_heard.h"
 #include "dmr_ids.h"
+#include "position.h"
 #include "qso_panel.h"
 
 #define LINE1_Y      44
@@ -96,6 +99,7 @@ void qso_panel_draw(const dmr_call_t *call, const char *channel_name)
     char callsign[LAST_HEARD_TEXT_SIZE];
     char rest[LAST_HEARD_TEXT_SIZE];
     char id[20];
+    char location[32];
     char line1[40];
     char line[40];
     char ts_text[8];
@@ -147,6 +151,17 @@ void qso_panel_draw(const dmr_call_t *call, const char *channel_name)
     }
     if (id[0]) {
         draw_text(x, ID_Y, id, &font_roboto17, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT_LABEL);
+    }
+    if (call->has_location) {
+        int32_t room = width - (id[0] ? (font_text_width(&font_roboto17, id) + 6) : 0);
+
+        position_format(location, sizeof(location), call->latitude_e5, call->longitude_e5);
+        if (font_text_width(&font_roboto17, location) > room) {
+            position_format_short(location, sizeof(location), call->latitude_e5, call->longitude_e5);
+        }
+        if ((room > 0) && (font_text_width(&font_roboto17, location) <= room)) {
+            draw_text(x + width, ID_Y, location, &font_roboto17, FONT_ALIGN_RIGHT, THEME_COLOUR_TEXT_LABEL);
+        }
     }
 
     draw_hline(x, SEPARATOR_Y, width, THEME_COLOUR_LINE);
