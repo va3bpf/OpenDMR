@@ -35,8 +35,11 @@
  *
  * The watchdog (from systime_watchdog_start(), at the end of the start): fed here while the tick and the main task run.
  * After a stall of SYSTIME_WATCHDOG_STALL_MS it is no longer fed and resets the radio SYSTIME_WATCHDOG_MS later, as
- * it does when this interrupt stops (interrupts off for good, an exception: hal/irq.c). Not while the cable link is
- * in use (dm32dbg.py reading a stalled radio) or systime_watchdog_hold is set (written with dm32dbg.py). What
+ * it does when this interrupt stops (interrupts off for good, an exception: hal/irq.c). The main task is the key scan
+ * (input.c): stopped, the radio is dead to its user, whatever else runs. Not while systime_watchdog_hold is set
+ * (written with dm32dbg.py, to read a stalled radio). No longer while the cable link was in use: a debug call that
+ * never returned (to a wrong address, 2026-11-12) counted as a cable link in use for good and the watchdog kept
+ * being fed, the radio hung until switched off. What
  * stopped is kept through the reset (the reset record, in RAM not cleared at the start), then in systime_last_reset.
  */
 
@@ -53,7 +56,6 @@
 #define SYSTIME_MONITOR_STALL_MS  2000
 #define SYSTIME_WATCHDOG_STALL_MS 5000  // a stall this long: the watchdog no longer fed
 #define SYSTIME_WATCHDOG_MS       3000  // the watchdog's timeout: the reset 8 s into a stall
-#define SYSTIME_WATCHDOG_CABLE_MS 10000 // a cable request this recent: still fed (a stalled radio read with dm32dbg.py)
 #define SYSTIME_RESET_MAGIC       0x57444F47u // "WDOG"
 
 volatile uint32_t systime_ms = 0;
@@ -128,12 +130,18 @@ static void RAM_CODE systime_isr(void)
         static bool recorded = false;
         bool stalled = (tick_stalled_ms >= SYSTIME_WATCHDOG_STALL_MS) || (passes_stalled_ms >= SYSTIME_WATCHDOG_STALL_MS);
 
-        if (!stalled || systime_watchdog_hold || cable_link_used_within(SYSTIME_WATCHDOG_CABLE_MS)) {
+        if (!stalled || systime_watchdog_hold) {
             if (recorded) {
                 reset_record[0] = 0;
                 recorded = false;
             }
-            watchdog_feed();
+            if (WDG_EN == 0) {
+                // turned off from outside (fw_update.py does it after an update, for firmware older than the
+                // watchdog restart): on again, or a stall from here on would hang the radio for good
+                watchdog_start(SYSTIME_WATCHDOG_MS);
+            } else {
+                watchdog_feed();
+            }
         } else if (!recorded) {
             reset_record[1] = systime_monitor_last[0];
             reset_record[2] = systime_monitor_last[1];

@@ -857,6 +857,9 @@ static void draw_status_bar(const codeplug_channel_t *v)
         status.item1 = ts_text;
         status.item1_bold = true;
         status.item2 = cc_text;
+    } else if (v->mode == CODEPLUG_MODE_P25) {
+        snprintf(cc_text, sizeof(cc_text), "NAC%03X", codeplug_p25_nac(v));
+        status.item2 = cc_text;
     }
     status_bar_draw(&status);
 }
@@ -925,6 +928,20 @@ static void draw(void)
             icons_draw(WIDGET_MARGIN, TONE_Y + 3, (pc ? ICONS_CONTACT : ICONS_TALKGROUP), THEME_COLOUR_TEXT_LABEL);
             draw_text(VALUE_X, TONE_Y, target.name, &font_roboto20, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT);
         }
+    } else if (v->mode == CODEPLUG_MODE_P25) {
+        // P25: the talk group transmitted to (tx_target_apply()), the NAC (codeplug.h)
+        uint16_t nac = codeplug_p25_nac(v);
+
+        if (target.id != 0) {
+            icons_draw(WIDGET_MARGIN, TONE_Y + 3, ICONS_TALKGROUP, THEME_COLOUR_TEXT_LABEL);
+            draw_text(VALUE_X, TONE_Y, target.name, &font_roboto20, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT);
+        }
+        if ((nac == CODEPLUG_P25_NAC_RX_ANY) || (nac == 0xF7F)) {
+            snprintf(buffer, sizeof(buffer), "%03X (%s)", nac, text(TEXT_ALL));
+        } else {
+            snprintf(buffer, sizeof(buffer), "%03X", nac);
+        }
+        draw_info_line(CSS_Y, "NAC", buffer);
     } else {
         uint16_t tone = ((v->rx_tone != CODEPLUG_CSS_NONE) ? v->rx_tone : v->tx_tone);
 

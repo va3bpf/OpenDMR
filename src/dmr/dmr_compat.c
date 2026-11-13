@@ -188,7 +188,7 @@ void dmr_compat_set_channel(const codeplug_channel_t *tuned)
     bool dmo = (tuned->rx_freq == tuned->tx_freq) || (tuned->libre_dmr_flag1 & 0x04); // FORCE_DMO
 
     memcpy(&channel, tuned, sizeof(channel));
-    device.currentMode = (tuned->mode == CODEPLUG_MODE_DMR) ? RADIO_MODE_DIGITAL : RADIO_MODE_ANALOG;
+    device.currentMode = codeplug_mode_is_digital(tuned->mode) ? RADIO_MODE_DIGITAL : RADIO_MODE_ANALOG; // P25 too: the modem set up for 4FSK
     device.trxDMRModeRx = dmo ? DMR_MODE_DMO : DMR_MODE_RMO;
     device.trxDMRModeTx = device.trxDMRModeRx;
     device.currentBandWidthIs25kHz = false;

@@ -39,6 +39,7 @@
 #include "vfo_screen.h"
 #include "dmr.h"
 #include "tx_target.h"
+#include "p25_radio.h"
 
 #define TS_MASK           0x03
 #define TS_CONTACT_SHIFT  6    // tsSetContactHasBeenOverriden(): a bit for each source after the 3 x 2 bits
@@ -120,6 +121,19 @@ void tx_target_get(const codeplug_channel_t *channel, tx_target_t *target)
 void tx_target_apply(codeplug_channel_t *channel, tx_target_t *target)
 {
     memset(target, 0, sizeof(*target));
+    if (channel->mode == CODEPLUG_MODE_P25) {
+        // P25: the same target (a TG entered, the RX group's, the contact), group calls of 16 bits; the channel's NAC
+        tx_target_get(channel, target);
+        bool group = ((target->id >> 24) != TX_TARGET_PC_FLAG) && ((target->id & CODEPLUG_CONTACT_ID_MAX) <= 0xFFFF);
+        if (!group || (target->id == 0)) { // none, a private call, over 16 bits: TG 1 (p25_radio_set_target())
+            memset(target, 0, sizeof(*target));
+            target->id = 1;
+            target->timeslot = 1;
+            snprintf(target->name, sizeof(target->name), "%s 1", text(TEXT_TG));
+        }
+        p25_radio_set_target(codeplug_p25_nac(channel), (uint16_t)target->id);
+        return;
+    }
     if (channel->mode != CODEPLUG_MODE_DMR) {
         return;
     }
