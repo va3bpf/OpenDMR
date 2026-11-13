@@ -35,4 +35,8 @@
 extern const ui_screen_t channel_screen;
 extern volatile int channel_screen_channel; // the channel number shown
 
+// The channel shown, for the channel details to change in place (the radio follows after each event); written to the
+// codeplug by them. NULL: none
+codeplug_channel_t *channel_screen_edit(void);
+
 #endif

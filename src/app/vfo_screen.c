@@ -42,7 +42,8 @@
  *   right key           channel screen; held: the other VFO
  *   the shortcuts of keymap.c (SK2 + UP / DOWN TX frequency, * timeslot or bandwidth, SK1 + * FM / DMR,
  *   LEFT / RIGHT TG or squelch, SK2 + LEFT / RIGHT power, # number entry ...)
- * The VFO goes to the radio with the timeslot and TG of tx_target.c.
+ * The VFO goes to the radio with the timeslot and TG of tx_target.c. The screen doesn't tune the radio: it gives the VFO
+ * (radio_channel()) when the UI task asks, after each event (ui_tune()), also while the menus are over it.
  * Scan (keymap.c, SK1 + UP; scan.c, uiVFOMode.c scanning()): the RX frequency in VFO steps from the VFO's low to high
  * scan limit (settings, the quick menu sets them), round again; without limits the band of the frequency. Shown on
  * the TX line while it scans; * on a paused frequency skips it for this scan.
@@ -127,9 +128,9 @@ static unsigned step_of(const codeplug_channel_t *v)
 // The bands of the radio (codeplug_frequency_is_valid()), to go from the end of one to the next with the knob
 static const uint32_t band_edges[][2] = {{13700000, 18000000}, {20000000, 27997500}, {28000000, 52000000}};
 
-static codeplug_channel_t vfos[2]; // 2 x 64 bytes
-static codeplug_channel_t tuned;   // the VFO as the radio gets it (tx_target_apply())
-static tx_target_t target;         // its TG (DMR)
+static codeplug_channel_t vfos[2];  // 2 x 64 bytes
+static codeplug_channel_t radio_ch; // the channel for the radio: the VFO with its TG (tx_target_apply())
+static tx_target_t target;          // its TG (DMR)
 static bool loaded[2];
 static bool home_is_vfo = false;
 static bool dirty = false;
@@ -188,11 +189,17 @@ static codeplug_channel_t *vfo(void)
     return vfo_screen_vfo(vfo_screen_current());
 }
 
-static void send_to_radio(void)
+static void compute_radio_channel(void)
 {
-    memcpy(&tuned, vfo(), sizeof(tuned)); // with the VFO's own power (0: the radio's), as vfo_power() shows
-    tx_target_apply(&tuned, &target);
-    radio_set_channel(&tuned);
+    memcpy(&radio_ch, vfo(), sizeof(radio_ch)); // with the VFO's own power (0: the radio's), as vfo_power() shows
+    tx_target_apply(&radio_ch, &target);
+}
+
+// The channel of the screen (ui_screen_t.channel): asked after each event, the same again changes nothing there
+static const codeplug_channel_t *radio_channel(void)
+{
+    compute_radio_channel();
+    return &radio_ch;
 }
 
 /* Tone scan (uiVFOMode.c toneScan(), started from the quick menu): the receive tone steps through the tones of the
@@ -244,7 +251,6 @@ void vfo_screen_tone_scan(int type)
     tone_scan.active = true;
     settings.analog_filter_level = 1; // trxSetAnalogFilterLevel(ANALOG_FILTER_CSS): the tone opens the squelch
     tone_scan_set();
-    send_to_radio();
 }
 
 // The timer while scanning: found (the speaker on), else the next tone
@@ -484,7 +490,6 @@ static bool scan_step(void)
     }
     vfo()->rx_freq = f;
     dirty = true;
-    send_to_radio();
     scan_moved(&scan, scan_dwell());
     return true;
 }
@@ -514,6 +519,7 @@ static void toggle_ts_or_bandwidth(void)
 
     if (v->mode == CODEPLUG_MODE_DMR) {
         tx_target_toggle_timeslot(v);
+        compute_radio_channel();
         ui_key_beep((target.timeslot == 2) ? SOUND_KEY_FIRST_ITEM : SOUND_KEY); // back to TS1
         return;
     }
@@ -548,7 +554,6 @@ static void change_power(int direction, bool to_user)
     }
     if (level != vfo_power(v) || (v->libre_dmr_power == 0)) {
         v->libre_dmr_power = (uint8_t)(level + 1);
-        send_to_radio();
         changed();
     }
     if (level == 0) {
@@ -585,7 +590,6 @@ static void enter(void *arg)
     set_home_mode(true);
     green_down = red_down = false;
     held = 0;
-    send_to_radio();
 }
 
 static void leave(void)
@@ -800,8 +804,7 @@ static bool handle_event(const ui_event_t *ev)
     }
 }
 
-// The PTT transmits (a frequency being entered is dropped); after any other event the VFO goes to the radio again
-// (its frequency, mode or the VFO may have changed; the same VFO again changes nothing there)
+// The PTT transmits (a frequency being entered is dropped)
 static bool handle(const ui_event_t *ev)
 {
     bool redraw;
@@ -823,13 +826,11 @@ static bool handle(const ui_event_t *ev)
         scan_stop(&scan);
         digit_entry_stop(&entry);
         save_if_dirty();
-        send_to_radio();
         snprintf(name, sizeof(name), "VFO %c", (vfo_screen_current() == 0) ? 'A' : 'B');
-        tx_screen_open("VFO", name, &tuned);
+        tx_screen_open("VFO", name, &radio_ch);
         return false;
     }
     redraw = handle_event(ev);
-    send_to_radio();
     return redraw;
 }
 
@@ -980,4 +981,5 @@ const ui_screen_t vfo_screen = {
     .leave = leave,
     .handle = handle,
     .draw = draw,
+    .channel = radio_channel,
 };

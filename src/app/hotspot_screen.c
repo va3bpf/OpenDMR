@@ -29,7 +29,8 @@
 /*
  * OpenDMR, screen: the DMR hotspot (uiHotspot.c), over every other screen while the hotspot runs
  * (services/hotspot.c). Shown when a host talks MMDVM on the cable (hotspot_screen_hook()), it starts the hotspot;
- * the hotspot ending (MMDVMHost silent for 20 s) takes it away, the home screen tunes its channel again. Keys do
+ * the hotspot ending (MMDVMHost silent for 20 s) takes it away, the home screen's channel goes back to the radio.
+ * While it is shown the hotspot tunes the radio (hotspot.c), the UI leaves it alone (UI_CHANNEL_KEPT). Keys do
  * nothing, but the right key with BlueDV, which ends it (MMDVMHost would not recover from a hotspot that went away).
  *
  *   status bar: DMR, the colour code, receiving / transmitting
@@ -91,6 +92,12 @@ static bool handle(const ui_event_t *ev)
         hotspot_stop();
     }
     return false;
+}
+
+// The channel of the screen (ui_screen_t.channel): the hotspot's, set by the hotspot task at its moments
+static const codeplug_channel_t *radio_channel(void)
+{
+    return UI_CHANNEL_KEPT;
 }
 
 static void format_frequency(char *buffer, size_t size, char prefix, uint32_t frequency)
@@ -162,4 +169,5 @@ const ui_screen_t hotspot_screen = {
     .leave = leave,
     .handle = handle,
     .draw = draw,
+    .channel = radio_channel,
 };

@@ -170,11 +170,11 @@ static void load_path(int i)
     }
 }
 
+// The path the radio is on (radio_channel(), after the event), and its TX ID
 static void tune_path(int i, uint32_t now)
 {
     current = i;
     state_ms = now;
-    radio_set_channel(&paths[i].channel);
     if (paths[i].channel.mode == CODEPLUG_MODE_DMR) {
         dmr_set_tx_id(paths[i].talk_group);
     }
@@ -257,6 +257,12 @@ static bool watch(uint32_t now)
         return true;
     }
     return false;
+}
+
+// The channel of the screen (ui_screen_t.channel): the path watched
+static const codeplug_channel_t *radio_channel(void)
+{
+    return &paths[current].channel;
 }
 
 static void enter(void *arg)
@@ -504,4 +510,5 @@ const ui_screen_t dual_watch_screen = {
     .leave = leave,
     .handle = handle,
     .draw = draw,
+    .channel = radio_channel,
 };
