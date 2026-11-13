@@ -44,6 +44,7 @@
 #include "radio.h"
 #include "gps.h"
 #include "sound.h"
+#include "ui.h"
 #include "aprs.h"
 
 #define DESTINATION        "APOG77"
@@ -477,6 +478,7 @@ static uint32_t interval_ms(void)
 static void reset(int config_index)
 {
     aprs.decay = DECAY_MULT_MIN;
+    location_invalidate(&aprs.current);
     location_invalidate(&aprs.previous);
     aprs.fixed_lat = NAN;
     aprs.fixed_lon = NAN;
@@ -498,28 +500,31 @@ static bool position_valid(void)
     double lon;
 
     if (aprs.s.state & STATE_LOCATION_FROM_GPS) {
-        return settings.location_lat != LOCATION_UNSET;
+        return aprs.has_fix; // the GPS's position, not the fixed one of the channel / settings
     }
     fixed_position(&lat, &lon);
     return !isnan(lat) && !isnan(lon);
 }
 
-// aprsBeaconingSendBeacon(false): true when the frame went to the radio task
-static bool send_beacon(void)
+// aprsBeaconingSendBeacon(): true when the frame went to the radio task. forced: SK1 + 3 (or the menu item): it sends
+// in any mode but OFF, not only in Manual / PTT, and the caller gives the error tone (once)
+static bool send_beacon(bool forced)
 {
-    bool manual = (aprs.s.mode == MODE_PTT) || (aprs.s.mode == MODE_MANUAL);
+    bool manual = forced || (aprs.s.mode == MODE_PTT) || (aprs.s.mode == MODE_MANUAL);
     codeplug_channel_t channel;
 
     if (radio_is_scanning() || !radio_get_channel(&channel) || (channel.mode != CODEPLUG_MODE_FM) ||
         (aprs.s.mode == MODE_OFF) || !aprs.enabled || aprs.waiting) {
         return false;
     }
-    if ((aprs.s.mode == MODE_PTT) &&
+    if (!forced && (aprs.s.mode == MODE_PTT) &&
         ((aprs.next_beacon_running && ((int32_t)(systime_get_ms() - aprs.next_beacon_ms) < 0)) || !aprs.has_config)) {
         return false;
     }
     if (manual && !(aprs.has_config && position_valid())) {
-        sound_play(SOUND_ERROR); // "APRS?" / "Location?" of the main firmware
+        if (!forced) {
+            sound_play(SOUND_ERROR); // "APRS?" / "Location?" of the main firmware
+        }
         return false;
     }
     if (!aprs.has_config) {
@@ -613,6 +618,9 @@ static void sent(bool ok)
 {
     aprs.waiting = false;
     if (!aprs.waiting_auto) {
+        if (!ok) {
+            sound_play(SOUND_ERROR); // the radio task could not send it: busy channel, Rx only, out of band
+        }
         return;
     }
     if (!ok) {
@@ -693,7 +701,7 @@ static void check(void)
             aprs.trigger = true;
         }
     }
-    if (aprs.trigger && ((aprs.s.mode == MODE_AUTO) || (aprs.s.mode == MODE_SMART)) && send_beacon()) {
+    if (aprs.trigger && ((aprs.s.mode == MODE_AUTO) || (aprs.s.mode == MODE_SMART)) && send_beacon(false)) {
         aprs.trigger = false;
     }
 }
@@ -730,18 +738,21 @@ void aprs_tick(void)
                 reset(aprs.config_index);
             }
             sound_play(aprs.enabled ? SOUND_ACK : SOUND_NACK);
+            ui_event_t ev = {.type = UI_EVENT_DATA}; // the bottom bar shows "@" while beaconing is on
+
+            ui_post(&ev);
         }
     }
     if (send_asked) {
         send_asked = false;
-        if ((aprs.s.mode == MODE_MANUAL) && !send_beacon()) {
+        if ((aprs.s.mode == MODE_OFF) || !send_beacon(true)) {
             sound_play(SOUND_ERROR);
         }
     }
     if (ptt_asked && !radio_is_transmitting()) {
         ptt_asked = false;
         if (aprs.s.mode == MODE_PTT) {
-            send_beacon();
+            send_beacon(false);
         }
     }
 
@@ -751,6 +762,12 @@ void aprs_tick(void)
     }
     aprs.check_ms = systime_get_ms() + CHECK_MS;
     check();
+}
+
+// The beaconing is on (SK1 + 1), not suspended; the bottom bar's "@"
+bool aprs_is_active(void)
+{
+    return (aprs.s.mode != MODE_OFF) && aprs.enabled;
 }
 
 void aprs_toggle(void)

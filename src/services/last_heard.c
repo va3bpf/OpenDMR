@@ -115,6 +115,24 @@ void last_heard_set_talker_alias(uint32_t id, const char *alias)
     }
 }
 
+// The caller's position as an ETSI GPS Info LC carries it (dmr.c); the entry stays when the call ends
+void last_heard_set_location(uint32_t id, int32_t latitude_e5, int32_t longitude_e5)
+{
+    taskENTER_CRITICAL();
+
+    int at = find(id);
+
+    if (at >= 0) {
+        entries[order[at]].has_location = true;
+        entries[order[at]].latitude_e5 = latitude_e5;
+        entries[order[at]].longitude_e5 = longitude_e5;
+    }
+    taskEXIT_CRITICAL();
+    if (at >= 0) {
+        changed();
+    }
+}
+
 void last_heard_clear(void)
 {
     taskENTER_CRITICAL();

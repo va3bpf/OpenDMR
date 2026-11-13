@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include "util.h"
 #include "settings.h"
+#include "language.h"
 #include "display.h"
 #include "text.h"
 #include "options.h"
@@ -194,7 +195,7 @@ static const ui_list_t display_options = {
     .count = sizeof(display_options_items) / sizeof(display_options_items[0]),
 };
 
-/* Language: English / Chinese (bitfield_options bit 19), each named in its own language */
+/* Language: English / Chinese / Spanish (language.c), each named in its own language */
 
 static void language_format(char *buffer, size_t size)
 {
@@ -203,14 +204,20 @@ static void language_format(char *buffer, size_t size)
 
 static void language_change(int direction, uint8_t modifiers)
 {
+    uint8_t language = language_get();
+
     (void)modifiers;
-    settings.bitfield_options = (direction > 0) ? (settings.bitfield_options | SETTINGS_BIT_SECONDARY_LANGUAGE)
-                                                : (settings.bitfield_options & ~SETTINGS_BIT_SECONDARY_LANGUAGE);
+    if (direction > 0) {
+        language = (language + 1) % LANGUAGE_COUNT;
+    } else {
+        language = (language == 0) ? (LANGUAGE_COUNT - 1) : (language - 1);
+    }
+    language_set(language);
 }
 
 static void language_select(void)
 {
-    settings.bitfield_options ^= SETTINGS_BIT_SECONDARY_LANGUAGE;
+    language_set((language_get() + 1) % LANGUAGE_COUNT);
 }
 
 static const ui_custom_t language = {
@@ -227,7 +234,7 @@ static const ui_item_t options_items[] = {
     {TEXT_DISPLAY_OPTIONS, ICONS_DISPLAY, UI_ITEM_LIST, &display_options, NULL},
     {TEXT_SOUND_OPTIONS, ICONS_SOUND, UI_ITEM_LIST, &sound_options, NULL},
     {TEXT_KEY_SETTINGS, ICONS_KEYPAD, UI_ITEM_SCREEN, &key_settings_screen, (void *)1},
-    {TEXT_LANGUAGE, ICONS_LANGUAGE, UI_ITEM_CUSTOM, &language, NULL},
+    {TEXT_LANGUAGE_MENU, ICONS_LANGUAGE, UI_ITEM_CUSTOM, &language, NULL}, // "Language" in every language
     {TEXT_CALIBRATION, ICONS_WRENCH, UI_ITEM_SCREEN, &calibration_screen, NULL},
     {TEXT_APRS_OPTIONS, ICONS_LOCATION, UI_ITEM_LIST, &aprs_options, NULL},
 };

@@ -56,6 +56,9 @@ typedef struct {
     uint32_t source;   // the caller's DMR ID
     uint32_t tg_or_pc; // the talk group, or LAST_HEARD_PC_FLAG << 24 | the called ID (last_heard.h)
     uint8_t timeslot;  // 0: TS1, 1: TS2
+    bool has_location; // a GPS Info LC was heard from this caller (position.h)
+    int32_t latitude_e5;  // 1/100000 degree, + north
+    int32_t longitude_e5; // 1/100000 degree, + east
 } dmr_call_t;
 
 bool dmr_call(dmr_call_t *call); // a call is shown (the caller known); false: none

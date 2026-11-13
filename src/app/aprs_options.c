@@ -38,6 +38,7 @@
 #include "settings.h"
 #include "text.h"
 #include "options.h"
+#include "aprs.h"
 
 // Fields: part1[0]: mode 31..29, low speed 28..24, fast rate 23..16, turn slope 15..8, turn time 7..0
 //         part1[1]: message interval 25..21, slow rate 20..14, high speed 13..7, turn angle 6..0
@@ -374,6 +375,23 @@ static const ui_custom_t turn_time = {
     .change = turn_time_change,
 };
 
+// "Send beacon now": not a setting, an action; the row shows OK and the select sends (aprs_send() sets the request, the
+// input task does the rest: in any mode but Off, and it beeps when it cannot)
+static void send_now_format(char *buffer, size_t size)
+{
+    snprintf(buffer, size, "%s", text(TEXT_UI_OK));
+}
+
+static void send_now_select(void)
+{
+    aprs_send();
+}
+
+static const ui_custom_t send_now = {
+    .format = send_now_format,
+    .select = send_now_select,
+};
+
 static const ui_item_t aprs_options_items[] = {
     {TEXT_MODE, ICONS_COUNT, UI_ITEM_CUSTOM, &mode, NULL},
     {TEXT_LOCATION, ICONS_COUNT, UI_ITEM_CUSTOM, &location, NULL},
@@ -387,6 +405,7 @@ static const ui_item_t aprs_options_items[] = {
     {TEXT_APRS_TURN_ANGLE, ICONS_COUNT, UI_ITEM_CUSTOM, &turn_angle, NULL},
     {TEXT_APRS_TURN_SLOPE, ICONS_COUNT, UI_ITEM_CUSTOM, &turn_slope, NULL},
     {TEXT_APRS_TURN_TIME, ICONS_COUNT, UI_ITEM_CUSTOM, &turn_time, NULL},
+    {TEXT_APRS_SEND_NOW, ICONS_COUNT, UI_ITEM_CUSTOM, &send_now, NULL},
 };
 
 const ui_list_t aprs_options = {

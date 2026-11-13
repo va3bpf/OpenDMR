@@ -42,7 +42,7 @@
 #include "keymap.h"
 #include "key_settings.h"
 
-#define ROWS        KEYMAP_ACTIONS // the actions (from 1), then the defaults
+#define ROWS        (KEYMAP_ACTIONS + 1) // the actions (from 1), then the defaults
 #define SIDE_KEYS   (UI_MODIFIER_SK1 | UI_MODIFIER_SK2)
 
 static struct {

@@ -62,7 +62,7 @@ typedef enum {
     KEYMAP_SCAN,               // SK1 + UP: scan the zone, or the VFO's range (OpenGD77: UP held, here it steps)
     KEYMAP_SCAN_DOWN,          // SK1 + DOWN: the same, downwards
     KEYMAP_APRS_TOGGLE,        // SK1 + 1: APRS beaconing on / off (OpenGD77)
-    KEYMAP_APRS_SEND,          // SK1 + 2: an APRS beacon now, in the manual mode
+    KEYMAP_APRS_SEND,          // SK1 + 3: an APRS beacon now (2 is in SK1's column, SK2 + 2 a quick key)
     KEYMAP_ACTIONS
 } keymap_action_t;
 

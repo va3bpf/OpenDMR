@@ -761,7 +761,9 @@ void codeplug_get_dtmf_durations(codeplug_dtmf_durations_t *durations)
 
 // codeplugAPRSGetDataForIndex(): valid when named and with the magic version
 #define ADDR_APRS_CONFIGS  0x1588
-#define APRS_MAGIC_VERSION 0x4152
+// Version 3 (0x4153) is version 2 plus the "Beaconing Silently" flag (flags bit 2) of the 2025 CPS: same layout
+#define APRS_MAGIC_VERSION   0x4152
+#define APRS_MAGIC_VERSION_3 0x4153
 
 _Static_assert(sizeof(codeplug_aprs_config_t) == 64, "an APRS configuration is 64 bytes in the codeplug");
 
@@ -771,8 +773,10 @@ bool codeplug_get_aprs_config(int index, codeplug_aprs_config_t *config)
         !flash_read(ADDR_APRS_CONFIGS + ((index - 1) * sizeof(*config)), (uint8_t *)config, sizeof(*config))) {
         return false;
     }
+    uint16_t magic = (uint16_t)(config->magic[0] | (config->magic[1] << 8));
+
     return ((uint8_t)config->name[0] != 0xFF) &&
-           ((uint16_t)(config->magic[0] | (config->magic[1] << 8)) == APRS_MAGIC_VERSION);
+           ((magic == APRS_MAGIC_VERSION) || (magic == APRS_MAGIC_VERSION_3));
 }
 
 bool codeplug_get_rx_group(int number, codeplug_rx_group_t *group)

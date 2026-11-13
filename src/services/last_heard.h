@@ -45,7 +45,10 @@ typedef struct {
     uint32_t id;                             // the caller's DMR ID
     uint32_t tg_or_pc;                       // the talk group, or LAST_HEARD_PC_FLAG << 24 | the called DMR ID
     uint32_t time_ms;                        // systime when heard last
+    int32_t latitude_e5;                     // the position of its last GPS Info LC, 1/100000 degree, + north
+    int32_t longitude_e5;                    // ... + east
     uint8_t timeslot;                        // 0: TS1, 1: TS2, LAST_HEARD_TS_UNKNOWN
+    bool has_location;                       // the position above was heard (position.h)
     char text[LAST_HEARD_TEXT_SIZE];         // "callsign name ..." from the contacts or the DMR IDs; "": not known
     char talker_alias[LAST_HEARD_TEXT_SIZE]; // "": none
 } last_heard_entry_t;
@@ -54,6 +57,7 @@ typedef struct {
 // its text), the oldest one goes when the list is full
 void last_heard_add(uint32_t id, uint32_t tg_or_pc, uint8_t timeslot, const char *text);
 void last_heard_set_talker_alias(uint32_t id, const char *alias);
+void last_heard_set_location(uint32_t id, int32_t latitude_e5, int32_t longitude_e5);
 void last_heard_clear(void);
 
 int last_heard_count(void);

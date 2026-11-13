@@ -58,6 +58,8 @@
 
 #define FLCO_GROUP   0 // DMR_frame_buffer[0]: the full link control opcode
 #define FLCO_PRIVATE 3
+#define FLCO_GPS     8 // ETSI GPS Info (TS 102 361-2 7.1.1.3): an embedded LC like a talker alias block
+#define FID_STANDARD 0 // DMR_frame_buffer[1]: the feature set ID; others are a maker's own LCs (another layout)
 
 /* The interrupts (user/main.c of the releases) */
 
@@ -310,6 +312,29 @@ static int ta_decode(char *out, int size, const uint8_t *alias)
     return (int)strlen(out);
 }
 
+// The ETSI GPS Info LC (FLCO 8): four reserved bits, the position error (3 bits), the longitude (25 bits, two's
+// complement, 360 / 2^25 degree) and the latitude (24 bits, two's complement, 180 / 2^24 degree). false: the LC
+// carries no position (0 / 0; RadioFoundry's dmr_gps_decode() does the same).
+static bool gps_decode(const volatile uint8_t *lc, int32_t *latitude_e5, int32_t *longitude_e5)
+{
+    uint32_t raw_lon = ((uint32_t)(lc[2] & 0x01) << 24) | ((uint32_t)lc[3] << 16) | ((uint32_t)lc[4] << 8) | lc[5];
+    uint32_t raw_lat = ((uint32_t)lc[6] << 16) | ((uint32_t)lc[7] << 8) | lc[8];
+    int32_t lat, lon;
+    double lat_deg, lon_deg;
+
+    if ((raw_lon == 0) && (raw_lat == 0)) {
+        return false;
+    }
+    lat = ((raw_lat & 0x00800000UL) != 0) ? ((int32_t)raw_lat - 0x01000000) : (int32_t)raw_lat;
+    lon = ((raw_lon & 0x01000000UL) != 0) ? ((int32_t)raw_lon - 0x02000000) : (int32_t)raw_lon;
+    lat_deg = (double)lat * (180.0 / 16777216.0);
+    lon_deg = (double)lon * (360.0 / 33554432.0);
+    *latitude_e5 = (int32_t)((lat_deg * 100000.0) + ((lat >= 0) ? 0.5 : -0.5));
+    *longitude_e5 = (int32_t)((lon_deg * 100000.0) + ((lon >= 0) ? 0.5 : -0.5));
+    return (*latitude_e5 >= -9000000) && (*latitude_e5 <= 9000000) && (*longitude_e5 >= -18000000) &&
+           (*longitude_e5 <= 18000000);
+}
+
 // A talker alias block (block 0: the header with the format and the length)
 static void ta_block(const volatile uint8_t *lc)
 {
@@ -423,6 +448,7 @@ void dmr_after_tick(void)
             if ((source != 0) && (destination != 0)) {
                 if (source != call.source) {
                     ta_clear();
+                    call.has_location = false;
                 }
                 ta.caller = true;
                 call.source = source;
@@ -438,6 +464,16 @@ void dmr_after_tick(void)
             }
         } else if (ta.caller && (lc[0] >= 4) && (lc[0] < (4 + TA_BLOCKS))) {
             ta_block(lc);
+        } else if (call_shown && (lc[0] == FLCO_GPS) && (lc[1] == FID_STANDARD)) {
+            int32_t latitude_e5, longitude_e5;
+
+            if (gps_decode(lc, &latitude_e5, &longitude_e5)) {
+                call.has_location = true;
+                call.latitude_e5 = latitude_e5;
+                call.longitude_e5 = longitude_e5;
+                last_heard_set_location(call.source, latitude_e5, longitude_e5);
+                post();
+            }
         }
     }
     if (uiDataGlobal.displayQSOState != qso_state) {

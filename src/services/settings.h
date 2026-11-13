@@ -112,7 +112,7 @@ bool settings_valid(void); // the magic number is right
 #define SETTINGS_BIT_APO_WITH_RF        (1UL << 13)
 #define SETTINGS_BIT_SAFE_POWER_ON      (1UL << 14)
 #define SETTINGS_BIT_AUTO_NIGHT         (1UL << 15)
-#define SETTINGS_BIT_SECONDARY_LANGUAGE (1UL << 19) // Chinese
+#define SETTINGS_BIT_SECONDARY_LANGUAGE (1UL << 19) // Chinese, without the language block (language.c)
 #define SETTINGS_BIT_FORCE_10W          (1UL << 24) // BIT_FORCE_10W_RADIO: unused, the levels go to 10 W anyway
 
 // The backlight modes (backlight_mode)
