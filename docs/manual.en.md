@@ -64,7 +64,7 @@ All of these can be changed in Options → Key settings (see [12](#12-lock-quick
 | SK1 alone | FM broadcast radio | Same |
 | SK1 + ▲ / ▼ | Scan up / down | Same |
 | SK1 + 1 | APRS on / off | Same |
-| SK1 + 2 | Send an APRS beacon now | Same |
+| SK2 + 2 | Send an APRS beacon now | Same |
 
 Also: SK2 + menu key opens the channel details directly; SK2 + a digit is a quick key (see [12](#12-lock-quick-keys-key-settings)).
 
@@ -162,9 +162,10 @@ and B): **hold the back key** to switch, or choose in the VFO menu.
 The top line shows which frequency is being changed (`RX` or `TX`) and the step.
 
 **AM, USB and LSB are receive only** (the RF chip can only transmit FM): the bottom bar shows `Rx Only`, and the PTT
-shows "Switch to FM or DMR". Their squelch is on the signal strength (0 %: always open). In USB and LSB the knob
-tunes 100 Hz a click; tune to the suppressed carrier (e.g. 144.300 MHz), then a little either way until the voice
-sounds right. The mode is kept with the channel and the VFO; the CPS sees such a channel as analog.
+shows "Switch to FM or DMR". Their squelch is on the signal strength (0 %: always open); it closes after the signal
+stayed under it for 0.2 s (AM) or 0.5 s (USB, LSB), so the pauses in speech don't cut the audio. In USB and LSB the knob
+tunes 100 Hz a click; tune to the suppressed carrier (e.g. 144.300 MHz), then a little either way until the voice sounds
+right. The mode is kept with the channel and the VFO; the CPS sees such a channel as analog.
 
 **P25** (APCO P25 Phase 1 conventional voice: simplex, group calls, clear): the bottom bar shows `P25`, the status bar
 the NAC (e.g. `NAC293`), and below the frequency come the talk group and the NAC.
@@ -205,6 +206,9 @@ the NAC (e.g. `NAC293`), and below the frequency come the talk group and the NAC
   the excess is shown in small red figures (`+xxdB`).
 - DMR: "Receiving", the caller (callsign or DMR ID, large), the name, the ID, the talk group. The caller shows within
   about 0.7 s. Names come from the contacts and from the DMR ID database written by the CPS.
+- If the call carries a position (ETSI GPS Info, as sent by other radios), the receive screen shows the distance and
+  the direction from your position on the ID line ("12.3 km NE"); without your position it shows the caller's
+  coordinates. Last heard keeps a short distance, or the coordinates.
 - Calls go into Last heard. **SK2** calls back the talk group just heard (a private call: the caller).
 - FM: audio when the squelch opens; ▶ ◀ change the squelch, shown on the screen for a moment.
 
@@ -457,7 +461,7 @@ Read only: the factory calibration table (oscillator tune, receive level, power 
 
 <img src="manual/en/aprs-options.png" alt="APRS options"> <img src="manual/en/aprs-options-2.png" alt="APRS options 2">
 
-- Mode: Off / Manual (SK1 + 2 sends one) / PTT (after each transmission) / Auto (on the interval, with decay) /
+- Mode: Off / Manual (SK2 + 2 sends one) / PTT (after each transmission) / Auto (on the interval, with decay) /
   Smart (SmartBeaconing);
 - Location: the fixed location of the channel's APRS configuration, or the GPS;
 - Interval, Decay, Compress; for Smart: Slow / Fast Rate, Low / Hi Speed, Turn Angle / Slope / Time.

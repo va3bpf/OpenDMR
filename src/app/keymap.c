@@ -29,7 +29,8 @@
 /*
  * OpenDMR: the shortcuts of the channel and VFO screens (keymap.h). The defaults are the OpenGD77 keys
  * (uiChannelMode.c, uiVFOMode.c handleEvent()), with SK1 + * for FM / DMR: SK2 shares its line with the keypad
- * column of 1, 4, 7 and *, which isn't read while SK2 is down.
+ * column of 1, 4, 7 and *, which isn't read while SK2 is down. In the same way SK1 holds down the column of 2, 5,
+ * 8 and 0, so the APRS beacon is SK2 + 2 and not SK1 + 2 (which the keyboard can never read).
  */
 
 #include <stdio.h>
@@ -38,7 +39,7 @@
 #include "keymap.h"
 
 #define KEYMAP_DATA_TYPE 0x44540002 // a custom data block of this firmware ("DT", 2)
-#define KEYMAP_VERSION   5 // 2: KEYMAP_FM_RADIO, 3: KEYMAP_SCAN, 4: KEYMAP_SCAN_DOWN, 5: the APRS keys
+#define KEYMAP_VERSION   6 // 2: KEYMAP_FM_RADIO, 3: KEYMAP_SCAN, 4: KEYMAP_SCAN_DOWN, 5: the APRS keys, 6: SK2 + 2
 #define KEYMAP_SLOTS     32 // room for more actions: a block keeps its size
 #define SIDE_KEYS        (UI_MODIFIER_SK1 | UI_MODIFIER_SK2)
 #define NO_KEY           {UI_KEY_COUNT, 0, 0, 0}
@@ -76,7 +77,7 @@ static const action_t actions[KEYMAP_ACTIONS] = {
     [KEYMAP_SCAN] = {TEXT_KEY_SCAN_UP, BOTH, false, {UI_KEY_UP, SK1, 0, 0}},
     [KEYMAP_SCAN_DOWN] = {TEXT_KEY_SCAN_DOWN, BOTH, false, {UI_KEY_DOWN, SK1, 0, 0}},
     [KEYMAP_APRS_TOGGLE] = {TEXT_KEY_APRS_TOGGLE, BOTH, false, {UI_KEY_1, SK1, 0, 0}},
-    [KEYMAP_APRS_SEND] = {TEXT_KEY_APRS_SEND, BOTH, false, {UI_KEY_2, SK1, 0, 0}},
+    [KEYMAP_APRS_SEND] = {TEXT_KEY_APRS_SEND, BOTH, false, {UI_KEY_2, SK2, 0, 0}},
 };
 
 static struct {
@@ -122,6 +123,10 @@ void keymap_load(void)
     }
     if (stored.version < 5) {
         (void)keymap_set(KEYMAP_APRS_TOGGLE, actions[KEYMAP_APRS_TOGGLE].binding);
+        (void)keymap_set(KEYMAP_APRS_SEND, actions[KEYMAP_APRS_SEND].binding);
+    }
+    if (stored.version < 6) {
+        // SK1 + 2 could never be read (2 is in the column SK1 holds down): the beacon now is SK2 + 2
         (void)keymap_set(KEYMAP_APRS_SEND, actions[KEYMAP_APRS_SEND].binding);
     }
     stored.version = KEYMAP_VERSION;

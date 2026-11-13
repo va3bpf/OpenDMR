@@ -2334,7 +2334,7 @@ void hotspot_stop(void)
     }
 }
 
-// hotspotExit(): the radio as it was; the hotspot screen goes, the home screen tunes its channel again
+// hotspotExit(): the radio as it was; the hotspot screen goes, the home screen's channel goes back to the radio
 static void hotspotExit(void)
 {
     radio_tx_signal(0, 0);

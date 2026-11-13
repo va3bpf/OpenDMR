@@ -219,12 +219,19 @@ typedef struct ui_screen {
     void (*leave)(void);                   // 离开
     bool (*handle)(const ui_event_t *ev);  // 处理事件；返回 true：要重画
     void (*draw)(void);                    // 把整屏画进帧缓冲（状态栏、内容、底栏）
+    const codeplug_channel_t *(*channel)(void); // 收信机该在的频道，由界面现在的数据算出；NULL：用下面界面的
 } ui_screen_t;
 ```
 
 - 进入界面、回到栈顶、`handle()` 返回 true，都会触发一次重画：清帧缓冲 → `draw()` → 覆盖层 → `fb_flush()`。
 - 界面不直接读按键、不自己延时；要定时就向框架申请定时器（`ui_timer_start(ms)`），到时收到 `UI_EVENT_TIMER`。
 - 主界面（信道、VFO）在栈底；`ui_home()` 回到它。
+- 收信机的频道和显示一样由框架负责：界面只改自己的数据，不调用 `radio_set_channel()`。每个事件处理完（包括
+  `handle()` 里的压栈、出栈、替换都做完以后），框架从栈顶往下找第一个有 `channel()` 的界面，把它算出的频道交给
+  收信机（`ui_tune()`）；频道没变时收信机什么都不做。菜单这类界面没有 `channel()`，用的是下面主界面按最新数据
+  算出的频道，所以在菜单里改的东西马上生效。有 `channel()` 的界面：信道、VFO、双守、卫星（打开某次过境以后）；
+  热点返回 `UI_CHANNEL_KEPT`，由热点服务自己调谐；`UI_CHANNEL_UNDER` 表示这时用下面界面的。发射前
+  `tx_screen_open()` 先调用一次 `ui_tune()`。
 
 ### 6.5 列表界面（菜单和设置）
 

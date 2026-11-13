@@ -31,6 +31,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "codeplug.h"
 
 // The UI framework (docs/ui-design.md 6): events from the input service and the other services go into a queue; the
 // UI task gives them to the screen on top of the stack and draws the whole screen into the frame buffer when the
@@ -96,11 +97,18 @@ typedef struct {
     uint16_t what;
 } ui_event_t;
 
+// The channel of a screen (ui_screen_t.channel) besides a channel, or NULL (none: the receiver off)
+#define UI_CHANNEL_UNDER ((const codeplug_channel_t *)1) // the one of the screen under it
+#define UI_CHANNEL_KEPT  ((const codeplug_channel_t *)2) // a service tunes the radio itself (the hotspot): left alone
+
 typedef struct {
     void (*enter)(void *arg);             // pushed (arg), or back on top (arg NULL); may be NULL
     void (*leave)(void);                  // popped or covered; may be NULL
     bool (*handle)(const ui_event_t *ev); // true: draw the screen again
     void (*draw)(void);                   // the whole screen, into the frame buffer
+    // The channel the radio is on, made from the screen's data as they are now; NULL (most screens): the one of the
+    // screen under it. Screens don't tune the radio: the UI task asks after each event, as it draws (ui_tune()).
+    const codeplug_channel_t *(*channel)(void);
 } ui_screen_t;
 
 // Starts the UI task with the home screen (channel or VFO) at the bottom, and on_top (NULL: none) over it, entered
@@ -116,6 +124,9 @@ void ui_push(const ui_screen_t *screen, void *arg);
 void ui_pop(void);
 void ui_replace(const ui_screen_t *screen, void *arg);
 void ui_home(void);
+// The channel of the screens (the first from the top that has one) to the radio, which takes the same one again
+// without a change. The UI task does it after each event; before a transmission it is done at once (tx_screen.c)
+void ui_tune(void);
 void ui_redraw(void);    // after the current event
 void *ui_arg(void);      // the arg the screen on top was pushed with
 int32_t *ui_state(void); // a value kept for the screen on top, 0 when pushed (e.g. its selected row)
