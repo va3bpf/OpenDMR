@@ -34,13 +34,13 @@
 
 // APRS position beacons (aprs.c, from the main firmware's functions/aprs.c): the AX.25 UI frame of the channel's APRS
 // configuration (CPS), its position from the GPS or fixed, sent as AFSK by the radio task. The mode is the APRS
-// options': off, manual (SK2 + 2), PTT (after a transmission on the channel), auto (each interval, decaying when not
+// options': off, manual (SK1 + 3), PTT (after a transmission on the channel), auto (each interval, decaying when not
 // moving) or smart beaconing (by the speed and the turns). FM channels with an APRS configuration only.
 
 void aprs_tick(void);   // the input task, each pass
 bool aprs_is_active(void); // beaconing on (SK1 + 1), not suspended
 void aprs_toggle(void); // SK1 + 1: beaconing on / off (aprsBeaconingToggles())
-void aprs_send(void);   // SK2 + 2 or the menu's "send now": a beacon now, in any mode but OFF
+void aprs_send(void);   // SK1 + 3 or the menu's "send now": a beacon now, in any mode but OFF
 void aprs_after_ptt(void); // a transmission of the PTT ended (the PTT mode)
 
 #endif

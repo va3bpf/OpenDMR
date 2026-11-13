@@ -506,7 +506,7 @@ static bool position_valid(void)
     return !isnan(lat) && !isnan(lon);
 }
 
-// aprsBeaconingSendBeacon(): true when the frame went to the radio task. forced: SK2 + 2 (or the menu item): it sends
+// aprsBeaconingSendBeacon(): true when the frame went to the radio task. forced: SK1 + 3 (or the menu item): it sends
 // in any mode but OFF, not only in Manual / PTT, and the caller gives the error tone (once)
 static bool send_beacon(bool forced)
 {

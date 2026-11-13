@@ -413,4 +413,5 @@ const char *const text_en[TEXT_COUNT] = {
     [TEXT_POWER_TO_ALL_ASK] = "All channels + VFOs",
     [TEXT_POWER_TO_ALL_DONE] = "Channels set",
     [TEXT_APRS_SEND_NOW] = "Send beacon now",
+    [TEXT_LANGUAGE_MENU] = "Language",
 };

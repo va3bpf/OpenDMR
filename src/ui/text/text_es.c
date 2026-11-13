@@ -413,4 +413,5 @@ const char *const text_es[TEXT_COUNT] = {
     [TEXT_POWER_TO_ALL_ASK] = "Todos canales + VFO",
     [TEXT_POWER_TO_ALL_DONE] = "Canales ajustados",
     [TEXT_APRS_SEND_NOW] = "Enviar baliza",
+    [TEXT_LANGUAGE_MENU] = "Language",
 };

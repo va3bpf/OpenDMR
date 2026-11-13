@@ -234,7 +234,7 @@ static const ui_item_t options_items[] = {
     {TEXT_DISPLAY_OPTIONS, ICONS_DISPLAY, UI_ITEM_LIST, &display_options, NULL},
     {TEXT_SOUND_OPTIONS, ICONS_SOUND, UI_ITEM_LIST, &sound_options, NULL},
     {TEXT_KEY_SETTINGS, ICONS_KEYPAD, UI_ITEM_SCREEN, &key_settings_screen, (void *)1},
-    {TEXT_LANGUAGE, ICONS_LANGUAGE, UI_ITEM_CUSTOM, &language, NULL},
+    {TEXT_LANGUAGE_MENU, ICONS_LANGUAGE, UI_ITEM_CUSTOM, &language, NULL}, // "Language" in every language
     {TEXT_CALIBRATION, ICONS_WRENCH, UI_ITEM_SCREEN, &calibration_screen, NULL},
     {TEXT_APRS_OPTIONS, ICONS_LOCATION, UI_ITEM_LIST, &aprs_options, NULL},
 };
