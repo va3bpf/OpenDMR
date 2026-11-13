@@ -54,6 +54,7 @@
 #include "systime.h"
 #include "cable_link.h"
 #include "settings.h"
+#include "language.h"
 #include "codeplug.h"
 #include "dmr_ids.h"
 #include "adc.h"
@@ -95,6 +96,7 @@ int main(void)
     codeplug_init();
     dmr_ids_init();
     keymap_load();
+    language_load();
     ui_list_places_load();
     quick_keys_init();
     radio_init(); // the factory calibration, the FD6818 and the baseband

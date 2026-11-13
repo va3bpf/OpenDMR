@@ -8,7 +8,7 @@ permission (see "Licences").
 
 - Rewritten on FreeRTOS. The features come from RA4FHE's (Alexey's) OpenDM32 (the DM-32 port of OpenGD77, on
   uC/OS-III);
-- A new user interface (native 240×320, English / Chinese);
+- A new user interface (native 240×320, English / Chinese / Spanish);
 - DMR uses our own AMBE+2 compatible vocoder (the `vocoder/` submodule), P25 our own IMBE vocoder and air interface
   (the `p25/` submodule): **no stock firmware code at all**.
 
