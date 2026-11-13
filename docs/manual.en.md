@@ -162,9 +162,10 @@ and B): **hold the back key** to switch, or choose in the VFO menu.
 The top line shows which frequency is being changed (`RX` or `TX`) and the step.
 
 **AM, USB and LSB are receive only** (the RF chip can only transmit FM): the bottom bar shows `Rx Only`, and the PTT
-shows "Switch to FM or DMR". Their squelch is on the signal strength (0 %: always open). In USB and LSB the knob
-tunes 100 Hz a click; tune to the suppressed carrier (e.g. 144.300 MHz), then a little either way until the voice
-sounds right. The mode is kept with the channel and the VFO; the CPS sees such a channel as analog.
+shows "Switch to FM or DMR". Their squelch is on the signal strength (0 %: always open); it closes after the signal
+stayed under it for 0.2 s (AM) or 0.5 s (USB, LSB), so the pauses in speech don't cut the audio. In USB and LSB the knob
+tunes 100 Hz a click; tune to the suppressed carrier (e.g. 144.300 MHz), then a little either way until the voice sounds
+right. The mode is kept with the channel and the VFO; the CPS sees such a channel as analog.
 
 **P25** (APCO P25 Phase 1 conventional voice: simplex, group calls, clear): the bottom bar shows `P25`, the status bar
 the NAC (e.g. `NAC293`), and below the frequency come the talk group and the NAC.

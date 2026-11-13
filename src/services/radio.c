@@ -82,6 +82,10 @@
 #define RSSI_SQUELCH_MIN_DBM (-128)
 #define RSSI_SQUELCH_STEP    3
 #define CSS_HOLD           6 // checks a receive tone may be missing before the speaker closes
+// AM and SSB: how long the signal stays under the closing level before the squelch closes. The RSSI follows the
+// modulation: AM's envelope dips on deep modulation and fades, SSB has no carrier and drops to the noise between words
+#define SQUELCH_HOLD_AM_MS  200
+#define SQUELCH_HOLD_SSB_MS 500
 #define SIGNAL_SAMPLES     10
 #define SIGNAL_MOVE        2 // the shown signal follows the average when it moved this much
 #define RX_END_BEEP_MS     150 // the carrier end beep waits this long, a new carrier in it cancels both
@@ -125,6 +129,7 @@ static volatile bool speaker = false; // the audio on (the carrier, and the tone
 static volatile bool scanning = false; // radio_set_scanning(): no receive beeps
 static TickType_t settled_at;           // after a channel change, the squelch may open from then on
 static uint8_t css_missing = 0;
+static uint8_t signal_low = 0; // AM, SSB: checks in a row the signal was under the closing level
 static bool rx_end_beep = false; // the carrier end beep is waiting
 static TickType_t rx_end_beep_at;
 static volatile uint8_t signal_raw = 0;
@@ -295,6 +300,7 @@ static void squelch_close(void)
         post_signal();
     }
     css_missing = 0;
+    signal_low = 0;
 }
 
 // Receive on the channel: radioSetRx(), radioSetFrequency(), radioSetIF()
@@ -512,8 +518,17 @@ static void RAM_CODE squelch_check(void)
         open = (noise < level);
         close = (noise > (level + SQUELCH_HYSTERESIS));
     } else {
+        // 3 dB under the opening level, and for the hold time in a row: a moment under it (a dip of the modulation, a
+        // pause between words) doesn't close it
+        int hold = (codeplug_mode_is_ssb(channel.mode) ? SQUELCH_HOLD_SSB_MS : SQUELCH_HOLD_AM_MS) / SAMPLE_MS;
+
         open = (signal >= level);
-        close = (signal < (level - SQUELCH_HYSTERESIS));
+        if (signal >= (level - SQUELCH_HYSTERESIS)) {
+            signal_low = 0;
+        } else if (signal_low < hold) {
+            signal_low++;
+        }
+        close = (signal_low >= hold);
     }
     if (!carrier && open && ((int32_t)(xTaskGetTickCount() - settled_at) >= 0)) {
         carrier = true;
