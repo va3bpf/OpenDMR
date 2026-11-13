@@ -40,7 +40,7 @@ DMR 热点（MMDVM）、VOX、可自定义的按键……见 [使用说明书](d
 | `src/` | 固件源码（`make` 编译，见下） |
 | `vocoder/` | 子模块，仓库 [va3bpf/dmr-vocoder](https://github.com/va3bpf/dmr-vocoder)：我们的 DMR 声码器（AMBE+2 兼容），算法、Python 验证、定点 C（`c/ambe/`，固件直接用）、测试、文档 |
 | `p25/` | 子模块，仓库 [va3bpf/p25-core](https://github.com/va3bpf/p25-core)：P25 Phase 1 的 IMBE 声码器和空中接口（帧、纠错），C 代码和电脑上的测试；电台这一侧见 [docs/p25.md](docs/p25.md) |
-| `docs/` | [安装手册](docs/installation.md)、[使用说明书](docs/manual.md)（截图在 `docs/manual/`）；开发文档：[architecture.md](docs/architecture.md)（架构）、[ui-design.md](docs/ui-design.md)（界面设计和界面框架）、[coding-style.md](docs/coding-style.md)、[fd6818-registers.md](docs/fd6818-registers.md)（射频芯片寄存器） |
+| `docs/` | [安装手册](docs/installation.md)、[使用说明书](docs/manual.md)（截图在 `docs/manual/`）；开发文档：[architecture.md](docs/architecture.md)（架构）、[ui-design.md](docs/ui-design.md)（界面设计和界面框架）、[coding-style.md](docs/coding-style.md)、[fd6818-registers.md](docs/fd6818-registers.md)（射频芯片寄存器）、[i18n.md](docs/i18n.md)（多语言设计，想加语言的看这里） |
 | `tools/backup/` | `dm32_dump.py`：走芯片引导程序的备份 / 写入工具（和它上传到电台的 `dumper/`） |
 | `tools/debug/` | 数据线升级 `fw_update.py`（和 `updater/`）、调试命令 `dm32dbg.py`、截屏 `fshot.py`、模拟按键 `fkey.py`、话筒电平 `miclevel.py` 等 |
 | `tools/fonts/` | 字体转换（`mkfont.py`）、中文字库（`mkcjk.py` → `build/cjk.bin`，`upload_cjk.py` 写入电台） |
