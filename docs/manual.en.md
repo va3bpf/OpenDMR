@@ -205,6 +205,9 @@ the NAC (e.g. `NAC293`), and below the frequency come the talk group and the NAC
   the excess is shown in small red figures (`+xxdB`).
 - DMR: "Receiving", the caller (callsign or DMR ID, large), the name, the ID, the talk group. The caller shows within
   about 0.7 s. Names come from the contacts and from the DMR ID database written by the CPS.
+- If the call carries a position (ETSI GPS Info, as sent by other radios), the receive screen shows the distance and
+  the direction from your position on the ID line ("12.3 km NE"); without your position it shows the caller's
+  coordinates. Last heard keeps a short distance, or the coordinates.
 - Calls go into Last heard. **SK2** calls back the talk group just heard (a private call: the caller).
 - FM: audio when the squelch opens; ▶ ◀ change the squelch, shown on the screen for a moment.
 
