@@ -444,7 +444,7 @@ See [12](#12-lock-quick-keys-key-settings).
 
 ### Language
 
-The menu key or ◀ ▶ on Options → Language switches English / 中文.
+The menu key or ◀ ▶ on Options → Language switches English / 中文 / Español.
 
 ### Calibration
 
