@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Makes an OpenDMR release: builds the firmware, packs what docs/installation.md lists into
-dist/OpenDMR-<version>.zip (the folder layout the tools expect), puts SHA256SUMS.txt next to it, and with --publish
-makes the release on GitHub (the gh CLI, logged in: gh auth login) and uploads them. The OpenGD77 CPS is not in it:
-users download it from opengd77.com.
+dist/OpenDMR-<version>.zip (the folder layout the tools expect) with our CPS (opendmr-cps.html, the latest release of
+va3bpf/opendmr-cps), puts the CPS and SHA256SUMS.txt next to it, and with --publish makes the release on GitHub (the gh
+CLI, logged in: gh auth login) and uploads them. The OpenGD77 CPS is not in it: users download it from opengd77.com.
 
   py tools/release/make_release.py                      build and pack (version: date and commit, 2026.11.07-6584c27)
   py tools/release/make_release.py --version 0.1        a version of your own
@@ -11,6 +11,7 @@ users download it from opengd77.com.
                                                         pushed first (develop is for merging, main for releases)
         --notes FILE  the release text (Markdown; default: the commits since the last v* tag)
         --draft / --prerelease   --repo va3bpf/OpenDMR
+        --cps FILE    this opendmr-cps.html instead of the one of the latest CPS release
 
 The working tree must be clean (the firmware shows the commit it was built from); --dirty packs it anyway, not with
 --publish.
@@ -27,6 +28,8 @@ import zipfile
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 DIST = os.path.join(ROOT, 'dist')
 DEFAULT_REPO = 'va3bpf/OpenDMR'
+CPS_REPO = 'va3bpf/opendmr-cps'
+CPS_FILE = 'opendmr-cps.html'
 FONT = 'tools/fonts/build/cjk.bin'
 
 # In the zip -> from the repository. Keep in step with the table of docs/installation.md
@@ -78,6 +81,32 @@ def font():
         subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'fonts', 'mkcjk.py')], cwd=ROOT, check=True)
 
 
+def gh_path():
+    gh = shutil.which('gh') or shutil.which('gh', path=r'C:\Program Files\GitHub CLI')
+    if gh is None:
+        sys.exit('the GitHub CLI (gh) is not installed: winget install GitHub.cli, then gh auth login')
+    return gh
+
+
+def cps(args):
+    """Our CPS, one HTML file: the asset of the latest release of va3bpf/opendmr-cps (or --cps); (path, version)"""
+    if args.cps:
+        return args.cps, 'local file'
+    folder = os.path.join(DIST, 'cps')
+    os.makedirs(folder, exist_ok=True)
+    gh = gh_path()
+    tag = subprocess.run([gh, 'release', 'view', '--repo', CPS_REPO, '--json', 'tagName', '-q', '.tagName'], cwd=ROOT,
+                         capture_output=True, text=True)
+    if tag.returncode != 0:
+        sys.exit('gh: %s' % tag.stderr.strip())
+    r = subprocess.run([gh, 'release', 'download', tag.stdout.strip(), '--repo', CPS_REPO, '--pattern', CPS_FILE,
+                        '--dir', folder, '--clobber'], cwd=ROOT, capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit('the CPS could not be downloaded: %s' % r.stderr.strip())
+    print('CPS %s' % tag.stdout.strip())
+    return os.path.join(folder, CPS_FILE), tag.stdout.strip()
+
+
 def sha256(path):
     h = hashlib.sha256()
     with open(path, 'rb') as f:
@@ -86,7 +115,7 @@ def sha256(path):
     return h.hexdigest()
 
 
-def pack(version):
+def pack(version, cps_path, cps_version):
     os.makedirs(DIST, exist_ok=True)
     name = 'OpenDMR-%s' % version
     zip_path = os.path.join(DIST, name + '.zip')
@@ -102,9 +131,13 @@ def pack(version):
                     path = os.path.join(folder, f)
                     rel = os.path.relpath(path, os.path.join(ROOT, source)).replace(os.sep, '/')
                     z.write(path, '%s/%s/%s' % (name, inside, rel))
-        z.writestr('%s/VERSION.txt' % name, 'OpenDMR %s\ncommit %s\nbuilt %s\n' % (
-            version, git('rev-parse', 'HEAD'), datetime.datetime.now().strftime('%Y-%m-%d %H:%M')))
-    assets = [zip_path]
+        z.write(cps_path, '%s/%s' % (name, CPS_FILE))
+        z.writestr('%s/VERSION.txt' % name, 'OpenDMR %s\ncommit %s\nbuilt %s\nCPS %s\n' % (
+            version, git('rev-parse', 'HEAD'), datetime.datetime.now().strftime('%Y-%m-%d %H:%M'), cps_version))
+    cps_asset = os.path.join(DIST, CPS_FILE)
+    if os.path.abspath(cps_path) != os.path.abspath(cps_asset):
+        shutil.copyfile(cps_path, cps_asset)
+    assets = [zip_path, cps_asset]
     sums = os.path.join(DIST, 'SHA256SUMS.txt')
     with open(sums, 'w', newline='\n') as f:
         for a in assets:
@@ -126,9 +159,7 @@ def notes_since_last_tag(version):
 
 
 def publish(args, version, assets):
-    gh = shutil.which('gh') or shutil.which('gh', path=r'C:\Program Files\GitHub CLI')
-    if gh is None:
-        sys.exit('the GitHub CLI (gh) is not installed: winget install GitHub.cli, then gh auth login')
+    gh = gh_path()
     head = git('rev-parse', 'HEAD')
     # Releases come from main only (develop is where the work is merged): HEAD must be what github.com has as main
     # (whatever the local branch is called)
@@ -162,6 +193,7 @@ def main():
     ap.add_argument('--publish', action='store_true')
     ap.add_argument('--repo', default=DEFAULT_REPO)
     ap.add_argument('--notes')
+    ap.add_argument('--cps', help='opendmr-cps.html to pack (default: the latest CPS release)')
     ap.add_argument('--draft', action='store_true')
     ap.add_argument('--prerelease', action='store_true')
     args = ap.parse_args()
@@ -174,7 +206,8 @@ def main():
     if not args.no_build:
         build()
     font()
-    assets = pack(version)
+    cps_path, cps_version = cps(args)
+    assets = pack(version, cps_path, cps_version)
     if args.publish:
         publish(args, version, assets)
 
