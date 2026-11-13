@@ -36,13 +36,16 @@
 | `tools/debug/fw_update.py`、`tools/debug/updater/updater.bin` | 平时升级用（电台跑着 OpenDMR 时） |
 | `tools/fonts/upload_cjk.py` | 电台跑着 OpenDMR 时单独重写中文字库 |
 | `docs/manual.md`、`docs/manual.en.md`、`docs/manual/` | 使用说明书 |
+| `opendmr-cps.html` | 我们的写频软件（OpenDMR CPS），Chrome / Edge 双击打开，见 [5](#5-写码表) |
 | `docs/installation.md`、`docs/installation.en.md`、`README.md`、`README.en.md` | 本手册、项目说明 |
 | `licences/` | 字体（Roboto Condensed、Noto Sans SC）的 OFL 许可 |
 | `VERSION.txt` | 版本、git 提交号、打包时间 |
 
 另一个附件 **`SHA256SUMS.txt`** 是校验值，可以用 `certutil -hashfile OpenDMR-<版本>.zip SHA256` 核对。
 
-写码表软件 **OpenGD77 CPS** 不在发布包里，自己从 <https://www.opengd77.com/> 下载（要支持 DM32/UV008 的版本；测试过的是 E2026.07.13.01）。
+写码表可以用发布包里的 **OpenDMR CPS**（`opendmr-cps.html`，也单独放在 Release 页面上），也可以用 **OpenGD77 CPS**
+（不在发布包里，自己从 <https://www.opengd77.com/> 下载，要支持 DM32/UV008 的版本；测试过 E2026.07.13.01）。见
+[5](#5-写码表)。
 
 ### 电脑
 
@@ -140,6 +143,24 @@ py -u tools\backup\dm32_dump.py COM6 data cjk.bin --write --start 0x280000
 
 ## 5. 写码表
 
+两种写频软件都能用，码表格式相同，可以混着用：
+
+| | OpenDMR CPS（发布包里的 `opendmr-cps.html`） | OpenGD77 CPS |
+|---|---|---|
+| 安装 | 不用装，Chrome / Edge 双击打开 | Windows 程序 |
+| 中文名称 | 能输入（按 GB2312 写，电台上正常显示） | 没测过 |
+| P25 信道和 NAC，AM / USB / LSB | 能改 | P25 显示成 DMR，AM 等显示成模拟，改了会丢 |
+| 电台的设置（功率档、背光、话筒增益等） | 能读写 | 不读写 |
+| DMR ID 数据库（显示主叫名字） | 还不能写 | 能写 |
+
+**OpenDMR CPS**：
+
+1. 用 Chrome 或 Edge 打开 `opendmr-cps.html`；
+2. 电台**正常开机**（跑着 OpenDMR），插上写频线，点「连接电台」，选写频线的串口；
+3. 「从电台读取」→ 编辑 →「写入电台」，写完电台自动重启。写之前可以先「保存文件」备份。
+
+**OpenGD77 CPS**：
+
 1. 从 <https://www.opengd77.com/> 下载 OpenGD77 CPS（支持 DM32/UV008 的版本，测试过 E2026.07.13.01），安装；
 2. 打开 OpenGD77 CPS，**Radio type 选 DM32/UV008**；
 3. 电台**正常开机**（跑着 OpenDMR），插上写频线；
@@ -147,9 +168,9 @@ py -u tools\backup\dm32_dump.py COM6 data cjk.bin --write --start 0x280000
 
 读写时电台屏幕上显示正在读写哪一部分和进度，不要拔线。
 
-- 原厂 CPS 和原厂码表文件**不能**用，码表要在 OpenGD77 CPS 里重新做。
-- CPS 也可以写：DMR ID 数据库（显示主叫名字）、业余卫星的轨道根数。
-- **CPS 不读写电台的设置**（功率、背光、话筒增益等），设置在电台菜单里改。
+- 原厂 CPS 和原厂码表文件**不能**用，码表要重新做。
+- OpenGD77 CPS 还可以写 DMR ID 数据库（显示主叫名字）、业余卫星的轨道根数；它不读写电台的设置，设置在电台菜单里
+  改，或者用 OpenDMR CPS。
 
 ---
 
