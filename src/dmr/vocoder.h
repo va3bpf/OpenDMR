@@ -35,6 +35,11 @@
 
 // Copies the vocoder into its RAM if it isn't there yet; the HR_C7000 task only
 void vocoder_sync(void);
+
+// The overlay RAM (ckcpu.ld): our AMBE vocoder (DMR) or the P25 receiver's IMBE decoder, one at a time. Loads the one
+// asked for (zeroing its variables) if the other one is there.
+enum { OVERLAY_NONE, OVERLAY_AMBE, OVERLAY_P25 };
+void overlay_use(int which);
 // Copies it into the RAM again (after a test overwrote it: vocoder/py/ram_test.py); its state starts afresh
 void vocoder_load(void);
 

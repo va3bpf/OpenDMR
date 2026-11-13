@@ -60,6 +60,7 @@
 #include "hotspot.h"
 #include "adc.h"
 #include "radio.h"
+#include "p25_radio.h"
 
 #define RADIO_TASK_PRIORITY 4
 #define SAMPLE_MS           25
@@ -119,6 +120,7 @@ static volatile bool transmitting = false;
 
 // Receive
 static volatile bool carrier = false; // the noise under the squelch level
+static bool p25_on = false;          // the P25 receiver runs (p25_radio.c)
 static volatile bool speaker = false; // the audio on (the carrier, and the tone if one is set)
 static volatile bool scanning = false; // radio_set_scanning(): no receive beeps
 static TickType_t settled_at;           // after a channel change, the squelch may open from then on
@@ -246,10 +248,9 @@ static const power_step_t power_steps[POWER_USER] = { // finer at the low end, c
     {2, 0},    // 10 W
 };
 
-static uint16_t pa_drive(uint32_t frequency)
+static uint16_t level_drive(uint32_t frequency, int level)
 {
     uint16_t points[FACTORY_CAL_LEVELS];
-    int level = (channel.libre_dmr_power != 0) ? (channel.libre_dmr_power - 1) : settings.tx_power_level;
     int32_t drive;
 
     level = CLAMP(level, 0, POWER_LEVELS - 1);
@@ -266,6 +267,12 @@ static uint16_t pa_drive(uint32_t frequency)
         drive = from + (((next - from) * step->per_mille) / 1000);
     }
     return (uint16_t)CLAMP(drive, 0, PA_DRIVE_MAX);
+}
+
+static uint16_t pa_drive(uint32_t frequency)
+{
+    return level_drive(frequency,
+                       (channel.libre_dmr_power != 0) ? (channel.libre_dmr_power - 1) : settings.tx_power_level);
 }
 
 /* Receive */
@@ -316,6 +323,12 @@ static void apply_channel(void)
     bool was_analog = is_analog();
 
     eco_reset(); // the channel is set up receiving: the power saving starts over
+
+    // P25: the modem back to DMR while the channel changes (p25_radio.c), started again below on a P25 channel
+    if (p25_on) {
+        p25_radio_stop();
+        p25_on = false;
+    }
 
     taskENTER_CRITICAL();
     memcpy(&channel, &requested, sizeof(channel));
@@ -378,6 +391,11 @@ static void apply_channel(void)
         } else {
             dmr_enter(&channel);
             dmr_on = true;
+        }
+        // P25: the DMR engine set the modem up for 4FSK; the P25 receiver takes it over (physical layer receive)
+        if (channel.mode == CODEPLUG_MODE_P25) {
+            p25_radio_start();
+            p25_on = true;
         }
     }
     vox_setup();
@@ -798,10 +816,42 @@ void RAM_CODE radio_dmr_rx_on(void)
     rf_ask(RF_RX);
 }
 
+// The physical layer transmit (p25_phy.c, a test for now): the transmitter on the channel's Tx frequency at the lowest
+// power (50 mW), the PA on and kept on; off: back to receive. The RF set up rewrites WORK_MODE (dmr_modem_calibration()):
+// the caller sets the modem up after it.
+void radio_phy_tx(bool on, bool low_power)
+{
+    if (on) {
+        dmr_drive = low_power ? level_drive(channel.tx_freq, 0) : pa_drive(channel.tx_freq);
+        leds_red(true);
+        rf_ask(RF_SETUP);
+    } else {
+        rf_ask(RF_RX);
+        leds_red(false);
+    }
+}
+
+// P25 (p25_radio.c): the PTT to its transmission; transmitting until it has sent its last data unit
+static void p25_transmit_check(void)
+{
+    if (tx_wanted && !transmitting) {
+        transmitting = true;
+        p25_radio_transmit(true);
+        post_signal();
+    } else if (!tx_wanted && transmitting) {
+        p25_radio_transmit(false);
+        if (!p25_radio_transmitting()) {
+            transmitting = false;
+            post_signal();
+        }
+    }
+}
+
 // The PTT: the engine asked to transmit; released: it ends its transmission, then the radio is free again
 static void dmr_transmit_check(void)
 {
     if (tx_wanted && !transmitting) {
+        p25_ev_log(21, 0); // the delay log (p25_radio.c)
         dmr_drive = pa_drive(channel.tx_freq);
         transmitting = true;
         dmr_stopping = false;
@@ -991,13 +1041,18 @@ void radio_vox_key(bool ptt_held)
 /* Receive power saving (rxPowerSaving.c rxPowerSavingTick(), trxPowerUpDownRxAndC7000()): no signal, key, beep or
    transmission for 12 - 2 x level seconds (at least 4 s), then the receiver (the FD6818 and the LNA) goes off and on
    in turns: on for 130 - 10 x level ms, off for that x 2^(level - 1) (level 1: 120 ms / 120 ms ... level 5: 80 ms /
-   1.28 s). A signal found while on, a key (radio_eco_activity()) or anything going on ends it. Not on a channel with
+   1.28 s); on a P25 channel on for 210 ms at least (ECO_P25_RX_MS). A signal found while on, a key (radio_eco_activity()), a P25 sync (the same, p25_radio.c) or anything
+   going on ends it. Not on a channel with
    "no eco", nor while scanning, with the VOX, in hotspot mode or while the FM broadcast radio plays (switching the
    receiver cut its audio). The main firmware's slower CPU clock (level 2 and
    over) isn't done here. */
 
 #define ECO_FLAG1_NO_ECO  0x20 // libre_dmr_flag1
 #define ECO_SETTLE_MS     25   // after the receiver comes on, before the squelch reads the noise
+// P25: on at least this long, an LDU (180 ms: a frame sync each) and the sync and the settling, so that the modem sees
+// a sync every time it is on (DMR has one every 60 ms). Measured 2026-11-12 at level 1 (120 ms on): calls found from
+// the HDU 3 times in 6, the others 260 ms or more late
+#define ECO_P25_RX_MS     210
 
 typedef enum {
     ECO_INACTIVE,
@@ -1069,6 +1124,7 @@ static void eco_tick(void)
     }
 
     uint32_t rx_ms = (uint32_t)(130 - (10 * level));
+    uint32_t on_ms = (p25_on && (rx_ms < ECO_P25_RX_MS)) ? ECO_P25_RX_MS : rx_ms;
 
     switch (eco) {
         case ECO_INACTIVE: // wait before shutting down
@@ -1083,7 +1139,7 @@ static void eco_tick(void)
             break;
         case ECO_RX_OFF:
             rx_power(true);
-            eco_due = xTaskGetTickCount() + pdMS_TO_TICKS(rx_ms);
+            eco_due = xTaskGetTickCount() + pdMS_TO_TICKS(on_ms);
             eco = ECO_RX_ON;
             break;
     }
@@ -1112,7 +1168,9 @@ static void RAM_CODE radio_task(void *arg)
         if (aprs_bits && !dmr_on && !transmitting) {
             aprs_transmit();
         }
-        if (dmr_on) {
+        if (p25_on) {
+            p25_transmit_check();
+        } else if (dmr_on) {
             dmr_transmit_check();
         } else if (tx_wanted != transmitting) {
             if (tx_wanted && is_fm()) {

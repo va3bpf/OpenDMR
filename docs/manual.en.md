@@ -55,7 +55,7 @@ All of these can be changed in Options → Key settings (see [12](#12-lock-quick
 | # long | Reverse repeater (channel mode only) | Same |
 | * | Timeslot | Bandwidth 12.5 / 25 kHz |
 | * long | Back to the channel's own timeslot | — |
-| SK1 + * | Mode: FM → AM → USB → LSB → DMR | Same |
+| SK1 + * | Mode: FM → AM → USB → LSB → DMR → P25 | Same |
 | ▶ / ◀ | Talk group + / − (through the RX group list) | Squelch + / − |
 | SK2 + ▶ / ◀ | Power + / − | Same |
 | SK2 + ▶ long | User power | Same |
@@ -130,7 +130,7 @@ changes.
 
 <img src="manual/en/channel-details.png" alt="Channel details 1"> <img src="manual/en/channel-details-2.png" alt="Channel details 2"> <img src="manual/en/channel-details-3.png" alt="Channel details 3"> <img src="manual/en/channel-details-4.png" alt="Channel details 4">
 
-Name, receive and transmit frequencies, mode, DMR ID, colour code, timeslot, TG list, contact, receive and transmit
+Name, receive and transmit frequencies, mode, DMR ID, colour code (the NAC on a P25 channel), timeslot, TG list, contact, receive and transmit
 CTCSS/DCS, bandwidth, step, transmit timeout, Rx only, zone skip, all skip, VOX, channel power, squelch, beep, eco,
 talker alias transmit on TS1 / TS2, APRS configuration.
 
@@ -156,8 +156,8 @@ and B): **hold the back key** to switch, or choose in the VFO menu.
 | Change the transmit frequency | SK2 + knob, or SK2 + ▲ ▼ |
 | Type a frequency | Digits (e.g. `43500000`: it is set after the 8th digit, or with the menu key; the back key deletes one) |
 | Swap Rx and Tx while held | SK1 + SK2 |
-| Mode: FM → AM → USB → LSB → DMR | SK1 + * |
-| Squelch (FM, AM, SSB) / talk group (DMR) | ▶ ◀ |
+| Mode: FM → AM → USB → LSB → DMR → P25 | SK1 + * |
+| Squelch (FM, AM, SSB) / talk group (DMR, P25) | ▶ ◀ |
 
 The top line shows which frequency is being changed (`RX` or `TX`) and the step.
 
@@ -165,6 +165,17 @@ The top line shows which frequency is being changed (`RX` or `TX`) and the step.
 shows "Switch to FM or DMR". Their squelch is on the signal strength (0 %: always open). In USB and LSB the knob
 tunes 100 Hz a click; tune to the suppressed carrier (e.g. 144.300 MHz), then a little either way until the voice
 sounds right. The mode is kept with the channel and the VFO; the CPS sees such a channel as analog.
+
+**P25** (APCO P25 Phase 1 conventional voice: simplex, group calls, clear): the bottom bar shows `P25`, the status bar
+the NAC (e.g. `NAC293`), and below the frequency come the talk group and the NAC.
+
+- The **NAC** (network access code, 12 bits in hex, 293 by default) works like DMR's colour code: only calls with the
+  same NAC are received; `F7E` receives them all. It is set in the channel details (on a P25 channel the colour code
+  row becomes the NAC; ◀ ▶ step 1, held 0x10).
+- The **talk group** is chosen as in DMR (▶ ◀, typed, contacts); only group calls are sent.
+- An encrypted call only shows a lock and is not played. The CPS sees a P25 channel as DMR: **editing that channel in
+  the CPS may change its NAC**.
+- Known issues and the technical details: [docs/p25.md](p25.md) (in Chinese).
 
 ### VFO quick menu (menu key)
 
@@ -517,4 +528,5 @@ firmware: see the README.
 - The calibration is read only: power and oscillator can't be changed.
 - No themes: the interface has fixed colours.
 - Safe Pwr-On and Sat (Manual / Auto) have no effect yet.
+- P25: simplex group calls in clear only; known issues in [docs/p25.md](p25.md), section 6.
 - Not fully tested on the air yet: APRS decoding, the hotspot's CW ID, satellite passes, talkaround, distance sort.

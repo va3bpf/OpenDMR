@@ -44,8 +44,12 @@
 #include "hal.h"
 #include "settings.h"
 #include "dmr_compat.h"
+#include "p25_phy.h"
+#include "p25_radio.h"
 
 #define WAV_BUFFER_AMBE_PREBUFFERING_COUNT 12 // 2 DMR frames, 6 buffers each
+// the buffers before the playback starts: DMR's above; P25 sets its own while it receives (p25_radio.c)
+volatile int sound_rx_prebuffer = WAV_BUFFER_AMBE_PREBUFFERING_COUNT;
 #define IRQ_PCM_READ                       (59 - 32)
 #define IRQ_PCM_WRITE                      (60 - 32)
 
@@ -191,9 +195,14 @@ static void send(void)
 {
     if (!playing) {
         *AUDIO_CONTROL &= BITCLR(6);
-        *WORK_MODE = 0x6E;
+        if (!p25_phy_active()) {
+            *WORK_MODE = 0x6E;
+        } else if (*WORK_MODE != p25_phy_work_mode) {
+            *WORK_MODE = p25_phy_work_mode; // P25: the physical layer receive goes on (p25_phy.c)
+        }
         playing = refill();
         if (playing) {
+            p25_ev_log(20, 0); // the delay log (p25_radio.c)
             *INTERP_CLEAR |= BITSET(5);
             *AUDIO_CONTROL |= BITSET(5);
         }
@@ -203,7 +212,7 @@ static void send(void)
 // From the engine's task: one frame of buffering, then the playback
 void soundTickRXBuffer(void)
 {
-    if ((wavbuffer_count >= WAV_BUFFER_AMBE_PREBUFFERING_COUNT) && !trxTransmissionEnabled) {
+    if ((wavbuffer_count >= sound_rx_prebuffer) && !trxTransmissionEnabled) {
         send();
     }
 }
@@ -234,6 +243,36 @@ void RAM_CODE soundStopMicCapture(void)
     *AUDIO_CONTROL &= ~BITSET(4);
     *INTERP_CLEAR |= BITSET(4);
     terminate();
+}
+
+// P25 (p25_radio.c): the mic capture on its own, without the DMR engine: the playback off, the buffers emptied, the
+// PCM write interrupt filling them; sound_mic_take() takes them out (80 samples each, 10 ms)
+void sound_mic_start(void)
+{
+    terminate();
+    mic_level_count = 0;
+    isReceiving = true;
+    *INTERP_CLEAR |= BITSET(4);
+    *AUDIO_CONTROL |= BITSET(4);
+}
+
+bool sound_mic_take(int16_t out[WAV_BUFFER_SIZE / 2])
+{
+    CPU_SR_ALLOC();
+    bool have = false;
+
+    CPU_CRITICAL_ENTER();
+    if (wavbuffer_count > 0) {
+        volatile uint8_t *b = audioAndHotspotDataBuffer.wavbuffer[wavbuffer_read_idx];
+        for (int i = 0; i < WAV_BUFFER_SIZE / 2; i++) {
+            out[i] = (int16_t)(b[2 * i] | (b[2 * i + 1] << 8));
+        }
+        wavbuffer_read_idx = (int16_t)((wavbuffer_read_idx + 1) % WAV_BUFFER_COUNT);
+        wavbuffer_count--;
+        have = true;
+    }
+    CPU_CRITICAL_EXIT();
+    return have;
 }
 
 // PCM read (vector 59): the modem wants the next buffer to play

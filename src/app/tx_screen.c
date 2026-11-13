@@ -504,6 +504,9 @@ static void draw(void)
         bar.item1 = ts;
         bar.item1_bold = true;
         bar.item2 = cc;
+    } else if (tx.channel.mode == CODEPLUG_MODE_P25) {
+        snprintf(cc, sizeof(cc), "NAC%03X", codeplug_p25_nac(&tx.channel));
+        bar.item2 = cc;
     }
     status_bar_draw(&bar);
     draw_text(WIDGET_MARGIN, LABEL_Y, tx.label, &font_roboto17, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT_LABEL);

@@ -33,6 +33,7 @@
 #include "dmr_compat.h"
 #include "hr_c7000.h"
 #include "systime.h"
+#include "p25_phy.h"
 
 #define QSODATA_TIMER_TIMEOUT            2400
 #define QSODATA_RX_BEEP_TIMER_TIMEOUT   (QSODATA_TIMER_TIMEOUT - 1000)
@@ -2658,8 +2659,8 @@ static void hrc7000TaskFunction(void *data)
 
 			dmr_compat_run_callbacks();
 
-			// If DIGITAL mode is active, we must handle it ;-)
-			if (trxGetMode() == RADIO_MODE_DIGITAL)
+			// If DIGITAL mode is active, we must handle it ;-) (not while the physical layer receive has the modem)
+			if ((trxGetMode() == RADIO_MODE_DIGITAL) && !p25_phy_active())
 			{
 				hrc7000Tick();
 				dmr_after_tick(); // the call to the last heard list and the UI (applicationMain.c)

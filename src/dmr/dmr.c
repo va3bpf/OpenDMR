@@ -47,6 +47,7 @@
 #include "hr_c7000.h"
 #include "radio.h"
 #include "dmr.h"
+#include "p25_phy.h"
 
 #define VECTOR_FIRST       32
 #define IRQ_SYSTEM         (61 - VECTOR_FIRST)
@@ -60,9 +61,12 @@
 
 /* The interrupts (user/main.c of the releases) */
 
+// While the physical layer receive runs (p25_phy.c), the DMR engine stands aside: its interrupts are only cleared
 static void RAM_CODE system_isr(void)
 {
-    if (trxGetMode() == RADIO_MODE_DIGITAL) {
+    if (p25_phy_active()) {
+        p25_phy_isr();
+    } else if (trxGetMode() == RADIO_MODE_DIGITAL) {
         hrc7000SetInIRQHandler(true);
         hrc7000SysInterruptHandler();
         hrc7000SetInIRQHandler(false);
@@ -86,7 +90,9 @@ static void RAM_CODE timeslot_rx_isr(void)
     bool handled = timeslot_handled;
 
     timeslot_handled = false;
-    if ((trxGetMode() == RADIO_MODE_DIGITAL) && !handled &&
+    if (p25_phy_active()) {
+        p25_phy_rx_slot_isr();
+    } else if ((trxGetMode() == RADIO_MODE_DIGITAL) && !handled &&
         ((slotState < DMR_STATE_TX_START_1) || (slotState == DMR_STATE_REPEATER_WAKE_3))) {
         hrc7000SetInIRQHandler(true);
         hrc7000TimeslotInterruptHandler();
@@ -98,7 +104,9 @@ static void RAM_CODE timeslot_rx_isr(void)
 
 static void RAM_CODE timeslot_tx_isr(void)
 {
-    if ((trxGetMode() == RADIO_MODE_DIGITAL) && (slotState >= DMR_STATE_TX_START_1)) {
+    if (p25_phy_tx_active()) {
+        p25_phy_tx_isr(); // the physical layer transmit test: the next 30 ms block
+    } else if (!p25_phy_active() &&(trxGetMode() == RADIO_MODE_DIGITAL) && (slotState >= DMR_STATE_TX_START_1)) {
         hrc7000SetInIRQHandler(true);
         hrc7000TimeslotInterruptHandler();
         hrc7000SetInIRQHandler(false);
@@ -112,7 +120,7 @@ static void RAM_CODE timeslot_tx_isr(void)
 static void RAM_CODE tx_burst_isr(void)
 {
     *INTERP_CLEAR |= 0x04;
-    if (trxGetMode() == RADIO_MODE_DIGITAL) {
+    if (!p25_phy_active() && (trxGetMode() == RADIO_MODE_DIGITAL)) {
         hrc7000SetInIRQHandler(true);
         hrc7000TxInterruptHandler();
         hrc7000SetInIRQHandler(false);
@@ -123,7 +131,7 @@ static void RAM_CODE tx_burst_isr(void)
 static void RAM_CODE rf_rx_isr(void)
 {
     *INTERP_CLEAR |= 0x08;
-    if (trxGetMode() == RADIO_MODE_DIGITAL) {
+    if (!p25_phy_active() && (trxGetMode() == RADIO_MODE_DIGITAL)) {
         hrc7000SetInIRQHandler(true);
         hrc7000RfRxInterruptHandler();
         hrc7000SetInIRQHandler(false);

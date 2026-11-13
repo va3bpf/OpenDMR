@@ -152,6 +152,24 @@ static bool is_dmr(void)
     return edit.mode == CODEPLUG_MODE_DMR;
 }
 
+static bool is_p25(void)
+{
+    return edit.mode == CODEPLUG_MODE_P25;
+}
+
+// P25's NAC (codeplug.h): LEFT / RIGHT 1, held 0x10 (0x000 - 0xFFF; 0xF7E receives any)
+static void step_nac(int direction, bool fast)
+{
+    int next = (int)codeplug_p25_nac(&edit) + direction * (fast ? 0x10 : 1);
+
+    if (next < 0) {
+        next = 0;
+    } else if (next > CODEPLUG_P25_NAC_MAX) {
+        next = CODEPLUG_P25_NAC_MAX;
+    }
+    codeplug_set_p25_nac(&edit, (uint16_t)next);
+}
+
 static int *selected(void)
 {
     return (int *)ui_state();
@@ -291,7 +309,9 @@ static void change(int item, int direction, bool fast, uint8_t modifiers)
             }
             break;
         case ITEM_COLOUR_CODE:
-            if (!fm) {
+            if (is_p25()) {
+                step_nac(direction, fast);
+            } else if (!fm) {
                 step_value(&edit.tx_colour, direction, 0, COLOUR_CODE_MAX);
             }
             break;
@@ -369,12 +389,12 @@ static void change(int item, int direction, bool fast, uint8_t modifiers)
             }
             break;
         case ITEM_TG_LIST:
-            if (!fm) {
+            if (!fm || is_p25()) {
                 step_rx_group(direction);
             }
             break;
         case ITEM_CONTACT:
-            if (!fm) {
+            if (!fm || is_p25()) {
                 step_contact(direction);
             }
             break;
@@ -460,7 +480,16 @@ static void format_item(int item, char *label, size_t label_size, char *out, siz
             }
             break;
         case ITEM_COLOUR_CODE:
-            if (fm) {
+            if (is_p25()) {
+                uint16_t nac = codeplug_p25_nac(&edit);
+
+                snprintf(label, label_size, "NAC");
+                if ((nac == CODEPLUG_P25_NAC_RX_ANY) || (nac == 0xF7F)) {
+                    snprintf(out, size, "%03X (%s)", nac, text(TEXT_ALL));
+                } else {
+                    snprintf(out, size, "%03X", nac);
+                }
+            } else if (fm) {
                 snprintf(out, size, "%s", na);
             } else {
                 snprintf(out, size, "%u", edit.tx_colour);
@@ -477,7 +506,7 @@ static void format_item(int item, char *label, size_t label_size, char *out, siz
         case ITEM_CONTACT: {
             unsigned number = ((item == ITEM_TG_LIST) ? edit.rx_group_list : edit.contact);
 
-            if (fm) {
+            if (fm && !is_p25()) {
                 snprintf(out, size, "%s", na);
             } else if (number == 0) {
                 snprintf(out, size, "%s", text(TEXT_NONE));

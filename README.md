@@ -7,9 +7,10 @@
 
 - 在 FreeRTOS 上重写，功能从 RA4FHE（Alexey）的 OpenDM32（OpenGD77 的 DM-32 移植，uC/OS-III）搬过来；
 - 界面重新设计（240×320 原生分辨率，中文 / English）；
-- DMR 用我们自己的 AMBE+2 兼容声码器（子模块 `vocoder/`），**不含任何原厂代码**。
+- DMR 用我们自己的 AMBE+2 兼容声码器（子模块 `vocoder/`），P25 用我们自己的 IMBE 声码器和空中接口（子模块 `p25/`），
+  **不含任何原厂代码**。
 
-功能：DMR / FM 收发、信道和 VFO、扫描、双守、联系人、最近通话、FM 收音机、GPS、APRS 信标、业余卫星过境、
+功能：DMR / FM / **P25**（Phase 1 直通组呼）收发、信道和 VFO、扫描、双守、联系人、最近通话、FM 收音机、GPS、APRS 信标、业余卫星过境、
 DMR 热点（MMDVM）、VOX、可自定义的按键……见 [使用说明书](docs/manual.md)。
 
 <p align="center">
@@ -38,6 +39,7 @@ DMR 热点（MMDVM）、VOX、可自定义的按键……见 [使用说明书](d
 |---|---|
 | `src/` | 固件源码（`make` 编译，见下） |
 | `vocoder/` | 子模块，仓库 [va3bpf/dmr-vocoder](https://github.com/va3bpf/dmr-vocoder)：我们的 DMR 声码器（AMBE+2 兼容），算法、Python 验证、定点 C（`c/ambe/`，固件直接用）、测试、文档 |
+| `p25/` | 子模块，仓库 [va3bpf/p25-core](https://github.com/va3bpf/p25-core)：P25 Phase 1 的 IMBE 声码器和空中接口（帧、纠错），C 代码和电脑上的测试；电台这一侧见 [docs/p25.md](docs/p25.md) |
 | `docs/` | [安装手册](docs/installation.md)、[使用说明书](docs/manual.md)（截图在 `docs/manual/`）；开发文档：[architecture.md](docs/architecture.md)（架构）、[ui-design.md](docs/ui-design.md)（界面设计和界面框架）、[coding-style.md](docs/coding-style.md)、[fd6818-registers.md](docs/fd6818-registers.md)（射频芯片寄存器） |
 | `tools/backup/` | `dm32_dump.py`：走芯片引导程序的备份 / 写入工具（和它上传到电台的 `dumper/`） |
 | `tools/debug/` | 数据线升级 `fw_update.py`（和 `updater/`）、调试命令 `dm32dbg.py`、截屏 `fshot.py`、模拟按键 `fkey.py`、话筒电平 `miclevel.py` 等 |
@@ -50,7 +52,7 @@ DMR 热点（MMDVM）、VOX、可自定义的按键……见 [使用说明书](d
 
 ## 编译
 
-1. 取得源码（声码器是子模块）：
+1. 取得源码（声码器和 P25 是子模块）：
 
    ```powershell
    git clone --recursive https://github.com/va3bpf/OpenDMR.git
@@ -125,6 +127,7 @@ py tools\release\make_release.py --publish    # 再建 GitHub Release（tag v<�
 | `src/graphics/fonts/roboto*.c`、`src/ui/text/text*` | 生成的数据（字体见下；文字表来自 OpenGD77 的语言文件） |
 | `src/freertos/` | FreeRTOS，MIT |
 | `vocoder/` | 自己写的；解码器从 mbelib（ISC）移植。AMBE+2 是 DVSI 的专利技术，商用前要做专利检索 |
+| `p25/` | 自己写的；IMBE 参数解码和表从 mbelib、帧内位置从 DSD 移植（ISC）。IMBE 也是 DVSI 的技术，同上 |
 | 字体 `tools/fonts/ttf/` | Roboto Condensed、Noto Sans SC，都是 SIL Open Font License 1.1（许可文本在同一目录） |
 
 所以整个固件目前**不能商用**：要商用，至少要重写 DMR 引擎和热点，并确认 AMBE+2 的专利。
