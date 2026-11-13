@@ -64,7 +64,7 @@ All of these can be changed in Options → Key settings (see [12](#12-lock-quick
 | SK1 alone | FM broadcast radio | Same |
 | SK1 + ▲ / ▼ | Scan up / down | Same |
 | SK1 + 1 | APRS on / off | Same |
-| SK2 + 2 | Send an APRS beacon now | Same |
+| SK1 + 3 | Send an APRS beacon now | Same |
 
 Also: SK2 + menu key opens the channel details directly; SK2 + a digit is a quick key (see [12](#12-lock-quick-keys-key-settings)).
 
@@ -461,7 +461,7 @@ Read only: the factory calibration table (oscillator tune, receive level, power 
 
 <img src="manual/en/aprs-options.png" alt="APRS options"> <img src="manual/en/aprs-options-2.png" alt="APRS options 2">
 
-- Mode: Off / Manual (SK2 + 2 sends one) / PTT (after each transmission) / Auto (on the interval, with decay) /
+- Mode: Off / Manual (SK1 + 3 sends one) / PTT (after each transmission) / Auto (on the interval, with decay) /
   Smart (SmartBeaconing);
 - Location: the fixed location of the channel's APRS configuration, or the GPS;
 - Interval, Decay, Compress; for Smart: Slow / Fast Rate, Low / Hi Speed, Turn Angle / Slope / Time.

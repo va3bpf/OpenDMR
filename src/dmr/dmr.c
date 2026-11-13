@@ -59,6 +59,7 @@
 #define FLCO_GROUP   0 // DMR_frame_buffer[0]: the full link control opcode
 #define FLCO_PRIVATE 3
 #define FLCO_GPS     8 // ETSI GPS Info (TS 102 361-2 7.1.1.3): an embedded LC like a talker alias block
+#define FID_STANDARD 0 // DMR_frame_buffer[1]: the feature set ID; others are a maker's own LCs (another layout)
 
 /* The interrupts (user/main.c of the releases) */
 
@@ -463,7 +464,7 @@ void dmr_after_tick(void)
             }
         } else if (ta.caller && (lc[0] >= 4) && (lc[0] < (4 + TA_BLOCKS))) {
             ta_block(lc);
-        } else if (call_shown && (lc[0] == FLCO_GPS)) {
+        } else if (call_shown && (lc[0] == FLCO_GPS) && (lc[1] == FID_STANDARD)) {
             int32_t latitude_e5, longitude_e5;
 
             if (gps_decode(lc, &latitude_e5, &longitude_e5)) {

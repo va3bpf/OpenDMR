@@ -114,6 +114,8 @@ EXTRA = [
     ("power_to_all_ask", "All channels + VFOs", "所有信道和VFO", "Todos canales + VFO"),
     ("power_to_all_done", "Channels set", "已设置信道数", "Canales ajustados"),
     ("aprs_send_now", "Send beacon now", "立即发送信标", "Enviar baliza"),
+    # The language row of the options: English in every language, so it can be found from a language one cannot read
+    ("language_menu", "Language", "Language", "Language"),
 ]
 
 english = read('english.h', 'cp1252') + [(name, en) for name, en, _, _ in EXTRA]
