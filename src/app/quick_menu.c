@@ -28,9 +28,11 @@
 
 /*
  * OpenDMR, screens: the channel and VFO quick menus (uiChannelMode.c and uiVFOMode.c uiXModeQuickMenu(),
- * docs/ui-design.md 5.7), opened by the left key on the home screen (held: the main menu); the channel details first. As the main firmware: LEFT / RIGHT (and the
- * rotary) change a copy of the values, the left key applies them, or does the action of its line, and goes back; the
- * right key goes back without applying (held: home). "VFO --> Channel" and "VFO --> New Chan" ask first.
+ * docs/ui-design.md 5.7), opened by the left key on the home screen (held: the main menu); the channel details first.
+ * LEFT / RIGHT (and the rotary) change the setting itself, in use at once: the radio follows after the event (the home
+ * screen's channel, ui_tune()); the main firmware changed a copy, applied by the left key. The left key does the
+ * action of its line and goes back, the right key goes back (held: home); the settings are saved when the menu is
+ * left. "VFO --> Channel" and "VFO --> New Chan" ask first.
  *
  * The filters, CC scan and TS filter are the settings the radio and the DMR engine use; talkaround is the channel
  * screen's (it transmits on the receive frequency); the left key on the tone scan line starts the VFO's tone scan
@@ -104,21 +106,12 @@ static const menu_t vfo_menu = {vfo_items, sizeof(vfo_items)};
 static const char *const dmr_filter_names[DMR_FILTERS] = {NULL, "TG", "Ct", "TGL"};
 static const char *const tone_scan_names[TONE_SCAN_TYPES] = {NULL, "CTCSS", "DCS", "iDCS"};
 
-// The copy the keys change, applied by the left key
-static struct {
-    uint8_t analog_filter;
-    uint8_t dmr_filter;
-    uint8_t cc_ts_filter;
-    bool talkaround;
-    bool distance_sort;
-    uint8_t vfo;
-} copy;
-
 static uint8_t tone_scan_type = 0; // kept between the menus, as the main firmware's toneScanCSS
 static bool talkaround = false;
 static int add_target = 1;         // the dual watch path "add" replaces; the next add replaces the other one
 static int ref;                    // channel_details_current_ref() when the menu was opened
 static int confirming = -1;        // the item asking "please confirm", -1: none
+static int opened_vfo;             // the VFO in use when the menu was opened
 static codeplug_channel_t channel; // not on the UI task stack
 
 bool quick_menu_talkaround(void)
@@ -136,12 +129,7 @@ static const ui_screen_t quick_menu_screen;
 static void open(const menu_t *m)
 {
     ref = channel_details_current_ref();
-    copy.analog_filter = (settings.analog_filter_level < ANALOG_FILTERS) ? settings.analog_filter_level : 0;
-    copy.dmr_filter = (settings.dmr_destination_filter < DMR_FILTERS) ? settings.dmr_destination_filter : 0;
-    copy.cc_ts_filter = settings.dmr_cc_ts_filter;
-    copy.talkaround = talkaround;
-    copy.distance_sort = ((settings.bitfield_options & BIT_DISTANCE_SORT) != 0);
-    copy.vfo = (uint8_t)vfo_screen_current();
+    opened_vfo = vfo_screen_current();
     confirming = -1;
     ui_push(&quick_menu_screen, (void *)m);
     *ui_state() = ui_list_recall(ui_list_id((m == &vfo_menu) ? "VFO quick menu" : "Channel quick menu"), m->count);
@@ -195,59 +183,52 @@ static bool talkaround_possible(void)
     return load_channel() && (channel.tx_freq != channel.rx_freq);
 }
 
-// LEFT (-1) / RIGHT (+1): the copy, not the settings yet
+static uint8_t dmr_filter(void)
+{
+    return (settings.dmr_destination_filter < DMR_FILTERS) ? settings.dmr_destination_filter : 0;
+}
+
+// LEFT (-1) / RIGHT (+1): the setting itself (saved when the menu is left)
 static void change(item_t item, int direction)
 {
     bool on = (direction > 0);
 
     switch (item) {
         case QM_FILTER:
-            copy.analog_filter = (uint8_t)(on ? (ANALOG_FILTERS - 1) : 0);
+            settings.analog_filter_level = (uint8_t)(on ? (ANALOG_FILTERS - 1) : 0);
             break;
         case QM_DMR_FILTER:
-            if (on ? (copy.dmr_filter < (DMR_FILTERS - 1)) : (copy.dmr_filter > 0)) {
-                copy.dmr_filter = (uint8_t)(copy.dmr_filter + direction);
+            if (on ? (dmr_filter() < (DMR_FILTERS - 1)) : (dmr_filter() > 0)) {
+                settings.dmr_destination_filter = (uint8_t)(dmr_filter() + direction);
             }
             break;
         case QM_CC_SCAN: // CC scan on: the CC filter off
-            copy.cc_ts_filter = (uint8_t)(on ? (copy.cc_ts_filter & ~CC_FILTER) : (copy.cc_ts_filter | CC_FILTER));
+            settings.dmr_cc_ts_filter = (uint8_t)(on ? (settings.dmr_cc_ts_filter & ~CC_FILTER)
+                                                     : (settings.dmr_cc_ts_filter | CC_FILTER));
             break;
         case QM_TS_FILTER:
-            copy.cc_ts_filter = (uint8_t)(on ? (copy.cc_ts_filter | TS_FILTER) : (copy.cc_ts_filter & ~TS_FILTER));
+            settings.dmr_cc_ts_filter = (uint8_t)(on ? (settings.dmr_cc_ts_filter | TS_FILTER)
+                                                     : (settings.dmr_cc_ts_filter & ~TS_FILTER));
             break;
         case QM_TALKAROUND:
-            copy.talkaround = (on && talkaround_possible());
-            break;
+            talkaround = (on && talkaround_possible());
+            return;
         case QM_DISTANCE_SORT:
-            copy.distance_sort = (on && !in_all_channels());
+            settings_set_option(BIT_DISTANCE_SORT, on && !in_all_channels());
             break;
         case QM_VFO_AB:
-            copy.vfo = (uint8_t)(on ? 1 : 0);
+            settings.current_vfo_number = (uint8_t)(on ? 1 : 0);
             break;
         case QM_TONE_SCAN:
             if (tone_scan_possible() && (on ? (tone_scan_type < (TONE_SCAN_TYPES - 1)) : (tone_scan_type > 0))) {
                 tone_scan_type = (uint8_t)(tone_scan_type + direction);
             }
-            break;
+            return;
         case QM_DUAL_ADD:
             add_target = 1 - add_target;
-            break;
+            return;
         default:
-            break;
-    }
-}
-
-// The left key: the copy into the settings
-static void apply_copy(void)
-{
-    settings.analog_filter_level = copy.analog_filter;
-    settings.dmr_destination_filter = copy.dmr_filter;
-    settings.dmr_cc_ts_filter = copy.cc_ts_filter;
-    talkaround = copy.talkaround;
-    if (menu() == &vfo_menu) {
-        settings.current_vfo_number = copy.vfo;
-    } else {
-        settings_set_option(BIT_DISTANCE_SORT, copy.distance_sort);
+            return;
     }
     settings_changed();
 }
@@ -347,10 +328,10 @@ static void select_item(item_t item)
     confirming = -1;
 
     // OK on the VFO line goes to the other VFO when it was not changed (no orange button on the DM-32)
-    if ((item == QM_VFO_AB) && (copy.vfo == vfo_screen_current())) {
-        copy.vfo = (uint8_t)(1 - copy.vfo);
+    if ((item == QM_VFO_AB) && (vfo_screen_current() == opened_vfo)) {
+        settings.current_vfo_number = (uint8_t)(1 - opened_vfo);
+        settings_changed();
     }
-    apply_copy();
 
     switch (item) {
         case QM_CHANNEL_DETAILS:
@@ -380,8 +361,8 @@ static void select_item(item_t item)
         case QM_SCAN_HIGH:
             scan_limit(item);
             break;
-        case QM_DUAL_ADD: // uiDualWatchAddPath()
-            settings.dual_watch_path[add_target] = (int16_t)ref;
+        case QM_DUAL_ADD: // uiDualWatchAddPath(): the channel, or the VFO in use now
+            settings.dual_watch_path[add_target] = (int16_t)channel_details_current_ref();
             add_target = 1 - add_target;
             break;
         case QM_TONE_SCAN:
@@ -473,7 +454,7 @@ static const char *format_item(item_t item, char *name, size_t name_size, char *
 
     switch (item) {
         case QM_VFO_AB:
-            snprintf(name, name_size, "VFO %c", ((copy.vfo == 0) ? 'A' : 'B'));
+            snprintf(name, name_size, "VFO %c", ((vfo_screen_current() == 0) ? 'A' : 'B'));
             break;
         case QM_SWAP:
             snprintf(name, name_size, "Tx <--> Rx");
@@ -485,22 +466,22 @@ static const char *format_item(item_t item, char *name, size_t name_size, char *
             snprintf(name, name_size, "Tx --> Rx");
             break;
         case QM_FILTER:
-            value = (copy.analog_filter ? "CTCSS|DCS" : text(TEXT_NONE));
+            value = ((settings.analog_filter_level != 0) ? "CTCSS|DCS" : text(TEXT_NONE));
             break;
         case QM_DMR_FILTER:
-            value = (copy.dmr_filter ? dmr_filter_names[copy.dmr_filter] : text(TEXT_NONE));
+            value = (dmr_filter() ? dmr_filter_names[dmr_filter()] : text(TEXT_NONE));
             break;
         case QM_CC_SCAN:
-            value = on_off(!(copy.cc_ts_filter & CC_FILTER));
+            value = on_off(!(settings.dmr_cc_ts_filter & CC_FILTER));
             break;
         case QM_TS_FILTER:
-            value = on_off(copy.cc_ts_filter & TS_FILTER);
+            value = on_off(settings.dmr_cc_ts_filter & TS_FILTER);
             break;
         case QM_TALKAROUND:
-            value = (talkaround_possible() ? on_off(copy.talkaround) : text(TEXT_N_A));
+            value = (talkaround_possible() ? on_off(talkaround) : text(TEXT_N_A));
             break;
         case QM_DISTANCE_SORT:
-            value = (in_all_channels() ? text(TEXT_N_A) : on_off(copy.distance_sort));
+            value = (in_all_channels() ? text(TEXT_N_A) : on_off(settings.bitfield_options & BIT_DISTANCE_SORT));
             break;
         case QM_DUAL_WATCH:
             value = on_off(settings.bitfield_options & BIT_DUAL_WATCH);
@@ -516,7 +497,7 @@ static const char *format_item(item_t item, char *name, size_t name_size, char *
             break;
         case QM_SCAN_LOW:
         case QM_SCAN_HIGH: { // the limit now
-            uint32_t f = ((item == QM_SCAN_LOW) ? settings.vfo_scan_low : settings.vfo_scan_high)[copy.vfo];
+            uint32_t f = ((item == QM_SCAN_LOW) ? settings.vfo_scan_low : settings.vfo_scan_high)[vfo_screen_current()];
 
             if (f == 0) {
                 value = text(TEXT_NONE);
@@ -573,6 +554,7 @@ static void draw(void)
 
 static void leave(void)
 {
+    settings_save_if_changed(); // the changes are in use already; kept whichever way the menu is left
     ui_list_remember(ui_list_id((menu() == &vfo_menu) ? "VFO quick menu" : "Channel quick menu"), *ui_state());
 }
 

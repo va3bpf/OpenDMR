@@ -34,7 +34,8 @@
  * (tx_screen.c). The shortcuts are the ones of keymap.c (OpenGD77: LEFT / RIGHT the TG or the squelch, SK2 + UP / DOWN
  * the zone, # the number entry, * the timeslot ...). The channel shown is the one the radio receives (radio.c), with
  * the timeslot and TG of tx_target.c; the squelch, power, mode and bandwidth changed here last until the channel
- * changes.
+ * changes. The screen doesn't tune the radio: it gives its channel (radio_channel()) when the UI task asks, after each
+ * event (ui_tune()), also while screens without their own channel (the menus) are over it.
  */
 
 #include <math.h>
@@ -88,10 +89,11 @@
 volatile int channel_screen_zone = 0;
 volatile int channel_screen_channel = 0;
 
-static codeplug_zone_t zone;       // 176 bytes: not on the stack
-static codeplug_channel_t channel; // the channel shown
-static codeplug_channel_t tuned;   // as the radio gets it: reversed, the timeslot and TG of tx_target.c
-static tx_target_t target;         // its TG (DMR)
+static codeplug_zone_t zone;        // 176 bytes: not on the stack
+static codeplug_channel_t channel;  // the channel shown; the channel details change it (channel_screen_edit())
+static bool has_channel = false;    // a channel at the position (else none: the receiver off)
+static codeplug_channel_t radio_ch; // the channel for the radio: reversed, the timeslot and TG of tx_target.c
+static tx_target_t target;          // its TG (DMR)
 static int zone_number = 0;
 static int position = 0;
 static bool green_down = false; // the left / right key went down on this screen: a release from a list isn't ours
@@ -239,43 +241,56 @@ static void select_zone(int number)
     channel_screen_zone = zone_number;
 }
 
-// The channel to the radio: reversed (DMR: direct, as the main firmware), the timeslot and TG of tx_target.c. The
-// same again changes nothing there
-static void send_to_radio(void)
+// The channel for the radio, from the channel shown (radio_ch, and target): reversed (DMR: direct, as the main
+// firmware), the timeslot and TG of tx_target.c. radio_channel() gives it to the UI task
+static void compute_radio_channel(void)
 {
-    memcpy(&tuned, &channel, sizeof(tuned));
-    if (reversed) {
-        tuned.rx_freq = channel.tx_freq;
-        tuned.tx_freq = channel.rx_freq;
-        tuned.libre_dmr_flag1 |= FLAG1_FORCE_DMO;
-    } else if (quick_menu_talkaround()) {
-        tuned.tx_freq = channel.rx_freq; // talkaround (quick menu): direct on the repeater's output
-        tuned.libre_dmr_flag1 |= FLAG1_FORCE_DMO;
+    if (!has_channel) {
+        memset(&radio_ch, 0, sizeof(radio_ch));
+        memset(&target, 0, sizeof(target));
+        return;
     }
-    tx_target_apply(&tuned, &target);
-    radio_set_channel(&tuned);
+    memcpy(&radio_ch, &channel, sizeof(radio_ch));
+    if (reversed) {
+        radio_ch.rx_freq = channel.tx_freq;
+        radio_ch.tx_freq = channel.rx_freq;
+        radio_ch.libre_dmr_flag1 |= FLAG1_FORCE_DMO;
+    } else if (quick_menu_talkaround()) {
+        radio_ch.tx_freq = channel.rx_freq; // talkaround (quick menu): direct on the repeater's output
+        radio_ch.libre_dmr_flag1 |= FLAG1_FORCE_DMO;
+    }
+    tx_target_apply(&radio_ch, &target);
+}
+
+// The channel of the screen (ui_screen_t.channel): asked after each event, the same again changes nothing there
+static const codeplug_channel_t *radio_channel(void)
+{
+    compute_radio_channel();
+    return has_channel ? &radio_ch : NULL;
+}
+
+codeplug_channel_t *channel_screen_edit(void)
+{
+    return has_channel ? &channel : NULL;
 }
 
 // The channel at the position read again (it may have been edited; a change made here is undone)
-static void tune(void)
+static void load(void)
 {
     int number = zone_channel(position);
 
     channel_screen_channel = number;
-    if ((number == 0) || !codeplug_get_channel(number, &channel)) {
+    has_channel = (number != 0) && codeplug_get_channel(number, &channel);
+    if (!has_channel) {
         memset(&channel, 0, sizeof(channel));
-        memset(&tuned, 0, sizeof(tuned));
-        memset(&target, 0, sizeof(target));
         strcpy(channel.name, "--");
-        radio_set_channel(NULL);
-        return;
     }
-    send_to_radio();
 }
 
 static uint32_t scan_dwell(void)
 {
-    return scan_dwell_ms(channel.mode == CODEPLUG_MODE_DMR, tuned.rx_freq == tuned.tx_freq);
+    compute_radio_channel();
+    return scan_dwell_ms(channel.mode == CODEPLUG_MODE_DMR, radio_ch.rx_freq == radio_ch.tx_freq);
 }
 
 static bool scan_skipped(int at)
@@ -329,7 +344,7 @@ static void scan_begin(int direction)
     direct_channel = 0;
     if (scan_skipped(position)) {
         position = at; // starts on a channel it scans
-        tune();
+        load();
     }
     scan_start(&scan, scan_dwell(), direction);
 }
@@ -350,7 +365,7 @@ static bool scan_step(void)
     }
     position = at;
     squelch_shown = false;
-    tune();
+    load();
     scan_moved(&scan, scan_dwell());
     return true;
 }
@@ -390,7 +405,7 @@ static void enter(void *arg)
         sorted = sort; // the distance sort turned on or off in the quick menu: the zone read again
         select_zone(current);
     }
-    tune(); // the channel may have been edited (channel details), the TG chosen (number entry), or the VFO was used
+    load(); // the channel may have been written (channel details, VFO --> channel) or the zone changed (zone list)
 }
 
 static void leave(void)
@@ -406,7 +421,7 @@ static void channel_changed(int new_position)
     }
     reversed = false;
     squelch_shown = false;
-    tune();
+    load();
 }
 
 static void zone_step(int step)
@@ -498,7 +513,8 @@ static bool do_action(keymap_action_t action)
         case KEYMAP_TS_OR_BANDWIDTH:
             if (dmr) {
                 tx_target_toggle_timeslot(&channel);
-                ui_key_beep((tuned.flag2 & FLAG2_TIMESLOT_2) ? SOUND_KEY_FIRST_ITEM : SOUND_KEY); // back to TS1
+                compute_radio_channel();
+                ui_key_beep((radio_ch.flag2 & FLAG2_TIMESLOT_2) ? SOUND_KEY_FIRST_ITEM : SOUND_KEY); // back to TS1
             } else if (channel.mode == CODEPLUG_MODE_FM) { // AM and SSB have their own filters
                 channel.flag4 ^= FLAG4_BANDWIDTH_25K;
                 ui_key_beep((channel.flag4 & FLAG4_BANDWIDTH_25K) ? SOUND_KEY_FIRST_ITEM : SOUND_KEY);
@@ -554,7 +570,6 @@ static bool do_action(keymap_action_t action)
         default:
             return false;
     }
-    send_to_radio();
     return true;
 }
 
@@ -631,7 +646,7 @@ static bool handle_key(const ui_event_t *ev)
                 char name[48];
 
                 format_names(zone_text, sizeof(zone_text), name, sizeof(name));
-                tx_screen_open(zone_text, name, &tuned);
+                tx_screen_open(zone_text, name, &radio_ch);
                 return false;
             }
             if (((ev->key == UI_KEY_UP) || (ev->key == UI_KEY_DOWN)) && !(ev->modifiers & SIDE_KEYS) &&
@@ -746,8 +761,8 @@ static void draw(void)
     if (direct_channel > 0) {
         snprintf(name, sizeof(name), "-> %d", direct_channel);
     }
-    snprintf(freq, sizeof(freq), "%lu.%04lu MHz", (unsigned long)(tuned.rx_freq / 100000),
-             (unsigned long)((tuned.rx_freq % 100000) / 10));
+    snprintf(freq, sizeof(freq), "%lu.%04lu MHz", (unsigned long)(radio_ch.rx_freq / 100000),
+             (unsigned long)((radio_ch.rx_freq % 100000) / 10));
     panel.zone = zone_text;
     panel.name = name;
     panel.frequency = freq;
@@ -827,4 +842,5 @@ const ui_screen_t channel_screen = {
     .leave = leave,
     .handle = handle,
     .draw = draw,
+    .channel = radio_channel,
 };

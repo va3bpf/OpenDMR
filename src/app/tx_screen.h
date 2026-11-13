@@ -33,7 +33,8 @@
 
 // The transmit screen (docs/ui-design.md 5.3, uiTxScreen.c): pushed by the home screens on the PTT press, it transmits
 // until the PTT is released or the channel's timeout; or it says why it can't (Rx only, out of band, DMR).
-// label: the zone line; title: the channel or VFO name; the channel is the one radio_set_channel() was given.
+// label: the zone line; title: the channel or VFO name; the channel is the screen's (ui_screen_t.channel), tuned
+// first (ui_tune()).
 void tx_screen_open(const char *label, const char *title, const codeplug_channel_t *channel);
 
 // Sends a DTMF sequence on the radio's channel (uiUtilities.c dtmfSequencePrepare() / dtmfProcess()): transmits,

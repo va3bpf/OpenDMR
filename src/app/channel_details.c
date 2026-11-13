@@ -29,13 +29,15 @@
 /*
  * OpenDMR, screen: the channel details (menuChannelDetails.c, docs/ui-design.md 5.6). The 26 items of the
  * channel (or VFO) of the home screen, in a list as the settings: UP / DOWN move, LEFT / RIGHT (and the rotary) change
- * the value, the left key writes the channel to the codeplug and goes home, the right key goes back without saving.
+ * the value of the channel itself (the home screen's, channel_screen_edit() / vfo_screen_vfo()): the radio follows after
+ * the event (ui_tune()). Left, whichever way (the left key goes home, the right key back), a changed channel is written
+ * to the codeplug (a VFO: saved), once, not at each step.
  * Rx, Tx and DMR ID: the keypad enters a number (8 digits, then the left key or the 8th digit sets it, LEFT deletes,
  * the right key cancels); LEFT / RIGHT on Rx / Tx set Tx to Rx plus a repeater shift. The name is edited in place
  * with text_entry.c (keypad letters, LEFT / RIGHT move, SK2 + LEFT deletes, SK2 + RIGHT inserts).
  *
- * The main firmware writes the channel to the codeplug only with SK2 held (else the change lasts until the channel is
- * left); here the left key always writes it, as there is no channel copy in RAM.
+ * The main firmware changes a copy, applied by the left key, written to the codeplug only with SK2 held (else the
+ * change lasts until the channel is left); here the change is in use at once and always written.
  * Not editable yet, shown as numbers: the TG list, the contact and the APRS configuration (their lists aren't read
  * from the codeplug yet).
  */
@@ -125,7 +127,8 @@ enum {
 static const uint8_t shifts[] = {0, 6, 10, 15, 16, 20, 46, 50, 70, 76, 90, 94};
 #define SHIFT_MAX ((int)(sizeof(shifts) / sizeof(shifts[0])) - 1)
 
-static codeplug_channel_t edit; // the copy being edited
+static codeplug_channel_t *edit;    // the home screen's channel or VFO, changed in place
+static codeplug_channel_t original; // as it was when the screen was entered: written when it changed
 static int ref;                 // channel_details_current_ref() when it was opened
 static char name[NAME_LENGTH + 1];
 static bool name_editable; // not for a VFO
@@ -149,25 +152,25 @@ static bool is_vfo(void)
 
 static bool is_dmr(void)
 {
-    return edit.mode == CODEPLUG_MODE_DMR;
+    return edit->mode == CODEPLUG_MODE_DMR;
 }
 
 static bool is_p25(void)
 {
-    return edit.mode == CODEPLUG_MODE_P25;
+    return edit->mode == CODEPLUG_MODE_P25;
 }
 
 // P25's NAC (codeplug.h): LEFT / RIGHT 1, held 0x10 (0x000 - 0xFFF; 0xF7E receives any)
 static void step_nac(int direction, bool fast)
 {
-    int next = (int)codeplug_p25_nac(&edit) + direction * (fast ? 0x10 : 1);
+    int next = (int)codeplug_p25_nac(edit) + direction * (fast ? 0x10 : 1);
 
     if (next < 0) {
         next = 0;
     } else if (next > CODEPLUG_P25_NAC_MAX) {
         next = CODEPLUG_P25_NAC_MAX;
     }
-    codeplug_set_p25_nac(&edit, (uint16_t)next);
+    codeplug_set_p25_nac(edit, (uint16_t)next);
 }
 
 static int *selected(void)
@@ -180,7 +183,7 @@ static void format_css(const char *direction, uint16_t tone, char *label, size_t
     bool dcs = ((tone != CODEPLUG_CSS_NONE) && (tone & TONES_DCS));
 
     snprintf(label, label_size, "%s %s", direction, (dcs ? "DCS" : "CTCSS"));
-    if ((edit.mode != CODEPLUG_MODE_FM) || (edit.aprs_config_index != 0)) {
+    if ((edit->mode != CODEPLUG_MODE_FM) || (edit->aprs_config_index != 0)) {
         snprintf(out, size, "%s", text(TEXT_N_A));
     } else if (tone == CODEPLUG_CSS_NONE) {
         snprintf(out, size, "%s", text(TEXT_NONE));
@@ -193,10 +196,10 @@ static void format_css(const char *direction, uint16_t tone, char *label, size_t
 
 static uint32_t dmr_id(void)
 {
-    if (!(edit.libre_dmr_flag1 & FLAG1_OPTIONAL_DMR_ID)) {
+    if (!(edit->libre_dmr_flag1 & FLAG1_OPTIONAL_DMR_ID)) {
         return 0;
     }
-    return ((uint32_t)edit.rx_signaling << 16) | ((uint32_t)edit.arts_interval << 8) | edit.encrypt;
+    return ((uint32_t)edit->rx_signaling << 16) | ((uint32_t)edit->arts_interval << 8) | edit->encrypt;
 }
 
 static void set_dmr_id(uint32_t id)
@@ -204,11 +207,11 @@ static void set_dmr_id(uint32_t id)
     bool valid = ((id >= 1) && (id <= DMR_ID_MAX));
     uint32_t stored = (valid ? id : DMR_ID_DEFAULT);
 
-    edit.libre_dmr_flag1 =
-        (uint8_t)((edit.libre_dmr_flag1 & ~FLAG1_OPTIONAL_DMR_ID) | (valid ? FLAG1_OPTIONAL_DMR_ID : 0));
-    edit.rx_signaling = (uint8_t)(stored >> 16);
-    edit.arts_interval = (uint8_t)(stored >> 8);
-    edit.encrypt = (uint8_t)stored;
+    edit->libre_dmr_flag1 =
+        (uint8_t)((edit->libre_dmr_flag1 & ~FLAG1_OPTIONAL_DMR_ID) | (valid ? FLAG1_OPTIONAL_DMR_ID : 0));
+    edit->rx_signaling = (uint8_t)(stored >> 16);
+    edit->arts_interval = (uint8_t)(stored >> 8);
+    edit->encrypt = (uint8_t)stored;
 }
 
 /* Values */
@@ -223,11 +226,11 @@ static void apply_shift(int direction)
     }
 
     int32_t shift = (int32_t)shifts[(next < 0) ? -next : next] * ((next < 0) ? -10000 : 10000); // 100 kHz in 10 Hz
-    uint32_t tx = edit.rx_freq + (uint32_t)shift;
+    uint32_t tx = edit->rx_freq + (uint32_t)shift;
 
     if (codeplug_frequency_is_valid(tx)) {
         shift_index = next;
-        edit.tx_freq = tx;
+        edit->tx_freq = tx;
     }
 }
 
@@ -250,13 +253,13 @@ static void step_value(uint8_t *value, int direction, int min, int max)
 static void step_rx_group(int direction)
 {
     codeplug_rx_group_t group;
-    int number = edit.rx_group_list;
+    int number = edit->rx_group_list;
 
     do {
         number += direction;
     } while ((number > 0) && (number <= CODEPLUG_RX_GROUPS_MAX) && !codeplug_get_rx_group(number, &group));
     if ((number >= 0) && (number <= CODEPLUG_RX_GROUPS_MAX)) {
-        edit.rx_group_list = (uint8_t)number;
+        edit->rx_group_list = (uint8_t)number;
     }
 }
 
@@ -266,27 +269,27 @@ static void step_contact(int direction)
     int position = -1; // "none"
 
     for (int i = 0; i < count; i++) {
-        if (codeplug_contact_at(i, -1) == edit.contact) {
+        if (codeplug_contact_at(i, -1) == edit->contact) {
             position = i;
             break;
         }
     }
     position += direction;
     if ((position >= -1) && (position < count)) {
-        edit.contact = (uint16_t)((position < 0) ? 0 : codeplug_contact_at(position, -1));
+        edit->contact = (uint16_t)((position < 0) ? 0 : codeplug_contact_at(position, -1));
     }
 }
 
 static void step_aprs(int direction)
 {
     codeplug_aprs_config_t config;
-    int index = edit.aprs_config_index;
+    int index = edit->aprs_config_index;
 
     do {
         index += direction;
     } while ((index > 0) && (index <= CODEPLUG_APRS_CONFIGS_MAX) && !codeplug_get_aprs_config(index, &config));
     if ((index >= 0) && (index <= CODEPLUG_APRS_CONFIGS_MAX)) {
-        edit.aprs_config_index = (uint8_t)index;
+        edit->aprs_config_index = (uint8_t)index;
     }
 }
 
@@ -295,7 +298,7 @@ static void change(int item, int direction, bool fast, uint8_t modifiers)
 {
     bool on = (direction > 0);
     bool fm = !is_dmr();
-    bool aprs = (edit.aprs_config_index != 0);
+    bool aprs = (edit->aprs_config_index != 0);
 
     switch (item) {
         case ITEM_RX:
@@ -303,28 +306,28 @@ static void change(int item, int direction, bool fast, uint8_t modifiers)
             apply_shift(direction);
             break;
         case ITEM_MODE: // FM, AM, USB, LSB, DMR (DMR is 12.5 kHz)
-            edit.mode = codeplug_mode_step(edit.mode, direction);
-            if (edit.mode == CODEPLUG_MODE_DMR) {
-                set_bit(&edit.flag4, FLAG4_BANDWIDTH_25K, false);
+            edit->mode = codeplug_mode_step(edit->mode, direction);
+            if (edit->mode == CODEPLUG_MODE_DMR) {
+                set_bit(&edit->flag4, FLAG4_BANDWIDTH_25K, false);
             }
             break;
         case ITEM_COLOUR_CODE:
             if (is_p25()) {
                 step_nac(direction, fast);
             } else if (!fm) {
-                step_value(&edit.tx_colour, direction, 0, COLOUR_CODE_MAX);
+                step_value(&edit->tx_colour, direction, 0, COLOUR_CODE_MAX);
             }
             break;
         case ITEM_TIMESLOT:
             if (!fm) {
-                set_bit(&edit.flag2, FLAG2_TIMESLOT_2, on);
+                set_bit(&edit->flag2, FLAG2_TIMESLOT_2, on);
             }
             break;
         case ITEM_RX_CSS:
         case ITEM_TX_CSS:
             if (fm && !aprs) {
                 {
-                    uint16_t *tone = ((item == ITEM_RX_CSS) ? &edit.rx_tone : &edit.tx_tone);
+                    uint16_t *tone = ((item == ITEM_RX_CSS) ? &edit->rx_tone : &edit->tx_tone);
 
                     *tone = tones_step(*tone, direction * (fast ? CSS_FAST_STEP : 1));
                 }
@@ -332,60 +335,60 @@ static void change(int item, int direction, bool fast, uint8_t modifiers)
             break;
         case ITEM_BANDWIDTH:
             if (fm) {
-                set_bit(&edit.flag4, FLAG4_BANDWIDTH_25K, on);
+                set_bit(&edit->flag4, FLAG4_BANDWIDTH_25K, on);
             }
             break;
         case ITEM_STEP: {
-            int step = (edit.vfo_flag5 >> VFO_STEP_SHIFT) + direction;
+            int step = (edit->vfo_flag5 >> VFO_STEP_SHIFT) + direction;
 
             step = (step < 0) ? 0 : ((step >= VFO_SCREEN_STEPS) ? (VFO_SCREEN_STEPS - 1) : step);
-            edit.vfo_flag5 = (uint8_t)((edit.vfo_flag5 & 0x0F) | (step << VFO_STEP_SHIFT));
+            edit->vfo_flag5 = (uint8_t)((edit->vfo_flag5 & 0x0F) | (step << VFO_STEP_SHIFT));
             break;
         }
         case ITEM_TOT:
-            step_value(&edit.tot, direction, 0, TOT_MAX);
+            step_value(&edit->tot, direction, 0, TOT_MAX);
             break;
         case ITEM_RX_ONLY:
-            set_bit(&edit.flag4, FLAG4_RX_ONLY, on);
+            set_bit(&edit->flag4, FLAG4_RX_ONLY, on);
             break;
         case ITEM_ZONE_SKIP:
-            set_bit(&edit.flag4, FLAG4_ZONE_SKIP, on);
+            set_bit(&edit->flag4, FLAG4_ZONE_SKIP, on);
             break;
         case ITEM_ALL_SKIP:
-            set_bit(&edit.flag4, FLAG4_ALL_SKIP, on);
+            set_bit(&edit->flag4, FLAG4_ALL_SKIP, on);
             break;
         case ITEM_VOX:
-            set_bit(&edit.flag4, FLAG4_VOX, on);
+            set_bit(&edit->flag4, FLAG4_VOX, on);
             break;
         case ITEM_POWER:
             if (!is_vfo()) {
-                step_value(&edit.libre_dmr_power, direction, 0, POWER_MAX);
+                step_value(&edit->libre_dmr_power, direction, 0, POWER_MAX);
             }
             break;
         case ITEM_SQUELCH:
             if (fm) {
-                step_value(&edit.sql, direction, 0, SQUELCH_MAX);
+                step_value(&edit->sql, direction, 0, SQUELCH_MAX);
             }
             break;
         case ITEM_BEEP: // the bits are "no beep", "no eco"
-            set_bit(&edit.libre_dmr_flag1, FLAG1_NO_BEEP, !on);
+            set_bit(&edit->libre_dmr_flag1, FLAG1_NO_BEEP, !on);
             break;
         case ITEM_ECO:
-            set_bit(&edit.libre_dmr_flag1, FLAG1_NO_ECO, !on);
+            set_bit(&edit->libre_dmr_flag1, FLAG1_NO_ECO, !on);
             break;
         case ITEM_TA_TX_TS1:
         case ITEM_TA_TX_TS2:
             if (!fm) {
                 int shift = ((item == ITEM_TA_TX_TS1) ? TA_TX_TS1_SHIFT : TA_TX_TS2_SHIFT);
-                uint8_t value = (uint8_t)((edit.flag1 >> shift) & TA_TX_MASK);
+                uint8_t value = (uint8_t)((edit->flag1 >> shift) & TA_TX_MASK);
 
                 step_value(&value, direction, 0, TA_TX_BOTH);
-                edit.flag1 = (uint8_t)((edit.flag1 & ~(TA_TX_MASK << shift)) | (value << shift));
+                edit->flag1 = (uint8_t)((edit->flag1 & ~(TA_TX_MASK << shift)) | (value << shift));
             }
             break;
         case ITEM_FORCE_DMO:
             if (!fm) {
-                set_bit(&edit.libre_dmr_flag1, FLAG1_FORCE_DMO, on);
+                set_bit(&edit->libre_dmr_flag1, FLAG1_FORCE_DMO, on);
             }
             break;
         case ITEM_TG_LIST:
@@ -461,14 +464,14 @@ static void format_item(int item, char *label, size_t label_size, char *out, siz
             break;
         case ITEM_RX:
             snprintf(label, label_size, "%s", text(TEXT_RX));
-            format_frequency(edit.rx_freq, out, size);
+            format_frequency(edit->rx_freq, out, size);
             break;
         case ITEM_TX:
             snprintf(label, label_size, "%s", text(TEXT_TX));
-            format_frequency(edit.tx_freq, out, size);
+            format_frequency(edit->tx_freq, out, size);
             break;
         case ITEM_MODE:
-            snprintf(out, size, "%s", codeplug_mode_name(edit.mode));
+            snprintf(out, size, "%s", codeplug_mode_name(edit->mode));
             break;
         case ITEM_DMR_ID:
             if (fm) {
@@ -481,7 +484,7 @@ static void format_item(int item, char *label, size_t label_size, char *out, siz
             break;
         case ITEM_COLOUR_CODE:
             if (is_p25()) {
-                uint16_t nac = codeplug_p25_nac(&edit);
+                uint16_t nac = codeplug_p25_nac(edit);
 
                 snprintf(label, label_size, "NAC");
                 if ((nac == CODEPLUG_P25_NAC_RX_ANY) || (nac == 0xF7F)) {
@@ -492,19 +495,19 @@ static void format_item(int item, char *label, size_t label_size, char *out, siz
             } else if (fm) {
                 snprintf(out, size, "%s", na);
             } else {
-                snprintf(out, size, "%u", edit.tx_colour);
+                snprintf(out, size, "%u", edit->tx_colour);
             }
             break;
         case ITEM_TIMESLOT:
             if (fm) {
                 snprintf(out, size, "%s", na);
             } else {
-                snprintf(out, size, "%u", ((edit.flag2 & FLAG2_TIMESLOT_2) ? 2 : 1));
+                snprintf(out, size, "%u", ((edit->flag2 & FLAG2_TIMESLOT_2) ? 2 : 1));
             }
             break;
         case ITEM_TG_LIST:
         case ITEM_CONTACT: {
-            unsigned number = ((item == ITEM_TG_LIST) ? edit.rx_group_list : edit.contact);
+            unsigned number = ((item == ITEM_TG_LIST) ? edit->rx_group_list : edit->contact);
 
             if (fm && !is_p25()) {
                 snprintf(out, size, "%s", na);
@@ -530,90 +533,90 @@ static void format_item(int item, char *label, size_t label_size, char *out, siz
             break;
         }
         case ITEM_RX_CSS:
-            format_css(text(TEXT_RX), edit.rx_tone, label, label_size, out, size);
+            format_css(text(TEXT_RX), edit->rx_tone, label, label_size, out, size);
             break;
         case ITEM_TX_CSS:
-            format_css(text(TEXT_TX), edit.tx_tone, label, label_size, out, size);
+            format_css(text(TEXT_TX), edit->tx_tone, label, label_size, out, size);
             break;
         case ITEM_BANDWIDTH:
-            snprintf(out, size, "%s", (!fm ? na : ((edit.flag4 & FLAG4_BANDWIDTH_25K) ? "25kHz" : "12.5kHz")));
+            snprintf(out, size, "%s", (!fm ? na : ((edit->flag4 & FLAG4_BANDWIDTH_25K) ? "25kHz" : "12.5kHz")));
             break;
         case ITEM_STEP: {
-            unsigned step = vfo_screen_steps[(edit.vfo_flag5 >> VFO_STEP_SHIFT) % VFO_SCREEN_STEPS];
+            unsigned step = vfo_screen_steps[(edit->vfo_flag5 >> VFO_STEP_SHIFT) % VFO_SCREEN_STEPS];
 
             snprintf(out, size, "%u.%02ukHz", step / 100, step % 100);
             break;
         }
         case ITEM_TOT:
-            if (edit.tot == 0) {
+            if (edit->tot == 0) {
                 snprintf(out, size, "%s", text(TEXT_OFF));
             } else {
-                snprintf(out, size, "%us", (unsigned)(edit.tot * TOT_UNIT_S));
+                snprintf(out, size, "%us", (unsigned)(edit->tot * TOT_UNIT_S));
             }
             break;
         case ITEM_RX_ONLY:
-            snprintf(out, size, "%s", yes_no(edit.flag4 & FLAG4_RX_ONLY));
+            snprintf(out, size, "%s", yes_no(edit->flag4 & FLAG4_RX_ONLY));
             break;
         case ITEM_ZONE_SKIP:
-            snprintf(out, size, "%s", yes_no(edit.flag4 & FLAG4_ZONE_SKIP));
+            snprintf(out, size, "%s", yes_no(edit->flag4 & FLAG4_ZONE_SKIP));
             break;
         case ITEM_ALL_SKIP:
-            snprintf(out, size, "%s", yes_no(edit.flag4 & FLAG4_ALL_SKIP));
+            snprintf(out, size, "%s", yes_no(edit->flag4 & FLAG4_ALL_SKIP));
             break;
         case ITEM_VOX:
             snprintf(label, label_size, "%s", text(TEXT_VOX));
             snprintf(
                 out, size, "%s",
-                ((fm && (edit.aprs_config_index != 0)) ? na : text((edit.flag4 & FLAG4_VOX) ? TEXT_ON : TEXT_OFF)));
+                ((fm && (edit->aprs_config_index != 0)) ? na : text((edit->flag4 & FLAG4_VOX) ? TEXT_ON : TEXT_OFF)));
             break;
         case ITEM_POWER:
             if (is_vfo()) {
                 snprintf(out, size, "%s", na);
-            } else if (edit.libre_dmr_power == 0) {
+            } else if (edit->libre_dmr_power == 0) {
                 snprintf(out, size, "%s", text(TEXT_FROM_MASTER));
             } else {
-                snprintf(out, size, "%s", bottom_bar_power_label((edit.libre_dmr_power - 1) % POWER_MAX));
+                snprintf(out, size, "%s", bottom_bar_power_label((edit->libre_dmr_power - 1) % POWER_MAX));
             }
             break;
         case ITEM_SQUELCH:
             if (!fm) {
                 snprintf(out, size, "%s", na);
-            } else if (edit.sql == 0) {
+            } else if (edit->sql == 0) {
                 snprintf(out, size, "%s", text(TEXT_FROM_MASTER));
             } else {
-                snprintf(out, size, "%u%%", 5U * (edit.sql - 1U));
+                snprintf(out, size, "%u%%", 5U * (edit->sql - 1U));
             }
             break;
         case ITEM_BEEP:
-            snprintf(out, size, "%s", yes_no(!(edit.libre_dmr_flag1 & FLAG1_NO_BEEP)));
+            snprintf(out, size, "%s", yes_no(!(edit->libre_dmr_flag1 & FLAG1_NO_BEEP)));
             break;
         case ITEM_ECO:
-            snprintf(out, size, "%s", yes_no(!(edit.libre_dmr_flag1 & FLAG1_NO_ECO)));
+            snprintf(out, size, "%s", yes_no(!(edit->libre_dmr_flag1 & FLAG1_NO_ECO)));
             break;
         case ITEM_TA_TX_TS1:
         case ITEM_TA_TX_TS2: {
             int shift = ((item == ITEM_TA_TX_TS1) ? TA_TX_TS1_SHIFT : TA_TX_TS2_SHIFT);
 
-            snprintf(out, size, "%s", (fm ? na : text(ta_values[(edit.flag1 >> shift) & TA_TX_MASK])));
+            snprintf(out, size, "%s", (fm ? na : text(ta_values[(edit->flag1 >> shift) & TA_TX_MASK])));
             break;
         }
         case ITEM_APRS:
             if (!fm) {
                 snprintf(out, size, "%s", na);
-            } else if (edit.aprs_config_index == 0) {
+            } else if (edit->aprs_config_index == 0) {
                 snprintf(out, size, "%s", text(TEXT_NONE));
             } else {
                 codeplug_aprs_config_t config;
 
-                if (codeplug_get_aprs_config(edit.aprs_config_index, &config)) {
+                if (codeplug_get_aprs_config(edit->aprs_config_index, &config)) {
                     codeplug_text_name(config.name, sizeof(config.name), out, size);
                 } else {
-                    snprintf(out, size, "%u", edit.aprs_config_index);
+                    snprintf(out, size, "%u", edit->aprs_config_index);
                 }
             }
             break;
         case ITEM_FORCE_DMO:
-            snprintf(out, size, "%s", (fm ? na : yes_no(edit.libre_dmr_flag1 & FLAG1_FORCE_DMO)));
+            snprintf(out, size, "%s", (fm ? na : yes_no(edit->libre_dmr_flag1 & FLAG1_FORCE_DMO)));
             break;
         default:
             break;
@@ -638,9 +641,9 @@ static bool entry_set(uint32_t value)
     } else if (!codeplug_frequency_is_valid(value)) {
         return false;
     } else if (entry_item == ITEM_RX) {
-        edit.rx_freq = value;
+        edit->rx_freq = value;
     } else {
-        edit.tx_freq = value;
+        edit->tx_freq = value;
     }
     return true;
 }
@@ -664,37 +667,46 @@ static void enter(void *arg)
     *selected() = ITEM_NAME;
     digit_entry_stop(&entry);
     shift_index = 0;
-    memset(&edit, 0, sizeof(edit));
-
-    if (ref < 0) {
-        memcpy(&edit, vfo_screen_vfo(-1 - ref), sizeof(edit));
-    } else if ((ref == 0) || !codeplug_get_channel(ref, &edit)) {
+    edit = (ref < 0) ? vfo_screen_vfo(-1 - ref) : ((ref > 0) ? channel_screen_edit() : NULL);
+    if (edit == NULL) {
         ref = 0;
+        memset(&original, 0, sizeof(original));
+        edit = &original; // nothing to change: shown empty, never written
         return;
     }
+    memcpy(&original, edit, sizeof(original));
 
-    codeplug_name_to_string(edit.name, name, NAME_LENGTH);
+    codeplug_name_to_string(edit->name, name, NAME_LENGTH);
     name_editable = !is_vfo();
     text_entry_start(&name_entry, name, NAME_LENGTH, false);
+}
+
+// The name (no empty one, as the CPS: then the one it had), and the channel into the codeplug when it changed
+static void save(void)
+{
+    if (ref == 0) {
+        return;
+    }
+    text_entry_commit(&name_entry);
+    if (name_editable && (name[0] != '\0')) {
+        memset(edit->name, 0xFF, NAME_LENGTH);
+        memcpy(edit->name, name, strlen(name));
+    }
+    if (memcmp(edit, &original, sizeof(original)) == 0) {
+        return;
+    }
+    if (is_vfo()) {
+        vfo_screen_save(-1 - ref);
+    } else {
+        codeplug_write_channel(ref, edit);
+    }
+    memcpy(&original, edit, sizeof(original));
 }
 
 static void leave(void)
 {
     ui_timer_stop();
-}
-
-static void save(void)
-{
-    if (is_vfo()) {
-        memcpy(vfo_screen_vfo(-1 - ref), &edit, sizeof(edit));
-        vfo_screen_save(-1 - ref);
-        return;
-    }
-    if (name_editable) {
-        memset(edit.name, 0xFF, NAME_LENGTH);
-        memcpy(edit.name, name, strlen(name));
-    }
-    codeplug_write_channel(ref, &edit);
+    save();
 }
 
 static bool handle(const ui_event_t *ev)
@@ -731,8 +743,7 @@ static bool handle(const ui_event_t *ev)
             *selected() = ITEM_NAME;
             return true;
         }
-        save();
-        ui_home();
+        ui_home(); // leave() writes it
         return false;
     }
 
@@ -758,7 +769,7 @@ static bool handle(const ui_event_t *ev)
         return true;
     }
 
-    list_handle_back(ev); // back without saving; held: home
+    list_handle_back(ev); // back (leave() writes it); held: home
     return false;
 }
 

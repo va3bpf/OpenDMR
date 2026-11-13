@@ -103,6 +103,7 @@ static struct {
 
 void tx_screen_open(const char *label, const char *title, const codeplug_channel_t *channel)
 {
+    ui_tune(); // the channel of the screen the PTT was pressed on, now: enter() checks it, then it transmits on it
     snprintf(tx.label, sizeof(tx.label), "%s", label ? label : "");
     snprintf(tx.title, sizeof(tx.title), "%s", title ? title : "");
     memcpy(&tx.channel, channel, sizeof(tx.channel));

@@ -105,7 +105,7 @@ static satellite_freq_kind_t freq_kind;
 static entry_t entries[ENTRIES_MAX]; // the list in time order
 static int entry_count;
 static codeplug_channel_t channel;   // the satellite's, tuned on the pass screen
-static bool tuned = false;
+static bool tuned = false;           // since then the radio is on it (radio_channel()) until the screen is left
 static uint8_t sql = SQL_DEFAULT;
 static uint32_t sql_shown_until = 0;
 
@@ -175,6 +175,7 @@ static void enter(void *arg)
     (void)arg;
     if (*started == 0) {
         *started = 1;
+        tuned = false; // the radio on the home screen's channel until a pass is opened
         view = VIEW_LIST;
         selected = 0;
         freq_kind = SATELLITE_FREQ_VOICE;
@@ -213,6 +214,12 @@ static bool timer(void)
     return true;
 }
 
+// The channel of the screen (ui_screen_t.channel): the satellite's once a pass was opened, else the home screen's
+static const codeplug_channel_t *radio_channel(void)
+{
+    return tuned ? &channel : UI_CHANNEL_UNDER;
+}
+
 // The radio on the corrected frequencies of the kind shown (calculateActiveSatelliteData()); force: set again even
 // when it is close (a new kind, the squelch, the PTT: the exact transmit frequency)
 static void tune(bool force)
@@ -244,8 +251,7 @@ static void tune(bool force)
                           : CODEPLUG_CSS_NONE;
     channel.sql = sql;
     channel.not_in_codeplug_flag = 0x01;
-    radio_set_channel(&channel);
-    tuned = true;
+    tuned = true; // the UI task tunes it after the event (radio_channel())
 }
 
 static void open_selected(void)
@@ -626,4 +632,5 @@ const ui_screen_t satellite_screen = {
     .enter = enter,
     .handle = handle,
     .draw = draw,
+    .channel = radio_channel,
 };
