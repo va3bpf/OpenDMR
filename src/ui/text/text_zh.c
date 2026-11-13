@@ -412,4 +412,5 @@ const char *const text_zh[TEXT_COUNT] = {
     [TEXT_POWER_TO_ALL] = "功率应用到全部",
     [TEXT_POWER_TO_ALL_ASK] = "所有信道和VFO",
     [TEXT_POWER_TO_ALL_DONE] = "已设置信道数",
+    [TEXT_APRS_SEND_NOW] = "立即发送信标",
 };

@@ -416,6 +416,7 @@ typedef enum {
     TEXT_POWER_TO_ALL,
     TEXT_POWER_TO_ALL_ASK,
     TEXT_POWER_TO_ALL_DONE,
+    TEXT_APRS_SEND_NOW,
     TEXT_COUNT
 } text_id_t;
 

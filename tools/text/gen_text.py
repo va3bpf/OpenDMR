@@ -51,6 +51,7 @@ EXTRA = [
     ('cps_dmr_ids', 'DMR ID database', 'DMR ID 库'),
     ('cps_codeplug', 'Codeplug', '码表'),
     ('cps_keep_cable', 'Keep the cable in', '请勿拔下写频线'),
+    ('aprs_send_now', 'Send beacon now', '立即发送信标'),
 ]
 
 english = read('english.h', 'latin-1') + [(name, en) for name, en, _ in EXTRA]
