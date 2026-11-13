@@ -42,6 +42,7 @@
 #define SECTOR_TAG    0x02
 #define AT_OSC_TUNE   0x016
 #define AT_UHF_BIAS   0x017
+#define AT_RX_ADJUST  0x027
 #define AT_UHF_POWER  0x040
 #define AT_VHF_BIAS   0x0A6
 #define AT_VHF_POWER  0x0D0
@@ -58,9 +59,9 @@
 #define DEFAULT_MOD_BIAS   0x4D4D
 #define FALLBACK_PA_DRIVE  1408 // about 1 W, without a table
 #define PA_DRIVE_MAX       4095
+#define RX_ADJUST_FROM_TX  384 // RX Freq Adjust is near TX Freq Adjust + 384 (both radios here: exactly)
 
 static factory_cal_t cal;
-static uint32_t mod_bias_k[FACTORY_CAL_BANDS]; // mean of (calibration frequency in MHz * bias)
 
 static uint32_t bcd_le(const uint8_t *bytes)
 {
@@ -97,6 +98,13 @@ static bool read_sector(uint32_t sector)
         (cal.freqs[FACTORY_CAL_VHF][0] < VHF_FIRST_MIN) || (cal.freqs[FACTORY_CAL_VHF][0] > VHF_FIRST_MAX)) {
         return false;
     }
+    uint8_t rx_adjust[2];
+
+    if (!flash_read_raw(sector + AT_RX_ADJUST, rx_adjust, sizeof(rx_adjust))) {
+        return false;
+    }
+    cal.rx_adjust = (uint16_t)(rx_adjust[0] | (rx_adjust[1] << 8));
+
     return flash_read_raw(sector + AT_OSC_TUNE, &cal.osc_tune, 1) &&
            flash_read_raw(sector + AT_RX_LEVELS, cal.rx_levels, sizeof(cal.rx_levels)) &&
            flash_read_raw(sector + AT_UHF_POWER, cal.power[FACTORY_CAL_UHF], sizeof(cal.power[FACTORY_CAL_UHF])) &&
@@ -118,14 +126,36 @@ void factory_cal_init(void)
         }
     }
 
-    for (int band = 0; cal.valid && (band < FACTORY_CAL_BANDS); band++) {
-        uint32_t sum = 0;
-
-        for (int i = 0; i < FACTORY_CAL_POINTS; i++) {
-            sum += (cal.freqs[band][i] / 100000) * cal.bias[band][i];
-        }
-        mod_bias_k[band] = sum / FACTORY_CAL_POINTS;
+    // A table without the field (never written): the value it nearly always has
+    if (cal.valid && ((cal.rx_adjust == 0x0000) || (cal.rx_adjust == 0xFFFF))) {
+        cal.rx_adjust = (uint16_t)(cal.osc_tune + RX_ADJUST_FROM_TX);
     }
+}
+
+// The calibration point at or below the frequency, and how far above it (the stock points: UHF 400 - 470 MHz in
+// 17.5 MHz steps, VHF 136 - 174 MHz in 9.5 MHz steps); outside them the first or last pair, not extrapolated
+static int point_of(uint32_t frequency, int32_t *remainder, int32_t *step)
+{
+    bool uhf = (frequency >= 28000000);
+    int32_t base = uhf ? 40000000 : 13600000;
+    int32_t offset = (int32_t)frequency - base;
+
+    *step = uhf ? 1750000 : 950000;
+    if (offset <= 0) {
+        *remainder = 0;
+        return 0;
+    }
+    if (offset >= (*step * (FACTORY_CAL_POINTS - 1))) {
+        *remainder = *step;
+        return FACTORY_CAL_POINTS - 2;
+    }
+    *remainder = offset % *step;
+    return offset / *step;
+}
+
+static int band_of(uint32_t frequency)
+{
+    return (frequency >= 28000000) ? FACTORY_CAL_UHF : FACTORY_CAL_VHF;
 }
 
 const factory_cal_t *factory_cal_get(void)
@@ -151,29 +181,29 @@ uint8_t factory_cal_rx_dac_gain(void)
     return 0x80 | ((level < 32) ? (31 - level) : (95 - level));
 }
 
-// The bias scales with 1/f: the band's mean (f * bias) divided by f, rounded; the same byte in both halves
+// 4FSK (Test Mode "4FSK(400)" / "4FSK(136)"), interpolated between the calibration points as the power and rounded:
+// exactly the table's value at each point; the same byte in both halves
 uint16_t factory_cal_mod_bias(uint32_t frequency)
 {
-    uint32_t mhz = frequency / 100000;
-    uint32_t k = mod_bias_k[(frequency > 29999999) ? FACTORY_CAL_UHF : FACTORY_CAL_VHF];
+    int32_t remainder;
+    int32_t step;
 
-    if (!cal.valid || (mhz == 0)) {
+    if (!cal.valid) {
         return DEFAULT_MOD_BIAS;
     }
 
-    uint8_t bias = (uint8_t)(((k * 2) + mhz) / (mhz * 2));
+    int index = point_of(frequency, &remainder, &step);
+    const uint8_t *bias = cal.bias[band_of(frequency)];
+    int32_t sum = (bias[index] * (step - remainder)) + (bias[index + 1] * remainder);
+    uint8_t value = (uint8_t)((sum + (step / 2)) / step);
 
-    return (uint16_t)((bias << 8) | bias);
+    return (uint16_t)((value << 8) | value);
 }
 
 void factory_cal_pa_drive(uint32_t frequency, uint16_t drive[FACTORY_CAL_LEVELS])
 {
-    bool uhf = (frequency >= 28000000);
-    int32_t base = uhf ? 40000000 : 13600000;
-    int32_t step = uhf ? 1750000 : 950000;
-    int32_t offset = (int32_t)frequency - base;
-    int index;
     int32_t remainder;
+    int32_t step;
 
     if (!cal.valid) {
         for (int level = 0; level < FACTORY_CAL_LEVELS; level++) {
@@ -182,18 +212,8 @@ void factory_cal_pa_drive(uint32_t frequency, uint16_t drive[FACTORY_CAL_LEVELS]
         return;
     }
 
-    if (offset <= 0) {
-        index = 0;
-        remainder = 0;
-    } else if (offset >= (step * (FACTORY_CAL_POINTS - 1))) {
-        index = FACTORY_CAL_POINTS - 2;
-        remainder = step;
-    } else {
-        index = offset / step;
-        remainder = offset - (index * step);
-    }
-
-    const uint8_t *power = cal.power[uhf ? FACTORY_CAL_UHF : FACTORY_CAL_VHF];
+    int index = point_of(frequency, &remainder, &step);
+    const uint8_t *power = cal.power[band_of(frequency)];
 
     for (int level = 0; level < FACTORY_CAL_LEVELS; level++) {
         int32_t lower = power[(level * FACTORY_CAL_POINTS) + index] << 4;

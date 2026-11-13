@@ -70,12 +70,15 @@ bool radio_aprs_sent(void);
 // The VOX (an FM channel with VOX, settings.vox_threshold set) posts PTT presses and releases; a key (from the input
 // task) stops it and starts it again later
 void radio_vox_key(bool ptt_held);
-void radio_eco_activity(void); // a key or the knob (the input task): the receive power saving ends, starts over later
+void radio_eco_activity(void); // a key, the knob, a P25 sync: the receive power saving ends, starts over later
 void radio_dmr_audio(bool on); // the DMR engine's speaker (from its task or its interrupts)
 // The DMR engine's transmitter (from its timeslot interrupts): on at the start, each burst on / off, receive at the end
 void radio_dmr_tx_on(void);
 void radio_dmr_burst(bool on);
 void radio_dmr_rx_on(void);
+// The physical layer transmit (p25_phy.c): the transmitter on (low_power: 50 mW, else the channel's power), kept on /
+// back to receive
+void radio_phy_tx(bool on, bool low_power);
 void radio_tx_signal(uint16_t hz1, uint16_t hz2); // FM transmit: a tone (1750 Hz) or DTMF instead of the mic; 0, 0: off
 #define RADIO_TX_SILENT 0xFFFF // hz1: no tone and no mic (the gaps of the hotspot's CW ID)
 int radio_band_of(uint32_t frequency); // the band of the settings' squelch defaults: 0 VHF, 1 220 MHz, 2 UHF

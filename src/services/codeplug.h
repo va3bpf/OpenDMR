@@ -43,19 +43,26 @@
 
 // The codeplug knows FM (0) and DMR (1). AM, USB and LSB (receive only) are stored as an analog channel (0, what the
 // CPS shows) with the mode in the byte the OpenGD77 format leaves unused (opendmr_mode: 0xA1 AM, 0xA2 USB, 0xA3 LSB,
-// anything else FM)
+// anything else FM); P25 (receive only for now) as a digital one (1: the CPS shows DMR) with opendmr_mode 0xA4
 typedef enum {
     CODEPLUG_MODE_FM = 0,
     CODEPLUG_MODE_DMR = 1,
     CODEPLUG_MODE_AM = 2,
     CODEPLUG_MODE_USB = 3,
     CODEPLUG_MODE_LSB = 4,
+    CODEPLUG_MODE_P25 = 5,
     CODEPLUG_MODES
 } codeplug_mode_t;
 
 static inline bool codeplug_mode_is_analog(uint8_t mode)
 {
-    return mode != CODEPLUG_MODE_DMR;
+    return (mode != CODEPLUG_MODE_DMR) && (mode != CODEPLUG_MODE_P25);
+}
+
+// DMR and P25: the HR_C7000 demodulates (4FSK), the FD6818 set up as for DMR
+static inline bool codeplug_mode_is_digital(uint8_t mode)
+{
+    return !codeplug_mode_is_analog(mode);
 }
 
 static inline bool codeplug_mode_is_ssb(uint8_t mode)
@@ -66,11 +73,11 @@ static inline bool codeplug_mode_is_ssb(uint8_t mode)
 // AM, USB and LSB are receive only: the FD6818 modulates FM only
 static inline bool codeplug_mode_can_transmit(uint8_t mode)
 {
-    return (mode == CODEPLUG_MODE_FM) || (mode == CODEPLUG_MODE_DMR);
+    return (mode == CODEPLUG_MODE_FM) || (mode == CODEPLUG_MODE_DMR) || (mode == CODEPLUG_MODE_P25);
 }
 
-const char *codeplug_mode_name(uint8_t mode);  // "FM", "DMR", "AM", "USB", "LSB"
-uint8_t codeplug_mode_step(uint8_t mode, int direction); // the mode key's order: FM, AM, USB, LSB, DMR, around
+const char *codeplug_mode_name(uint8_t mode);  // "FM", "DMR", "AM", "USB", "LSB", "P25"
+uint8_t codeplug_mode_step(uint8_t mode, int direction); // the mode key's order: FM, AM, USB, LSB, DMR, P25, around
 
 // A channel as stored (56 bytes), then two values worked out when it is read
 typedef struct {
@@ -108,6 +115,24 @@ typedef struct {
     uint8_t not_in_codeplug_flag; // 0x01: a VFO
     int not_in_codeplug_distance_x10;
 } codeplug_channel_t;
+
+// P25 channels (and VFOs): the NAC, 12 bits, in the bytes DMR's colour code and the unused one hold (P25 has no colour
+// code): low 8 bits in tx_colour, high 4 in unused2 with 0xA0 over them (0x00 / 0xFF from the CPS: not set, 293)
+#define CODEPLUG_P25_NAC_DEFAULT 0x293 // the P25 default
+#define CODEPLUG_P25_NAC_RX_ANY  0xF7E // receive: any NAC (0xF7F too, the repeater's)
+#define CODEPLUG_P25_NAC_MAX     0xFFF
+static inline uint16_t codeplug_p25_nac(const codeplug_channel_t *channel)
+{
+    if ((channel->unused2 & 0xF0) != 0xA0) {
+        return CODEPLUG_P25_NAC_DEFAULT;
+    }
+    return (uint16_t)(((channel->unused2 & 0x0F) << 8) | channel->tx_colour);
+}
+static inline void codeplug_set_p25_nac(codeplug_channel_t *channel, uint16_t nac)
+{
+    channel->tx_colour = (uint8_t)nac;
+    channel->unused2 = (uint8_t)(0xA0 | ((nac >> 8) & 0x0F));
+}
 
 typedef struct {
     char name[CODEPLUG_NAME_LENGTH];
@@ -258,6 +283,9 @@ int codeplug_write_new_channel(const codeplug_channel_t *channel);
 // firmware's settingsVFOSanityCheck()).
 bool codeplug_read_vfo(int vfo, codeplug_channel_t *channel);
 bool codeplug_write_vfo(int vfo, const codeplug_channel_t *channel);
+
+// The power (libre_dmr_power: 1 - 10) into every channel in use and both VFOs; the channel count, -1: error
+int codeplug_set_all_power(uint8_t power);
 
 // The frequency (10 Hz) is in one of the bands of the radio (RADIO_HARDWARE_FREQUENCY_BANDS of the main firmware)
 bool codeplug_frequency_is_valid(uint32_t frequency);

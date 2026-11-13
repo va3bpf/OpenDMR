@@ -34,19 +34,21 @@
 
 // The factory calibration of the stock firmware, read only (functions/calibration.c dm32ReadFactory()). It is in the
 // 25Q128 below the window of this firmware: the 4 KB sector between 0x1000 and 0xC9000 whose last byte is 0x02 and
-// whose frequency tables start in the UHF and VHF bands (codeplug data can end with the same tag). Layout (reverse
-// engineered from OpenGD77_DM32_20260711):
-//   0x016          reference oscillator tune
-//   0x017 - 0x01B  UHF modulation bias at the 5 UHF calibration frequencies
-//   0x040 - 0x04E  UHF PA DAC / 16: low (250 mW), mid (1 W), high (5 W), 5 points each
-//   0x0A6 - 0x0AA  VHF modulation bias
+// whose frequency tables start in the UHF and VHF bands (codeplug data can end with the same tag). The fields read
+// (the stock CPS Test Mode row in brackets; the whole table: docs/factory-calibration.md):
+//   0x016          reference oscillator tune (TX Freq Adjust)
+//   0x017 - 0x01B  UHF modulation bias at the 5 UHF calibration frequencies (4FSK(400))
+//   0x027 - 0x028  receive frequency adjust, little endian (RX Freq Adjust)
+//   0x040 - 0x04E  UHF PA DAC / 16: the stock Low (1 W), Middle (4 W), High (10 W), 5 points each
+//   0x0A6 - 0x0AA  VHF modulation bias (4FSK(136))
 //   0x0D0 - 0x0DE  VHF PA DAC / 16
 //   0x20A, 0x20B   receive levels: analog (1 - 15), digital (1 - 63)
 //   0x300, 0x328   UHF, VHF calibration frequencies: 5 little endian BCD uint32 each, 10 Hz units
+// These are all the bytes that differ between two radios; the rest of the table holds the same defaults in both.
 // NOTHING IS WRITTEN: a wrong table would break the tuning of the radio.
 
 #define FACTORY_CAL_POINTS 5
-#define FACTORY_CAL_LEVELS 3 // 250 mW, 1 W, 5 W
+#define FACTORY_CAL_LEVELS 3 // the stock Low, Middle, High: rated 1 W, 4 W, 10 W
 
 enum {
     FACTORY_CAL_VHF,
@@ -58,7 +60,8 @@ typedef struct {
     bool valid;
     uint32_t sector;
     uint8_t osc_tune;
-    uint8_t rx_levels[2];                                                      // analog, digital
+    uint16_t rx_adjust; // osc_tune + 384 where the table doesn't have it
+    uint8_t rx_levels[2];                                                     // analog, digital
     uint32_t freqs[FACTORY_CAL_BANDS][FACTORY_CAL_POINTS];                     // 10 Hz units
     uint8_t power[FACTORY_CAL_BANDS][FACTORY_CAL_LEVELS * FACTORY_CAL_POINTS]; // PA DAC / 16, level after level
     uint8_t bias[FACTORY_CAL_BANDS][FACTORY_CAL_POINTS];
@@ -70,7 +73,7 @@ const factory_cal_t *factory_cal_get(void);
 uint8_t factory_cal_analog_rx_volume(void);        // FD6818 0x48 low bits in FM (1 - 15, default 13)
 uint8_t factory_cal_rx_dac_gain(void);             // GCR_DACL, from the digital receive level
 uint16_t factory_cal_mod_bias(uint32_t frequency); // low half of RF_MOD_BIAS_CTRL
-// PA DAC values (0 - 4095) for 250 mW, 1 W, 5 W at a frequency, interpolated between the calibration points
+// PA DAC values (0 - 4095) for 1 W, 4 W, 10 W at a frequency, interpolated between the calibration points
 void factory_cal_pa_drive(uint32_t frequency, uint16_t drive[FACTORY_CAL_LEVELS]);
 
 #endif

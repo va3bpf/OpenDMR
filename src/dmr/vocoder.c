@@ -36,11 +36,14 @@
 #include "hw.h"
 #include "vocoder.h"
 #include "ambe.h"
+#include "imbe.h"
 #include "rx_capture.h"
 
 extern uint8_t __vocoder_ram_start[], __vocoder_ram_end[], __vocoder_flash_start[];
+extern uint8_t __p25_ram_start[], __p25_ram_end[], __p25_flash_start[];
 
-static uint8_t loaded; // the vocoder is in the RAM
+static uint8_t overlay = OVERLAY_NONE; // which one is in the overlay RAM (ckcpu.ld)
+#define loaded (overlay == OVERLAY_AMBE) // the vocoder is in the RAM
 
 // The encoder's profile (vocoder/c/ambe/ambe_enc.c PROF): APB clocks (84 MHz) a step, summed; read over the cable
 uint32_t ambe_prof[AMBE_PROF_N];
@@ -62,15 +65,46 @@ static ambe_encoder encoder __attribute__((section(".vocoder_bss")));
 static uint8_t decoder_ready __attribute__((section(".vocoder_bss")));
 static uint8_t encoder_ready __attribute__((section(".vocoder_bss")));
 
+// The P25 encoder for the tests over the cable (imbe_enc_test, vocoder_bench 5): in the P25 overlay
+static imbe_encoder imbe_encoder_test __attribute__((section(".p25_bss")));
+uint8_t imbe_enc_ready __attribute__((section(".p25_bss"))); // 0: the next frame starts a fresh encoder
+
+// one frame of 160 samples -> u88 (88 parameter bits); 1 a frame out, 0 not yet (the encoder's delay), 0xFFFFFFFF
+// without the P25 overlay (the radio on a P25 channel)
+uint32_t imbe_enc_test(const int16_t *pcm, uint8_t *u88)
+{
+    if (overlay != OVERLAY_P25) {
+        return 0xFFFFFFFF;
+    }
+    if (!imbe_enc_ready) {
+        imbe_enc_init(&imbe_encoder_test);
+        imbe_enc_ready = 1;
+    }
+    return (uint32_t)imbe_enc_frame(&imbe_encoder_test, pcm, u88);
+}
+
 void vocoder_load(void)
 {
     memcpy(__vocoder_ram_start, __vocoder_flash_start, (size_t)(__vocoder_ram_end - __vocoder_ram_start));
-    loaded = 1;
+    overlay = OVERLAY_AMBE;
 }
 
 void vocoder_sync(void)
 {
     if (!loaded) {
+        vocoder_load();
+    }
+}
+
+void overlay_use(int which)
+{
+    if (overlay == which) {
+        return;
+    }
+    if (which == OVERLAY_P25) {
+        memcpy(__p25_ram_start, __p25_flash_start, (size_t)(__p25_ram_end - __p25_ram_start));
+        overlay = OVERLAY_P25;
+    } else if (which == OVERLAY_AMBE) {
         vocoder_load();
     }
 }
@@ -134,6 +168,11 @@ uint32_t vocoder_bench(uint32_t what_n, const uint8_t *data)
             } else { // data: 4 frames of PCM, used over and over
                 vocoderEncodeFrame((const int16_t *)data + AMBE_N * (i % 4), out);
             }
+        }
+    } else if (what == 5 && overlay == OVERLAY_P25) { // the P25 encoder; data: 4 frames of PCM
+        uint8_t u[88];
+        for (uint32_t i = 0; i < n; i++) {
+            imbe_enc_test((const int16_t *)data + IMBE_N * (i % 4), u);
         }
     } else {
         return 0xFFFFFFFF;

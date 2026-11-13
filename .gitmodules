@@ -1,3 +1,6 @@
 [submodule "vocoder"]
 	path = vocoder
 	url = https://github.com/va3bpf/dmr-vocoder.git
+[submodule "p25"]
+	path = p25
+	url = https://github.com/va3bpf/p25-core.git

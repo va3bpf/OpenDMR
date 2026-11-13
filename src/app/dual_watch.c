@@ -152,7 +152,7 @@ static void load_path(int i)
         int n = (ref == -2) ? 1 : 0;
 
         memcpy(&p->channel, vfo_screen_vfo(n), sizeof(p->channel));
-        p->channel.libre_dmr_power = 0; // as the VFO screen: the radio's power
+        // the VFO's own power (0: the radio's), as the VFO screen
         p->vfo = true;
         snprintf(p->name, sizeof(p->name), "VFO %c", (n == 1) ? 'B' : 'A');
     }

@@ -37,6 +37,10 @@
 #include "settings.h"
 #include "text.h"
 #include "options.h"
+#include "widgets.h"
+#include "message_box.h"
+#include "codeplug.h"
+#include "vfo_screen.h"
 
 #define BAND_LIMITS_MODES     3 // off, on (the legacy bands), from the CPS
 #define CAPTURE_TIMEOUT_MIN   2 // s
@@ -231,34 +235,72 @@ static const ui_custom_t user_power = {
     .change = user_power_change,
 };
 
+#define POWER_USER_LEVEL 9 // "+W-" (radio.c POWER_USER)
+
+/* Default power: what a new channel or VFO starts with (then each keeps its own), and the channels set to 0 */
+
+static void default_power_format(char *buffer, size_t size)
+{
+    snprintf(buffer, size, "%s", bottom_bar_power_label(settings.tx_power_level));
+}
+
+static void default_power_change(int direction, uint8_t modifiers)
+{
+    (void)modifiers;
+    settings.tx_power_level = (uint8_t)CLAMP(settings.tx_power_level + direction, 0, POWER_USER_LEVEL);
+}
+
+static const ui_custom_t default_power = {
+    .format = default_power_format,
+    .change = default_power_change,
+};
+
+/* Power to all: the default power into every channel and both VFOs, asked first */
+
+static message_box_t power_question;
+static message_box_t power_result;
+static char power_line[24];
+
+static void power_to_all_answered(bool yes)
+{
+    int count;
+
+    if (!yes) {
+        return;
+    }
+    count = codeplug_set_all_power((uint8_t)(settings.tx_power_level + 1));
+    vfo_screen_reload();
+    snprintf(power_line, sizeof(power_line), "%s %d", text(TEXT_POWER_TO_ALL_DONE), (count < 0) ? 0 : count);
+    power_result = (message_box_t){.title = text(TEXT_POWER_TO_ALL),
+                                   .line1 = (count < 0) ? text(TEXT_ERROR) : power_line,
+                                   .close_ms = 2000};
+    ui_push(&message_box_screen, &power_result);
+}
+
+static void power_to_all_format(char *buffer, size_t size)
+{
+    snprintf(buffer, size, "%s", bottom_bar_power_label(settings.tx_power_level));
+}
+
+static void power_to_all_select(void)
+{
+    power_question = (message_box_t){.title = text(TEXT_POWER_TO_ALL),
+                                     .line1 = text(TEXT_POWER_TO_ALL_ASK),
+                                     .line2 = bottom_bar_power_label(settings.tx_power_level),
+                                     .buttons = MESSAGE_BOX_YES_NO,
+                                     .answered = power_to_all_answered};
+    ui_push(&message_box_screen, &power_question);
+}
+
+static const ui_custom_t power_to_all = {
+    .format = power_to_all_format,
+    .select = power_to_all_select,
+};
+
 static const ui_bit_t dmr_crc = {
     .word = &settings.bitfield_options,
     .mask = SETTINGS_BIT_DMR_CRC_IGNORED,
     .inverted = true,
-};
-
-/* Mode: 5 W or 10 W radio */
-
-static void power_mode_format(char *buffer, size_t size)
-{
-    snprintf(buffer, size, "%sW", ((settings.bitfield_options & SETTINGS_BIT_FORCE_10W) ? "10" : "5"));
-}
-
-static void power_mode_change(int direction, uint8_t modifiers)
-{
-    (void)modifiers;
-    settings_set_option(SETTINGS_BIT_FORCE_10W, (direction > 0));
-}
-
-static void power_mode_select(void)
-{
-    settings.bitfield_options ^= SETTINGS_BIT_FORCE_10W;
-}
-
-static const ui_custom_t power_mode = {
-    .format = power_mode_format,
-    .change = power_mode_change,
-    .select = power_mode_select,
 };
 
 static const ui_item_t radio_options_items[] = {
@@ -274,9 +316,10 @@ static const ui_item_t radio_options_items[] = {
     {TEXT_SQUELCH_UHF, ICONS_COUNT, UI_ITEM_CUSTOM, &squelch_uhf, NULL},
     {TEXT_PTT_TOGGLE, ICONS_COUNT, UI_ITEM_BIT, &ptt_toggle, NULL},
     {TEXT_PRIVATE_CALL_HANDLING, ICONS_COUNT, UI_ITEM_CHOICE, &private_calls, NULL},
+    {TEXT_DEFAULT_POWER, ICONS_COUNT, UI_ITEM_CUSTOM, &default_power, NULL},
+    {TEXT_POWER_TO_ALL, ICONS_COUNT, UI_ITEM_CUSTOM, &power_to_all, NULL},
     {TEXT_USER_POWER, ICONS_COUNT, UI_ITEM_CUSTOM, &user_power, NULL},
     {TEXT_DMR_CRC, ICONS_COUNT, UI_ITEM_BIT, &dmr_crc, NULL},
-    {TEXT_MODE, ICONS_COUNT, UI_ITEM_CUSTOM, &power_mode, NULL},
 };
 
 const ui_list_t radio_options = {

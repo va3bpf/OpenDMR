@@ -9,9 +9,10 @@ permission (see "Licences").
 - Rewritten on FreeRTOS. The features come from RA4FHE's (Alexey's) OpenDM32 (the DM-32 port of OpenGD77, on
   uC/OS-III);
 - A new user interface (native 240×320, English / Chinese);
-- DMR uses our own AMBE+2 compatible vocoder (the `vocoder/` submodule): **no stock firmware code at all**.
+- DMR uses our own AMBE+2 compatible vocoder (the `vocoder/` submodule), P25 our own IMBE vocoder and air interface
+  (the `p25/` submodule): **no stock firmware code at all**.
 
-Features: DMR / FM receive and transmit, channels and VFO, scan, dual watch, contacts, last heard, FM broadcast
+Features: DMR / FM / **P25** (Phase 1 simplex group calls) receive and transmit, channels and VFO, scan, dual watch, contacts, last heard, FM broadcast
 radio, GPS, APRS beacons, amateur satellite passes, DMR hotspot (MMDVM), VOX, user-defined keys, ... See the
 [user manual](docs/manual.en.md).
 
@@ -43,7 +44,8 @@ Users: download the package from [Releases](../../releases) and follow the
 |---|---|
 | `src/` | The firmware source (`make`, see below) |
 | `vocoder/` | Submodule, repository [va3bpf/dmr-vocoder](https://github.com/va3bpf/dmr-vocoder): our DMR vocoder (AMBE+2 compatible): algorithm, Python verification, fixed-point C (`c/ambe/`, used by the firmware), tests, documents |
-| `docs/` | [Installation guide](docs/installation.en.md), [user manual](docs/manual.en.md) (screenshots in `docs/manual/`); developer documents: [architecture.md](docs/architecture.md) (architecture, Chinese), [ui-design.en.md](docs/ui-design.en.md) (user interface), [coding-style.md](docs/coding-style.md), [fd6818-registers.md](docs/fd6818-registers.md) (RF chip registers) |
+| `p25/` | Submodule, repository [va3bpf/p25-core](https://github.com/va3bpf/p25-core): the P25 Phase 1 IMBE vocoder and air interface (frames, error correction), C code and tests on the PC; the radio side is in [docs/p25.md](docs/p25.md) (Chinese) |
+| `docs/` | [Installation guide](docs/installation.en.md), [user manual](docs/manual.en.md) (screenshots in `docs/manual/`); developer documents: [architecture.md](docs/architecture.md) (architecture, Chinese), [ui-design.en.md](docs/ui-design.en.md) (user interface), [coding-style.md](docs/coding-style.md), [fd6818-registers.md](docs/fd6818-registers.md) (RF chip registers), [i18n.en.md](docs/i18n.en.md) (languages: the design, read it to add one) |
 | `tools/backup/` | `dm32_dump.py`: backup / write tool through the chip's bootloader (and `dumper/`, which it uploads to the radio) |
 | `tools/debug/` | Cable update `fw_update.py` (and `updater/`), debug commands `dm32dbg.py`, screenshots `fshot.py`, simulated keys `fkey.py`, mic level `miclevel.py`, ... |
 | `tools/fonts/` | Font conversion (`mkfont.py`), the Chinese font (`mkcjk.py` → `build/cjk.bin`, `upload_cjk.py` writes it to the radio) |
@@ -55,7 +57,7 @@ Users: download the package from [Releases](../../releases) and follow the
 
 ## Building
 
-1. Get the source (the vocoder is a submodule):
+1. Get the source (the vocoder and P25 are submodules):
 
    ```powershell
    git clone --recursive https://github.com/va3bpf/OpenDMR.git
@@ -136,6 +138,7 @@ Each file's header decides; the full text is in [LICENSE](LICENSE):
 | `src/graphics/fonts/roboto*.c`, `src/ui/text/text*` | Generated data (fonts below; the text tables come from OpenGD77's language files) |
 | `src/freertos/` | FreeRTOS, MIT |
 | `vocoder/` | Our own; the decoder is ported from mbelib (ISC). AMBE+2 is DVSI's patented technology: search the patents before any commercial use |
+| `p25/` | Our own; the IMBE parameter decoding and tables ported from mbelib, the positions in the frames from DSD (ISC). IMBE is DVSI's technology too: the same |
 | Fonts `tools/fonts/ttf/` | Roboto Condensed and Noto Sans SC, both SIL Open Font License 1.1 (licence texts in the same folder) |
 
 So the firmware as a whole **can't be used commercially** for now: that would at least need a new DMR engine and

@@ -40,6 +40,7 @@ ERRORS = {1: 'the sector came in damaged', 2: 'address outside the firmware area
 UART_CLOCK = 84000000 // 16  # the radio's UART: 84 MHz APB, baud = UART_CLOCK / divisor
 FAST_DIVISORS = (21,)  # 250000 baud. 375000 lost bytes from the radio to the PC now and then (the green radio: the
                        # update stopped after 7 sectors; tools/backup/dm32_dump.py measured it too), 250000 never
+SWITCH_SETTLE_S = 0.5  # after a speed change, before talking (the radio waits about 2 s for 'H')
 PROBE_DIVISORS = (14, 16, 21)  # where a radio left in the update by an older run may be: 375000, 328125, 250000
 UPDATER_AREA = 0x44400  # updater/updater.ld: the update area, which the firmware's loader gives the program
 
@@ -131,10 +132,10 @@ class Updater:
                 raise RuntimeError('bad reply to S')
             time.sleep(0.02)
             self.p.baudrate = UART_CLOCK // divisor
+            time.sleep(SWITCH_SETTLE_S)  # a bridge between this port and the cable (com0com) follows the change late
             self.p.reset_input_buffer()
             self.p.write(b'H')
-            time.sleep(0.2)
-            if self.p.read(self.p.in_waiting or 1) == b'UPD1':
+            if self.wait_for(b'UPD1', 1.0) is not None:
                 self.p.write(b'Y')  # both ways sound: the radio keeps the speed
                 if self.wait_for(b'Y', 0.5) is not None:
                     return

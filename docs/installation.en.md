@@ -40,6 +40,7 @@ that folder). It holds:
 | `tools/debug/fw_update.py`, `tools/debug/updater/updater.bin` | Updates (while the radio runs OpenDMR) |
 | `tools/fonts/upload_cjk.py` | Writes the Chinese font again while the radio runs OpenDMR |
 | `docs/manual.md`, `docs/manual.en.md`, `docs/manual/` | User manual |
+| `opendmr-cps.html` | Our codeplug software (OpenDMR CPS): double-click it, in Chrome / Edge; see [5](#5-writing-the-codeplug) |
 | `docs/installation.md`, `docs/installation.en.md`, `README.md`, `README.en.md` | This guide, the project's README |
 | `licences/` | The OFL licences of the fonts (Roboto Condensed, Noto Sans SC) |
 | `VERSION.txt` | Version, git commit, packing time |
@@ -47,8 +48,9 @@ that folder). It holds:
 One more download, **`SHA256SUMS.txt`**, holds the checksums (check with
 `certutil -hashfile OpenDMR-<version>.zip SHA256`).
 
-The codeplug software, the **OpenGD77 CPS**, isn't in the release: download it from <https://www.opengd77.com/>
-(a version with DM32/UV008; tested with E2026.07.13.01).
+For the codeplug, use **OpenDMR CPS** (`opendmr-cps.html` in the release, and on the release page on its own) or the
+**OpenGD77 CPS** (not in the release: download it from <https://www.opengd77.com/>, a version with DM32/UV008; tested
+with E2026.07.13.01). See [5](#5-writing-the-codeplug).
 
 ### Computer
 
@@ -156,6 +158,25 @@ Keys and screens: the [user manual](manual.en.md).
 
 ## 5. Writing the codeplug
 
+Either program works; the codeplug is the same, so they can be mixed:
+
+| | OpenDMR CPS (`opendmr-cps.html` in the release) | OpenGD77 CPS |
+|---|---|---|
+| Install | Nothing: double-click it, in Chrome / Edge | A Windows program |
+| Chinese names | Typed in, written as GB2312, shown on the radio | Not tested |
+| P25 channels and the NAC, AM / USB / LSB | Edited | P25 shown as DMR, AM etc. as analog: lost when edited |
+| The radio's settings (power levels, backlight, mic gain, ...) | Read and written | Not read or written |
+| DMR ID database (callers' names) | Not yet | Written |
+
+**OpenDMR CPS**:
+
+1. Open `opendmr-cps.html` in Chrome or Edge;
+2. Switch the radio **on normally** (running OpenDMR), plug in the cable, click "Connect" and pick the cable's
+   serial port;
+3. "Read radio" → edit → "Write radio"; the radio restarts when written. "Save file" first for a backup.
+
+**OpenGD77 CPS**:
+
 1. Download the OpenGD77 CPS from <https://www.opengd77.com/> (a version with DM32/UV008; tested with
    E2026.07.13.01) and install it;
 2. Start the OpenGD77 CPS, **Radio type DM32/UV008**;
@@ -164,10 +185,9 @@ Keys and screens: the [user manual](manual.en.md).
 
 While it reads or writes, the radio shows which part and how far: don't unplug the cable.
 
-- The stock CPS and stock codeplug files **can't** be used: make the codeplug again in the OpenGD77 CPS.
-- The CPS also writes the DMR ID database (callers' names) and the satellite keps.
-- **The CPS doesn't read or write the radio's settings** (power, backlight, mic gain, ...): they are in the radio's
-  menus.
+- The stock CPS and stock codeplug files **can't** be used: make the codeplug again.
+- The OpenGD77 CPS also writes the DMR ID database (callers' names) and the satellite keps; it doesn't read or write
+  the radio's settings: change them in the radio's menus, or with OpenDMR CPS.
 
 ---
 

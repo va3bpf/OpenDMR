@@ -38,8 +38,8 @@
 // microphone the other way.
 
 void modem_init(void);
-// SIG_CENTER / RF_MOD_BIAS_CTRL from the factory oscillator tune and the bias of the frequency
-void modem_set_frequency_calibration(bool valid, uint8_t osc_tune, uint16_t mod_bias);
+// SIG_CENTER / RF_MOD_BIAS_CTRL from the factory TX and RX frequency adjust and the 4FSK bias of the frequency
+void modem_set_frequency_calibration(bool valid, uint8_t osc_tune, uint16_t rx_adjust, uint16_t mod_bias);
 void modem_fm_receive(bool wide, uint8_t dac_gain); // dac_gain: GCR_DACL (factory_cal_rx_dac_gain())
 void modem_fm_transmit(bool wide, uint8_t mic_gain); // mic_gain: GCR_ADCL (settings.mic_gain_fm)
 void modem_fm_audio(bool on);                        // the received audio through to the DAC

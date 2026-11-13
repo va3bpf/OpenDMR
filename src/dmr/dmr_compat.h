@@ -341,7 +341,10 @@ void soundInit(void);
 void soundTerminateSound(void);
 bool soundReceiveData(void);
 void soundStopMicCapture(void);
+void sound_mic_start(void);                               // P25: the mic capture without the DMR engine
+bool sound_mic_take(int16_t out[WAV_BUFFER_SIZE / 2]);    // the next 10 ms of it, false if none yet
 void soundTickRXBuffer(void);
+extern volatile int sound_rx_prebuffer; // buffers (10 ms) before the playback starts; DMR: 12
 void soundSetupBuffer(void);    // currentWaveBuffer: the next one to fill
 void soundStoreBuffer(void);    // it is filled
 void soundRetrieveBuffer(void); // currentWaveBuffer: the next one to read

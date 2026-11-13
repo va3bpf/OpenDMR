@@ -20,7 +20,11 @@ TARGET  := $(BUILD)/opendmr
 CPU     := -mcpu=ck803s
 # Our AMBE+2 vocoder lives in the research tree (vocoder/c/ambe) and is built from there
 VOCODER := ../vocoder/c/ambe
-INCDIRS := $(VOCODER) config hal drivers dmr graphics graphics/fonts ui ui/text ui/widgets services app freertos/include freertos/portable/CK803
+# P25 (p25-core, the p25/ submodule): its air interface and IMBE frame layer, built from there
+P25CORE := ../p25/c
+P25_SRCS := $(P25CORE)/p25/p25_fec.c $(P25CORE)/p25/p25_frame.c $(P25CORE)/imbe/imbe_frame.c \
+            $(P25CORE)/imbe/imbe_parms.c $(P25CORE)/imbe/imbe_dec.c $(P25CORE)/imbe/imbe_tables.c             $(P25CORE)/imbe/imbe_enc.c $(P25CORE)/imbe/imbe_ana.c $(P25CORE)/imbe/imbe_ana_tables.c
+INCDIRS := $(VOCODER) $(P25CORE)/p25 $(P25CORE)/imbe config hal drivers dmr graphics graphics/fonts ui ui/text ui/widgets services app freertos/include freertos/portable/CK803
 CFLAGS  := $(CPU) $(addprefix -I,$(INCDIRS)) -O2 -Wall -ffunction-sections -fdata-sections -MMD -MP
 # Debug: every received AMBE frame to the data flash (services/rx_capture.h, read with tools/debug/rx_capture.py):
 # make clean && make RX_CAPTURE=1. Off by default (9 KB of RAM, writes below the window)
@@ -28,14 +32,16 @@ ifeq ($(RX_CAPTURE),1)
 CFLAGS  += -DRX_CAPTURE
 endif
 ASFLAGS := $(CPU) $(addprefix -I,$(INCDIRS)) -MMD -MP
-LDFLAGS := $(CPU) -nostartfiles -Wl,--gc-sections -Wl,--undefined=vocoder_bench -Wl,--undefined=serial_update_marker -Wl,-Map,$(TARGET).map -T ckcpu.ld
+LDFLAGS := $(CPU) -nostartfiles -Wl,--gc-sections -Wl,--undefined=vocoder_bench -Wl,--undefined=serial_update_marker \
+           -Wl,--undefined=p25_phy_capture -Wl,--undefined=p25_phy_stop -Wl,--undefined=p25_phy_tx_test -Wl,--undefined=imbe_enc_test -Wl,-Map,$(TARGET).map -T ckcpu.ld
 LIBS    := -lm -lc -lgcc
 
 # Layers, see docs/architecture.md
 SRCDIRS := startup freertos freertos/portable/CK803 hal drivers dmr graphics graphics/fonts ui ui/text ui/widgets services app
 C_SRCS  := $(foreach d,$(SRCDIRS),$(wildcard $(d)/*.c))
 S_SRCS  := $(foreach d,$(SRCDIRS),$(wildcard $(d)/*.S))
-OBJS    := $(addprefix $(BUILD)/,$(C_SRCS:.c=.o) $(S_SRCS:.S=.o))            $(patsubst $(VOCODER)/%.c,$(BUILD)/vocoder/%.o,$(wildcard $(VOCODER)/*.c))
+OBJS    := $(addprefix $(BUILD)/,$(C_SRCS:.c=.o) $(S_SRCS:.S=.o))            $(patsubst $(VOCODER)/%.c,$(BUILD)/vocoder/%.o,$(wildcard $(VOCODER)/*.c)) \
+           $(patsubst $(P25CORE)/%.c,$(BUILD)/p25/%.o,$(P25_SRCS))
 
 all: $(TARGET)_BFUV32.bin $(TARGET).elf.asm
 	$(SIZE) $(TARGET).elf
@@ -60,6 +66,11 @@ $(BUILD)/%.o: %.c
 $(BUILD)/vocoder/%.o: $(VOCODER)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -DAMBE_PROFILE '-DAMBE_RAM_DATA=__attribute__((section(".vocoder_rodata")))' -c -o $@ $<
+
+# the IMBE tables of the hot loops into the P25 overlay (ckcpu.ld .p25_overlay)
+$(BUILD)/p25/%.o: $(P25CORE)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) '-DIMBE_RAM_DATA=__attribute__((section(".p25_rodata")))' -c -o $@ $<
 
 $(BUILD)/%.o: %.S
 	@mkdir -p $(dir $@)
