@@ -31,10 +31,13 @@
 
 #include <stdbool.h>
 #include "dmr.h"
+#include "p25_radio.h"
 
 // The DMR caller on the channel and VFO screens (docs/ui-design.md 5.3, uiUtilities.c renderQSODataDM32()): receiving,
 // the callsign large (the ID when not known), the name, the ID, the talk group (or whom a private call is for), the S
 // meter, the bottom bar with the mode and the channel name
 void qso_panel_draw(const dmr_call_t *call, const char *channel_name);
+// A P25 caller the same way: "P25" in the bottom bar, the NAC of the call in the status bar (no timeslot)
+void qso_panel_draw_p25(const p25_call_t *call, const char *channel_name);
 
 #endif

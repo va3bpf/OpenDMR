@@ -85,7 +85,7 @@ static void split_callsign(const char *text, char *callsign, size_t callsign_siz
     }
 }
 
-void qso_panel_draw(const dmr_call_t *call, const char *channel_name)
+static void draw(const dmr_call_t *call, const char *mode, const char *status_item, const char *channel_name)
 {
     const int32_t x = WIDGET_MARGIN;
     const int32_t width = FB_WIDTH - (2 * WIDGET_MARGIN);
@@ -94,7 +94,7 @@ void qso_panel_draw(const dmr_call_t *call, const char *channel_name)
     const font_t *call_font = &font_roboto44_bold;
     status_bar_data_t status = {.state = STATUS_BAR_RECEIVING};
     s_meter_data_t meter = {.active = true, .open = true};
-    bottom_bar_data_t bottom = {.mode = "DMR", .item1 = channel_name};
+    bottom_bar_data_t bottom = {.mode = mode, .item1 = channel_name};
     char caller[LAST_HEARD_TEXT_SIZE];
     char callsign[LAST_HEARD_TEXT_SIZE];
     char rest[LAST_HEARD_TEXT_SIZE];
@@ -102,13 +102,11 @@ void qso_panel_draw(const dmr_call_t *call, const char *channel_name)
     char location[32];
     char line1[40];
     char line[40];
-    char ts_text[8];
     int32_t lx;
 
     s_meter_set_signal(&meter, radio_signal());
     status.signal_bars = (int8_t)((meter.s_units * ICONS_SIGNAL_BARS) / 9);
-    snprintf(ts_text, sizeof(ts_text), "TS%d", call->timeslot + 1);
-    status.item1 = ts_text;
+    status.item1 = status_item;
     status.item1_bold = true;
     status_bar_draw(&status);
 
@@ -170,4 +168,21 @@ void qso_panel_draw(const dmr_call_t *call, const char *channel_name)
 
     s_meter_draw(S_METER_Y, &meter);
     bottom_bar_draw(&bottom);
+}
+
+void qso_panel_draw(const dmr_call_t *call, const char *channel_name)
+{
+    char ts_text[8];
+
+    snprintf(ts_text, sizeof(ts_text), "TS%d", call->timeslot + 1);
+    draw(call, "DMR", ts_text, channel_name);
+}
+
+void qso_panel_draw_p25(const p25_call_t *call, const char *channel_name)
+{
+    dmr_call_t shown = {.source = call->src, .tg_or_pc = p25_call_tg_or_pc(call)};
+    char nac_text[8];
+
+    snprintf(nac_text, sizeof(nac_text), "NAC%03X", call->nac);
+    draw(&shown, "P25", nac_text, channel_name);
 }

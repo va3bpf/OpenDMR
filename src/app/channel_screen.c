@@ -740,14 +740,20 @@ static void draw(void)
     char freq[24];
     char line[24];
     char ts_text[8];
-    char cc_text[8];
+    char cc_text[16];
     char detail[24];
     char squelch[24];
     dmr_call_t call;
+    p25_call_t p25;
 
     if ((channel.mode == CODEPLUG_MODE_DMR) && dmr_call(&call)) {
         format_names(zone_text, sizeof(zone_text), name, sizeof(name));
         qso_panel_draw(&call, name);
+        return;
+    }
+    if ((channel.mode == CODEPLUG_MODE_P25) && p25_radio_call(&p25) && (p25.src != 0)) {
+        format_names(zone_text, sizeof(zone_text), name, sizeof(name));
+        qso_panel_draw_p25(&p25, name);
         return;
     }
     meter.active = true;
@@ -789,7 +795,7 @@ static void draw(void)
         bottom.item2 = "12.5K";
     } else if (channel.mode == CODEPLUG_MODE_P25) {
         // P25: the NAC where DMR has the colour code; the talk group transmitted to (tx_target_apply())
-        snprintf(cc_text, sizeof(cc_text), "NAC%03X", codeplug_p25_nac(&channel));
+        codeplug_text_nac(codeplug_p25_nac(&channel), cc_text, sizeof(cc_text));
         status.item2 = cc_text;
         if (target.id != 0) {
             panel.line_icon = ICONS_TALKGROUP;
