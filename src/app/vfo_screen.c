@@ -63,6 +63,7 @@
 #include "text.h"
 #include "settings.h"
 #include "codeplug.h"
+#include "codeplug_text.h"
 #include "battery.h"
 #include "datetime.h"
 #include "list_screen.h"
@@ -415,9 +416,14 @@ static void scan_range(uint32_t *low, uint32_t *high)
     }
 }
 
+static scan_kind_t scan_kind(void)
+{
+    return (vfo()->mode == CODEPLUG_MODE_DMR) ? SCAN_DMR : (vfo()->mode == CODEPLUG_MODE_P25) ? SCAN_P25 : SCAN_ANALOG;
+}
+
 static uint32_t scan_dwell(void)
 {
-    return scan_dwell_ms(vfo()->mode == CODEPLUG_MODE_DMR, vfo()->rx_freq == vfo()->tx_freq);
+    return scan_dwell_ms(scan_kind());
 }
 
 static bool scan_skipped(uint32_t frequency)
@@ -480,7 +486,7 @@ static bool scan_step(void)
     bool was_active = scan.active;
     uint32_t f;
 
-    if (!scan_tick(&scan, vfo()->mode == CODEPLUG_MODE_DMR)) {
+    if (!scan_tick(&scan, scan_kind())) {
         return was_active && !scan.active;
     }
     f = scan_next();
@@ -844,7 +850,7 @@ static void draw_status_bar(const codeplug_channel_t *v)
 {
     status_bar_data_t status = {0};
     char ts_text[8];
-    char cc_text[8];
+    char cc_text[16];
 
     s_meter_data_t meter = {0};
 
@@ -859,7 +865,7 @@ static void draw_status_bar(const codeplug_channel_t *v)
         status.item1_bold = true;
         status.item2 = cc_text;
     } else if (v->mode == CODEPLUG_MODE_P25) {
-        snprintf(cc_text, sizeof(cc_text), "NAC%03X", codeplug_p25_nac(v));
+        codeplug_text_nac(codeplug_p25_nac(v), cc_text, sizeof(cc_text));
         status.item2 = cc_text;
     }
     status_bar_draw(&status);
@@ -876,10 +882,16 @@ static void draw(void)
     char buffer[40];
     int32_t x;
     dmr_call_t call;
+    p25_call_t p25;
 
     if ((v->mode == CODEPLUG_MODE_DMR) && !digit_entry_active(&entry) && dmr_call(&call)) {
         snprintf(buffer, sizeof(buffer), "VFO %c", (vfo_screen_current() == 0) ? 'A' : 'B');
         qso_panel_draw(&call, buffer);
+        return;
+    }
+    if ((v->mode == CODEPLUG_MODE_P25) && !digit_entry_active(&entry) && p25_radio_call(&p25) && (p25.src != 0)) {
+        snprintf(buffer, sizeof(buffer), "VFO %c", (vfo_screen_current() == 0) ? 'A' : 'B');
+        qso_panel_draw_p25(&p25, buffer);
         return;
     }
     draw_status_bar(v);
@@ -930,19 +942,11 @@ static void draw(void)
             draw_text(VALUE_X, TONE_Y, target.name, &font_roboto20, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT);
         }
     } else if (v->mode == CODEPLUG_MODE_P25) {
-        // P25: the talk group transmitted to (tx_target_apply()), the NAC (codeplug.h)
-        uint16_t nac = codeplug_p25_nac(v);
-
+        // P25: the talk group transmitted to (tx_target_apply()); the NAC is in the status bar, as the colour code
         if (target.id != 0) {
             icons_draw(WIDGET_MARGIN, TONE_Y + 3, ICONS_TALKGROUP, THEME_COLOUR_TEXT_LABEL);
             draw_text(VALUE_X, TONE_Y, target.name, &font_roboto20, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT);
         }
-        if ((nac == CODEPLUG_P25_NAC_RX_ANY) || (nac == 0xF7F)) {
-            snprintf(buffer, sizeof(buffer), "%03X (%s)", nac, text(TEXT_ALL));
-        } else {
-            snprintf(buffer, sizeof(buffer), "%03X", nac);
-        }
-        draw_info_line(CSS_Y, "NAC", buffer);
     } else {
         uint16_t tone = ((v->rx_tone != CODEPLUG_CSS_NONE) ? v->rx_tone : v->tx_tone);
 

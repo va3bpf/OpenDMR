@@ -34,11 +34,14 @@
 #include "ui.h"
 
 // The scan of the channel and VFO screens (uiChannelMode.c / uiVFOMode.c scanning()): the screen steps to the next
-// channel or frequency when told, the scan decides when. A carrier (FM) or timeslot sync (DMR) pauses it shortly, a
-// signal heard pauses it the scan delay (pause mode), as long as it is heard (hold mode), or stops it (stop mode).
-// The screen runs scan_tick() every SCAN_TICK_MS on its timer.
+// channel or frequency when told, the scan decides when. A carrier (FM), timeslot sync (DMR) or a data unit (P25)
+// pauses it shortly, a signal heard pauses it the scan delay (pause mode), as long as it is heard (hold mode), or stops
+// it (stop mode). DMR and P25 take longer to find than a carrier: a step stays longer only where the signal strength
+// rose over the noise floor. The screen runs scan_tick() every SCAN_TICK_MS on its timer.
 
 #define SCAN_TICK_MS 10
+
+typedef enum { SCAN_ANALOG, SCAN_DMR, SCAN_P25 } scan_kind_t;
 
 typedef enum {
     SCAN_KEY_NONE,    // not the scan's: the screen handles it
@@ -55,15 +58,17 @@ typedef struct {
     uint32_t step_ms; // when the channel or frequency changed
     uint32_t due_ms;  // when it moves on
     uint32_t dwell_ms;
+    bool waiting;  // a DMR / P25 step kept longer for its signal
+    uint8_t floor; // DMR / P25: the signal strength of the steps without a signal (0: not known yet)
 } scan_t;
 
-// The time on a channel or frequency before moving on: the step time, DMR at least the time to find the timeslots
-uint32_t scan_dwell_ms(bool dmr, bool simplex);
+// The time on a channel or frequency before moving on: the step time, DMR and P25 at least DIGITAL_STEP_MS
+uint32_t scan_dwell_ms(scan_kind_t kind);
 // The screen is on the first one; starts the screen's timer. direction: 1 up, -1 down
 void scan_start(scan_t *scan, uint32_t dwell_ms, int direction);
 void scan_stop(scan_t *scan);
 // true: time to move on (the screen steps, then scan_moved()); scan->active false: it stopped (stop mode)
-bool scan_tick(scan_t *scan, bool dmr);
+bool scan_tick(scan_t *scan, scan_kind_t kind);
 void scan_moved(scan_t *scan, uint32_t dwell_ms);
 // A key while scanning (or after: the release of the key that stopped it): LEFT turns the direction, UP goes on now,
 // PTT stops it (and transmits: SCAN_KEY_NONE), SK1 / SK2 alone are left to the screen, another key stops it

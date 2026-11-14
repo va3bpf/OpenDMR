@@ -52,6 +52,9 @@
 #include "p25_phy.h"
 #include "p25_radio.h"
 #include "codeplug.h"
+#include "ui.h"
+#include "last_heard.h"
+#include "dmr_ids.h"
 
 #define RING          8   // blocks between the interrupt and the task
 #define PCM_FRAMES    20  // 400 ms of decoded voice
@@ -108,6 +111,8 @@ static bool have_held;
 static p25_call_t call;
 static TickType_t last_ldu;
 static TickType_t last_unit; // a data unit decoded, or the receive (re)armed
+static volatile TickType_t heard_at; // a data unit with the channel's NAC decoded (p25_radio_heard_within())
+static volatile bool heard;
 static bool audio_on;
 static void ev(uint16_t event, uint16_t arg);
 
@@ -261,6 +266,36 @@ static void rearm(void)
     p25_radio_stats.rearms++;
 }
 
+// The UI told when the call begins, its caller or talk group becomes known or changes, and it ends (the screens show
+// the caller panel, qso_panel.c); a caller goes into Last heard with its text from the contacts or the DMR IDs (a
+// P25 unit ID is the DMR ID on the amateur networks)
+static struct {
+    bool active;
+    uint32_t src;
+    uint32_t tg_or_pc;
+} published;
+
+static void call_publish(void)
+{
+    uint32_t tg_or_pc = p25_call_tg_or_pc(&call);
+    char text[LAST_HEARD_TEXT_SIZE];
+
+    if ((call.active == published.active) && (call.src == published.src) && (tg_or_pc == published.tg_or_pc)) {
+        return;
+    }
+    if (call.active && (call.src != 0) && ((call.src != published.src) || (tg_or_pc != published.tg_or_pc))) {
+        dmr_ids_caller_text(call.src, text, sizeof(text));
+        last_heard_add(call.src, tg_or_pc, LAST_HEARD_TS_UNKNOWN, text[0] ? text : NULL);
+    }
+    published.active = call.active;
+    published.src = call.src;
+    published.tg_or_pc = tg_or_pc;
+
+    ui_event_t ev = {.type = UI_EVENT_DATA, .what = UI_DATA_SIGNAL};
+
+    ui_post(&ev);
+}
+
 static void call_end(void)
 {
     if (call.active) {
@@ -280,6 +315,7 @@ static void call_end(void)
         p25_call_log_head++;
     }
     call.active = false;
+    call_publish();
     pcm_in = pcm_out = 0;
     audio(false);
     imbe_dec_init(&dec);
@@ -339,6 +375,8 @@ static void unit(int duid)
     }
     ev(10, (uint16_t)duid);
     last_unit = xTaskGetTickCount();
+    heard_at = last_unit;
+    heard = true;
     switch (duid) {
     case P25_DUID_HDU:
         call_begin();
@@ -382,6 +420,7 @@ static void unit(int duid)
     default:
         break;
     }
+    call_publish();
 }
 
 // the playback buffers filled from the queue; the playback started once there is enough
@@ -646,6 +685,11 @@ bool p25_radio_transmitting(void)
     return tx_want || tx_busy;
 }
 
+bool p25_radio_heard_within(uint32_t ms)
+{
+    return heard && ((xTaskGetTickCount() - heard_at) < pdMS_TO_TICKS(ms));
+}
+
 static void task_main(void *arg)
 {
     (void)arg;
@@ -751,7 +795,13 @@ void p25_radio_stop(void)
     }
     p25_phy_rx_stop();
     call.active = false;
+    call_publish();
     audio(false);
+}
+
+uint32_t p25_call_tg_or_pc(const p25_call_t *c)
+{
+    return (c->lco == P25_LCO_UNIT) ? (((uint32_t)LAST_HEARD_PC_FLAG << 24) | (c->dst & 0xFFFFFF)) : c->tgid;
 }
 
 bool p25_radio_call(p25_call_t *out)

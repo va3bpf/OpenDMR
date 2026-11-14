@@ -49,6 +49,9 @@ typedef struct {
 void p25_radio_start(void);
 void p25_radio_stop(void);
 bool p25_radio_call(p25_call_t *out); // the call now (false: none)
+#define P25_LCO_UNIT 3 // the link control of a unit to unit call
+// Its talk group, or LAST_HEARD_PC_FLAG << 24 | the called unit (a unit to unit call), as dmr_call_t.tg_or_pc
+uint32_t p25_call_tg_or_pc(const p25_call_t *call);
 // The PTT on a P25 channel: a transmission while on (the mic, IMBE, HDU / LDUs / TDU on the physical layer), back to
 // receive after it is released and the last data unit is out
 void p25_radio_transmit(bool on);
@@ -57,6 +60,7 @@ void p25_radio_transmit(bool on);
 void p25_radio_set_target(uint16_t nac, uint16_t tgid);
 void p25_ev_log(uint16_t event, uint16_t arg); // the delay log (p25_radio.c), also for DMR to compare
 bool p25_radio_transmitting(void); // asked, or still sending
+bool p25_radio_heard_within(uint32_t ms); // a data unit with the channel's NAC decoded in the last ms (the scan)
 extern volatile uint32_t p25_tx_source; // 0 the mic, 1 test frames (p25_phy_tx_frame())
 extern volatile uint32_t p25_tx_stats[4]; // calls, LDUs, encoder frames, mic buffers
 

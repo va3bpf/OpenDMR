@@ -1,6 +1,6 @@
 # OpenDMR — open firmware for the Baofeng DM-32UV
 
-[中文](README.md) · **[Installation guide](docs/installation.en.md)** · **[User manual](docs/manual.en.md)**
+[中文](README.md) · **[Installation guide](docs/installation.en.md)** · **[User manual](docs/manual.en.md)** · [Support OpenDMR](#support-opendmr)
 
 Open firmware for the **Baofeng DM-32 / DM-32UV** (SoC **HR_C7000** = CK803S CPU + DMR modem + audio codec).
 The source is open: free to use, change and share for non-commercial purposes; commercial use needs the author's
@@ -143,6 +143,20 @@ Each file's header decides; the full text is in [LICENSE](LICENSE):
 
 So the firmware as a whole **can't be used commercially** for now: that would at least need a new DMR engine and
 hotspot, and the AMBE+2 patents checked.
+
+## Support OpenDMR
+
+OpenDMR is free and made in spare time; developing and testing it takes a lot of time and AI tool fees. If it is useful
+to you, a donation helps keep it maintained and growing.
+
+<a href="https://ko-fi.com/opendmr"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support OpenDMR on Ko-fi"></a>
+
+- **Ko-fi** (cards and more): <https://ko-fi.com/opendmr>
+- **WeChat** (appreciation code below)
+
+<p align="center">
+  <img src="docs/donate/wechat.jpg" width="240" alt="WeChat appreciation code">
+</p>
 
 ## Thanks
 

@@ -190,13 +190,14 @@ static void put_flags(int count)
     }
 }
 
-// An address field: up to 6 characters shifted left, padded with spaces, then the SSID byte
+// An address field: up to 6 characters shifted left, padded with spaces, then the SSID byte. The name ends at a 0 or
+// a 0xFF (the CPS fills its unused bytes with either)
 static void put_address(const char *name, size_t max, uint8_t ssid, bool last)
 {
-    size_t length = strnlen(name, max);
+    size_t length = 0;
 
-    if (length > 6) {
-        length = 6;
+    while ((length < max) && (length < 6) && (name[length] != 0) && ((uint8_t)name[length] != 0xFF)) {
+        length++;
     }
     for (size_t i = 0; i < length; i++) {
         put_char((uint8_t)(name[i] << 1), true);
@@ -207,18 +208,32 @@ static void put_address(const char *name, size_t max, uint8_t ssid, bool last)
     put_char((uint8_t)(((ssid + '0') << 1) + (last ? 1 : 0)), true);
 }
 
+// A digipeater path of the configuration: its name not empty (0 or 0xFF, as the CPS leaves it)
+static bool path_used(const codeplug_aprs_path_t *path)
+{
+    return (path->name[0] != 0) && ((uint8_t)path->name[0] != 0xFF);
+}
+
+// Destination, source, then the paths used (none: the source is the last address; the main firmware sent an address
+// of spaces then, and took a path 2 of 0xFF for one)
 static void put_header(const char *call)
 {
     const codeplug_aprs_config_t *c = &aprs.config;
-    int paths = (c->paths[1].name[0] == 0) ? 1 : 2;
+    const codeplug_aprs_path_t *paths[2];
+    int count = 0;
 
+    for (int p = 0; p < 2; p++) {
+        if (path_used(&c->paths[p])) {
+            paths[count++] = &c->paths[p];
+        }
+    }
     for (size_t i = 0; i < strlen(DESTINATION); i++) {
         put_char((uint8_t)(DESTINATION[i] << 1), true);
     }
     put_char((uint8_t)('0' << 1), true);
-    put_address(call, 6, c->sender_ssid, false);
-    for (int p = 0; p < paths; p++) {
-        put_address(c->paths[p].name, sizeof(c->paths[p].name), c->paths[p].ssid, (p == (paths - 1)));
+    put_address(call, 6, c->sender_ssid, count == 0);
+    for (int p = 0; p < count; p++) {
+        put_address(paths[p]->name, sizeof(paths[p]->name), paths[p]->ssid, (p == (count - 1)));
     }
     put_char(0x03, true);
     put_char(0xF0, true);
