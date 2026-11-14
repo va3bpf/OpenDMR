@@ -258,8 +258,10 @@ typedef struct {
     uint8_t icon_table; // 0: '/', else '\'
     uint8_t icon_index; // the symbol - '!'
     char comment[24];
-    uint8_t reserved[6];
-    uint8_t flags;      // bit 0: 300 baud, bit 1: the fixed position above, 7:4 the position ambiguity
+    uint8_t tx_freq[4]; // 10 Hz units, little endian: the CPS's "Frec TX" (the QSY frequency), 0: none
+    uint8_t reserved[2];
+    uint8_t flags;      // bit 0: 300 baud, bit 1: the fixed position above, bit 2: transmit QSY, bit 3: silently,
+                        // 7:4 the position ambiguity (as the CPS has them)
     uint8_t magic[2];   // little endian APRS magic version
 } codeplug_aprs_config_t;
 
