@@ -239,6 +239,28 @@ static void put_header(const char *call)
     put_char(0xF0, true);
 }
 
+// The CPS's APRS frequency ("Frec TX"), 10 Hz units like a channel; 0: not set
+static uint32_t config_frequency(const codeplug_aprs_config_t *c)
+{
+    return (uint32_t)c->tx_freq[0] | ((uint32_t)c->tx_freq[1] << 8) |
+           ((uint32_t)c->tx_freq[2] << 16) | ((uint32_t)c->tx_freq[3] << 24);
+}
+
+// The QSY information of the CPS's "Transmit QSY" (flags bit 2): the frequency of the configuration after the comment,
+// as the stock firmware sends it ("144.390MHz", which aprs.fi reads as the frequency the station listens on)
+static void put_qsy(const codeplug_aprs_config_t *c)
+{
+    uint32_t frequency = config_frequency(c);
+
+    if ((c->flags & 0x04) && (frequency != 0)) {
+        char text[16];
+
+        snprintf(text, sizeof(text), " %u.%03uMHz", (unsigned)(frequency / 100000UL),
+                 (unsigned)((frequency / 100UL) % 1000UL));
+        put_string(text);
+    }
+}
+
 static void put_payload(const char *lat, const char *lon, const char *course_speed)
 {
     const codeplug_aprs_config_t *c = &aprs.config;
@@ -271,6 +293,7 @@ static void put_payload(const char *lat, const char *lon, const char *course_spe
         }
     }
     put_string(comment);
+    put_qsy(c);
 }
 
 static void put_crc(void)
