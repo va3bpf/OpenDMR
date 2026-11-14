@@ -384,6 +384,7 @@ these settings.**
 |---|---|
 | Key long / Key rpt | Long press time; repeat interval of a held key |
 | Auto lock | Locks the keypad and the PTT after this long without use (Off / minutes) |
+| Lock PIN / Power-on PIN / Change PIN | See [PINs](#pins) |
 | Hotspot | Off / MMDVM / BlueDV (see [13](#13-cps-hotspot-firmware-update)) |
 | Batt. Cal | Correction of the battery voltage shown (±0.5 V) |
 | Eco Level | How much the receiver saves power |
@@ -480,6 +481,21 @@ Read only: the factory calibration table (oscillator tune, receive level, power 
 - While locked, a key shows the lock page for a moment; **SK2 + \*** unlocks. With only the keypad locked the PTT
   still transmits.
 - General options → Auto lock: locks the keypad and the PTT after a time without use.
+
+### PINs
+
+Both are off by default; General options → **Lock PIN** and **Power-on PIN** turn them on (the first one asks for a
+new PIN, 4 - 6 digits, twice), **Change PIN** sets another one (for both).
+
+- **Lock PIN**: a lock (manual or auto) also locks the PTT and shows the lock screen (the time, nothing of the
+  channel); **SK2 + \*** asks for the PIN. Reception goes on; the VOX does not transmit. The radio also starts
+  locked. The CPS can't change it.
+- **Power-on PIN**: the radio asks for the PIN when it starts, with the receiver off; nothing else works until it is
+  entered. It is the OpenGD77 power-on password of the codeplug, so the OpenGD77 CPS (boot settings) sets or clears
+  it too.
+- Five wrong PINs in a row: wait 30 s before the next try.
+- **Forgot the PIN?** Update the firmware over the cable (it works from the PIN screen too): an update turns both
+  PINs off. So does another firmware version written with the bootloader.
 
 ### Quick keys (SK2 + digit)
 

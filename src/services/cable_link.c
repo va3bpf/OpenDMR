@@ -55,6 +55,7 @@
 #include "serial_update.h"
 #include "dmr_compat.h"
 #include "cps_screen.h"
+#include "security.h"
 
 #define CPS_REQUEST_IDLE_MS   5   // a request without a known length is complete after this silence
 #define CPS_REQUEST_LOST_MS   200 // a debug request with a known length that stopped short is handled anyway
@@ -281,6 +282,7 @@ static uint32_t handle_write(void)
             } else if ((write_sector >= 0) && (((uint32_t)write_sector * FLASH_SECTOR_SIZE) < FLASH_WINDOW_SIZE)) {
                 uint32_t address = (uint32_t)write_sector * FLASH_SECTOR_SIZE;
 
+                security_keep_block(address, sector_buffer); // the CPS can't change the lock PIN
                 ok = flash_write_sector_raw(FLASH_WINDOW_BASE + address, sector_buffer);
                 if (ok && (((address >= DMR_IDS_AREA_1) && (address < DMR_IDS_AREA_1_END)) ||
                            ((address >= DMR_IDS_AREA_2) && (address < DMR_IDS_AREA_2_END)))) {
@@ -366,6 +368,7 @@ static uint32_t handle_update(void)
 // then the update with the interrupts off (no keys, knob, PTT or power switch any more) until it restarts the radio
 static void update(void)
 {
+    security_clear(); // the power-on and lock PINs off (security.h)
     radio_set_channel(NULL);
     vTaskDelay(pdMS_TO_TICKS(UPDATE_RADIO_OFF_MS));
     panel_bus_take();

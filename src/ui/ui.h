@@ -128,6 +128,7 @@ void ui_home(void);
 // without a change. The UI task does it after each event; before a transmission it is done at once (tx_screen.c)
 void ui_tune(void);
 void ui_redraw(void);    // after the current event
+const ui_screen_t *ui_top_screen(void); // the screen on top
 void *ui_arg(void);      // the arg the screen on top was pushed with
 int32_t *ui_state(void); // a value kept for the screen on top, 0 when pushed (e.g. its selected row)
 
