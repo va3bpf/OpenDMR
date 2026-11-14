@@ -376,24 +376,39 @@ bool codeplug_get_channel(int number, codeplug_channel_t *channel)
  * codeplugSetVFO_ChannelData(). flash_write() erases a sector only when its data change.
  */
 
-// RADIO_HARDWARE_FREQUENCY_BANDS (trx.c, not the datasheet ranges): VHF, 220 MHz, UHF, in 10 Hz
+// RADIO_HARDWARE_FREQUENCY_BANDS (trx.c, not the datasheet ranges): VHF, 220 MHz, UHF, in 10 Hz; and below VHF the
+// aviation band, receive only (the FD6818 tunes there, the front end is not made for it: less sensitive)
 static const struct {
     uint32_t min;
     uint32_t max;
+    bool tx;
 } bands[] = {
-    {13700000, 18000000},
-    {20000000, 27997500},
-    {28000000, 52000000},
+    {10800000, 13699750, false},
+    {13700000, 18000000, true},
+    {20000000, 27997500, true},
+    {28000000, 52000000, true},
 };
+
+static int band_index(uint32_t frequency)
+{
+    for (int i = 0; i < (int)(sizeof(bands) / sizeof(bands[0])); i++) {
+        if ((frequency >= bands[i].min) && (frequency <= bands[i].max)) {
+            return i;
+        }
+    }
+    return -1;
+}
 
 bool codeplug_frequency_is_valid(uint32_t frequency)
 {
-    for (unsigned i = 0; i < (sizeof(bands) / sizeof(bands[0])); i++) {
-        if ((frequency >= bands[i].min) && (frequency <= bands[i].max)) {
-            return true;
-        }
-    }
-    return false;
+    return band_index(frequency) >= 0;
+}
+
+bool codeplug_frequency_can_transmit(uint32_t frequency)
+{
+    int i = band_index(frequency);
+
+    return (i >= 0) && bands[i].tx;
 }
 
 bool codeplug_write_channel(int number, const codeplug_channel_t *channel)

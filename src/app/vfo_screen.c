@@ -127,7 +127,8 @@ static unsigned step_of(const codeplug_channel_t *v)
 }
 
 // The bands of the radio (codeplug_frequency_is_valid()), to go from the end of one to the next with the knob
-static const uint32_t band_edges[][2] = {{13700000, 18000000}, {20000000, 27997500}, {28000000, 52000000}};
+static const uint32_t band_edges[][2] = {
+    {10800000, 13699750}, {13700000, 18000000}, {20000000, 27997500}, {28000000, 52000000}};
 
 static codeplug_channel_t vfos[2];  // 2 x 64 bytes
 static codeplug_channel_t radio_ch; // the channel for the radio: the VFO with its TG (tx_target_apply())
@@ -972,7 +973,9 @@ static void draw(void)
     vfo_screen_signal(&meter);
     s_meter_draw(S_METER_Y, &meter);
     bottom.mode = codeplug_mode_name(v->mode);
-    bottom.item1 = codeplug_mode_can_transmit(v->mode) ? bottom_bar_power_label(power) : text(TEXT_RX_ONLY);
+    bottom.item1 = (codeplug_mode_can_transmit(v->mode) && codeplug_frequency_can_transmit(v->tx_freq))
+                       ? bottom_bar_power_label(power)
+                       : text(TEXT_RX_ONLY);
     bottom.item2 = ((v->mode == CODEPLUG_MODE_FM) && (v->flag4 & FLAG4_BANDWIDTH_25K)) ? "25K" : "12.5K";
     if (codeplug_mode_is_ssb(v->mode)) {
         bottom.item2 = "3K";

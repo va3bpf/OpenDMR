@@ -838,8 +838,9 @@ static void draw(void)
 
     int power = (channel.libre_dmr_power != 0) ? (channel.libre_dmr_power - 1) : settings.tx_power_level;
 
-    bottom.item1 = codeplug_mode_can_transmit(channel.mode) ? bottom_bar_power_label((power < 10) ? power : 9)
-                                                             : text(TEXT_RX_ONLY); // AM, USB, LSB
+    bottom.item1 = (codeplug_mode_can_transmit(channel.mode) && codeplug_frequency_can_transmit(channel.tx_freq))
+                       ? bottom_bar_power_label((power < 10) ? power : 9)
+                       : text(TEXT_RX_ONLY); // AM, USB, LSB; the aviation band
 
     status_bar_draw(&status);
     channel_panel_draw(&panel);
