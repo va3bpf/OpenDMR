@@ -65,6 +65,8 @@
 #define RADIO_TASK_PRIORITY 4
 #define SAMPLE_MS           25
 #define TUNE_SETTLE_MS      20 // after a channel change the FD6818 noise reading is low a moment: no squelch opening
+#define SCAN_SAMPLE_MS      5  // scanning a digital channel: the signal read this often (radio_scan_peak())
+#define SCAN_SETTLE_MS      10 // and only from this long after the retune
 
 #define PIN_LNA_VHF   0x22 // R5_V_SW
 #define PIN_LNA_UHF   0x24 // R5_U_SW
@@ -127,6 +129,10 @@ static volatile bool carrier = false; // the noise under the squelch level
 static bool p25_on = false;          // the P25 receiver runs (p25_radio.c)
 static volatile bool speaker = false; // the audio on (the carrier, and the tone if one is set)
 static volatile bool scanning = false; // radio_set_scanning(): no receive beeps
+// Scanning a digital channel: the strongest reading since the retune (SCAN_SETTLE_MS on), and how many were taken
+static volatile uint8_t scan_peak;
+static volatile uint16_t scan_samples;
+static TickType_t scan_settled_at;
 static TickType_t settled_at;           // after a channel change, the squelch may open from then on
 static uint8_t css_missing = 0;
 static uint8_t signal_low = 0; // AM, SSB: checks in a row the signal was under the closing level
@@ -348,6 +354,9 @@ static void apply_channel(void)
         squelch_close();
     }
     settled_at = xTaskGetTickCount() + pdMS_TO_TICKS(TUNE_SETTLE_MS);
+    scan_settled_at = xTaskGetTickCount() + pdMS_TO_TICKS(SCAN_SETTLE_MS);
+    scan_peak = 0;
+    scan_samples = 0;
     // FM as the stock firmware: the speaker from the FD6818's audio output; through the baseband (switch low, as the
     // DMR receive needs it) the CPU, flash and display activity was heard in the FM audio
     taskENTER_CRITICAL();
@@ -1171,16 +1180,50 @@ void radio_eco_activity(void)
 
 /* The task */
 
+// Scanning a digital channel: a DMR transmission without a repeater is on the air 27.5 ms of every 60, so a step of
+// 50 ms sees it only with readings every few ms (SAMPLE_MS would give one or two, maybe in the gap)
+static bool scan_sampling(void)
+{
+    return scanning && dmr_on && !transmitting && !rx_off;
+}
+
+static void scan_sample(void)
+{
+    uint8_t signal;
+    uint8_t noise;
+
+    if ((int32_t)(xTaskGetTickCount() - scan_settled_at) < 0) {
+        return;
+    }
+    fd6818_read_signal(&signal, &noise);
+    if (signal > scan_peak) {
+        scan_peak = signal;
+    }
+    if (scan_samples < UINT16_MAX) {
+        scan_samples++;
+    }
+}
+
 static void RAM_CODE radio_task(void *arg)
 {
+    TickType_t full_pass = 0;
+
     (void)arg;
 
     for (;;) {
-        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(SAMPLE_MS));
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(scan_sampling() ? SCAN_SAMPLE_MS : SAMPLE_MS));
 
         if (channel_pending && !transmitting) {
             apply_channel();
         }
+        if (scan_sampling()) {
+            scan_sample();
+            // the rest every SAMPLE_MS as when not scanning (the S meter takes the peak of its last readings)
+            if ((xTaskGetTickCount() - full_pass) < pdMS_TO_TICKS(SAMPLE_MS)) {
+                continue;
+            }
+        }
+        full_pass = xTaskGetTickCount();
         if (aprs_bits && !dmr_on && !transmitting) {
             aprs_transmit();
         }
@@ -1445,6 +1488,19 @@ int radio_signal_dbm(void)
 uint8_t radio_signal_raw(void)
 {
     return signal_raw;
+}
+
+uint8_t radio_scan_peak(uint16_t *samples)
+{
+    taskENTER_CRITICAL();
+    uint8_t peak = scan_peak;
+    uint16_t n = scan_samples;
+    taskEXIT_CRITICAL();
+
+    if (samples != NULL) {
+        *samples = n;
+    }
+    return peak;
 }
 
 uint8_t radio_noise(void)

@@ -244,7 +244,10 @@ While transmitting:
   status bar shows the scan icon.
 - While scanning: **▲** goes on at once; **◀** reverses; when it has stopped on a signal, **\*** skips that channel /
   frequency as a nuisance (for this scan); **PTT** stops the scan and transmits; **any other key** stops it.
-- Radio options: Scan delay (how long it stays), Scan dwell, Scan mode (Hold / Pause / Stop), Scan On Boot.
+- Radio options: Scan delay (how long it stays), Scan dwell (the time on each channel / frequency), Scan mode (Hold /
+  Pause / Stop), Scan On Boot.
+- DMR and P25 channels take at least 50 ms each; where the signal strength rises over the noise, the scan waits up to
+  0.4 s for the DMR sync (P25: a data unit), then up to 3 s for the audio, so it also stops in the middle of a call.
 
 ---
 

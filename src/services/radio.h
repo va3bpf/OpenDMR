@@ -100,6 +100,9 @@ void radio_beep_amp(bool on);
 uint8_t radio_signal(void);     // RSSI, raw (dBm = raw - 177 on VHF, raw - 167 on UHF), averaged for showing
 int radio_signal_dbm(void);
 uint8_t radio_signal_raw(void); // the last reading
+// Scanning a digital channel: the strongest raw reading since the last retune settled, and how many readings (0: none
+// yet); read every few ms while scanning (radio_set_scanning())
+uint8_t radio_scan_peak(uint16_t *samples);
 uint8_t radio_noise(void);      // raw
 
 #endif
