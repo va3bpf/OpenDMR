@@ -62,10 +62,15 @@ static void caller_text(uint32_t id, char *out, size_t size)
     last_heard_entry_t entry;
 
     out[0] = '\0';
-    if (last_heard_get(0, &entry) && (entry.id == id)) {
-        bool alias = (entry.talker_alias[0] != 0) && (dmr_ids_talker_alias_first() || (entry.text[0] == 0));
+    // Search all last heard entries for this ID (not just position 0) because the
+    // talker alias arrives in a separate LC block and may not be at position 0 yet
+    for (int i = 0; i < last_heard_count(); i++) {
+        if (last_heard_get(i, &entry) && (entry.id == id)) {
+            bool alias = (entry.talker_alias[0] != 0) && (dmr_ids_talker_alias_first() || (entry.text[0] == 0));
 
-        snprintf(out, size, "%s", alias ? entry.talker_alias : entry.text);
+            snprintf(out, size, "%s", alias ? entry.talker_alias : entry.text);
+            return;
+        }
     }
 }
 
@@ -114,7 +119,7 @@ static void draw(const dmr_call_t *call, const char *mode, const char *status_it
     if (caller[0] == '\0') {
         snprintf(callsign, sizeof(callsign), "%lu", (unsigned long)call->source);
         rest[0] = '\0';
-        id[0] = '\0';
+        snprintf(id, sizeof(id), "ID %lu", (unsigned long)call->source);
     } else {
         split_callsign(caller, callsign, sizeof(callsign), rest, sizeof(rest));
         snprintf(id, sizeof(id), "ID %lu", (unsigned long)call->source);
