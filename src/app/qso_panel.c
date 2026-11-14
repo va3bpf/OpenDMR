@@ -119,7 +119,7 @@ static void draw(const dmr_call_t *call, const char *mode, const char *status_it
     if (caller[0] == '\0') {
         snprintf(callsign, sizeof(callsign), "%lu", (unsigned long)call->source);
         rest[0] = '\0';
-        snprintf(id, sizeof(id), "ID %lu", (unsigned long)call->source);
+        id[0] = '\0'; // the number is already the large line
     } else {
         split_callsign(caller, callsign, sizeof(callsign), rest, sizeof(rest));
         snprintf(id, sizeof(id), "ID %lu", (unsigned long)call->source);
