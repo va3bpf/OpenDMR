@@ -167,6 +167,9 @@ stayed under it for 0.2 s (AM) or 0.5 s (USB, LSB), so the pauses in speech don'
 tunes 100 Hz a click; tune to the suppressed carrier (e.g. 144.300 MHz), then a little either way until the voice sounds
 right. The mode is kept with the channel and the VFO; the CPS sees such a channel as analog.
 
+**108 – 137 MHz (aviation) is receive only**, in any mode: set AM (SK1 + \*) to listen. The radio's front end is made for
+137 MHz and up, so it is less sensitive there; the PTT shows "OUT OF BAND".
+
 **P25** (APCO P25 Phase 1 conventional voice: simplex, group calls, clear): the bottom bar shows `P25`, the status bar
 the NAC (e.g. `NAC293`), and below the frequency come the talk group and the NAC.
 

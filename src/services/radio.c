@@ -1356,7 +1356,7 @@ radio_tx_check_t radio_tx_check(void)
     if (!codeplug_mode_can_transmit(c->mode)) {
         return RADIO_TX_RX_MODE;
     }
-    if (!codeplug_frequency_is_valid(c->tx_freq) || !in_band_limits(c->tx_freq)) {
+    if (!codeplug_frequency_can_transmit(c->tx_freq) || !in_band_limits(c->tx_freq)) {
         return RADIO_TX_OUT_OF_BAND;
     }
     return RADIO_TX_OK;

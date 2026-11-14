@@ -290,4 +290,7 @@ int codeplug_set_all_power(uint8_t power);
 // The frequency (10 Hz) is in one of the bands of the radio (RADIO_HARDWARE_FREQUENCY_BANDS of the main firmware)
 bool codeplug_frequency_is_valid(uint32_t frequency);
 
+// ... and the radio may transmit there (not in the receive only aviation band, 108 - 137 MHz)
+bool codeplug_frequency_can_transmit(uint32_t frequency);
+
 #endif
