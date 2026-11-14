@@ -70,10 +70,10 @@
 #define CPS_WRITE_SECTOR      3  // 'X': the buffer to the flash
 #define CPS_WRITE_EEPROM      4  // 'X': the EEPROM, in the flash sectors on the DM-32
 #define CPS_CALIBRATION       0x10000    // the OpenGD77 calibration: not this radio's (the factory one is read only)
-#define DMR_IDS_AREA_1        0x30000    // the DMR ID database (dmr_ids.c): its header and first records
-#define DMR_IDS_AREA_1_END    0x70000
-#define DMR_IDS_AREA_2        0x8F000    // the rest (from 0x8F400 or 0xB8000)
-#define DMR_IDS_AREA_2_END    0x100000
+#define DMR_IDS_AREA_1        0x50000    // the DMR ID database (dmr_ids.c): its header and first records (0x20000 +
+#define DMR_IDS_AREA_1_END    0x90000    // 0x30000: the CPS adds 0x20000 to its flash addresses on the DM-32)
+#define DMR_IDS_AREA_2        0xAF000    // the rest (from 0xAF400 or 0xD8000)
+#define DMR_IDS_AREA_2_END    FLASH_WINDOW_SIZE // as far as the CPS writes: init again after its last sector
 #define CPS_RESTART_DELAY_MS  500        // the reply goes out first
 #define UPDATE_RADIO_OFF_MS   300        // the radio task's time to turn the receiver off before an update
 
