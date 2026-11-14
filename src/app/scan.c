@@ -35,31 +35,73 @@
 #include "systime.h"
 #include "radio.h"
 #include "dmr.h"
+#include "p25_radio.h"
 #include "scan.h"
 
-#define SETTLE_MS      30   // after a change, before the carrier is believed (SCAN_FREQ_CHANGE_SETTLING_INTERVAL)
-#define SHORT_PAUSE_MS 500  // a carrier: time for the tone or the audio (SCAN_SHORT_PAUSE_TIME)
-#define DMR_SYNC_MS    1560 // DMR sync: (1 superframe + 1 timeslot) x 4, the sync and the audio
-#define TIMESLOT_MS    30
-#define SLOW_STEP_MS   150  // above: the DMR slow mode
+#define SETTLE_MS       30   // after a change, before the carrier is believed (SCAN_FREQ_CHANGE_SETTLING_INTERVAL)
+#define SHORT_PAUSE_MS  500  // a carrier: time for the tone or the audio (SCAN_SHORT_PAUSE_TIME)
+// DMR sync (or a P25 data unit): time for the audio. The main firmware waits (1 superframe + 1 timeslot) x 4 = 1560 ms;
+// joining a DMR call already going on (as a scan does), the audio came 0.6 to 1.9 s after the retune (measured)
+#define SYNC_PAUSE_MS   3000
+#define TIMESLOT_MS     30
+// DMR and P25: a step long enough to see a transmission without a repeater in the signal strength (on 27.5 ms of
+// every 60: radio_scan_peak() reads every few ms), then up to SIGNAL_WAIT_MS where it rose SIGNAL_RISE over the noise
+// floor: the HR_C7000 found the DMR sync 100 to 300 ms after the retune (measured, 50 mW a metre away)
+#define DIGITAL_STEP_MS 50
+#define SIGNAL_WAIT_MS  400
+#define SIGNAL_RISE     8    // raw steps (about dB): the floor moved 76 - 82 from one frequency to another
+#define FLOOR_WEIGHT    8    // the floor: a moving average of the steps without a signal
 
 enum { MODE_HOLD, MODE_PAUSE, MODE_STOP }; // settings.scan_mode_pause
 enum { STATE_SCANNING, STATE_SHORT_PAUSED, STATE_PAUSED };
 
-uint32_t scan_dwell_ms(bool dmr, bool simplex)
+uint32_t scan_dwell_ms(scan_kind_t kind)
 {
     uint32_t step = TIMESLOT_MS + (settings.scan_step_time * TIMESLOT_MS);
-    uint32_t dmr_min;
 
-    if (!dmr) {
+    if (kind == SCAN_ANALOG) {
         return step;
     }
-    if (step > SLOW_STEP_MS) {
-        dmr_min = TIMESLOT_MS * (simplex ? 10 : 6);
-    } else {
-        dmr_min = simplex ? (TIMESLOT_MS * 2) : (TIMESLOT_MS + 8);
+    return (step < DIGITAL_STEP_MS) ? DIGITAL_STEP_MS : step;
+}
+
+static bool found(const scan_t *scan, scan_kind_t kind, uint32_t now)
+{
+    switch (kind) {
+        case SCAN_DMR:
+            return dmr_has_sync();
+        case SCAN_P25:
+            return p25_radio_heard_within(now - scan->step_ms);
+        default:
+            return radio_has_carrier();
     }
-    return (step < dmr_min) ? dmr_min : step;
+}
+
+// DMR / P25 while the step runs: the signal over the floor keeps the step for its sync
+static void signal_check(scan_t *scan)
+{
+    uint16_t samples;
+    uint8_t peak = radio_scan_peak(&samples);
+
+    if (!scan->waiting && (samples > 0) && (scan->floor != 0) && (peak >= (scan->floor + SIGNAL_RISE))) {
+        scan->waiting = true;
+        scan->due_ms = scan->step_ms + SIGNAL_WAIT_MS;
+    }
+}
+
+// DMR / P25 moving on from a step without a signal: its peak into the floor
+static void floor_update(scan_t *scan)
+{
+    uint16_t samples;
+    uint8_t peak = radio_scan_peak(&samples);
+
+    if (scan->waiting || (samples == 0)) {
+        return;
+    }
+    scan->floor = (scan->floor == 0)
+                      ? peak
+                      : (uint8_t)((((uint32_t)scan->floor * (FLOOR_WEIGHT - 1)) + peak + (FLOOR_WEIGHT / 2)) /
+                                  FLOOR_WEIGHT);
 }
 
 void scan_moved(scan_t *scan, uint32_t dwell_ms)
@@ -68,6 +110,7 @@ void scan_moved(scan_t *scan, uint32_t dwell_ms)
     scan->step_ms = systime_get_ms();
     scan->dwell_ms = dwell_ms;
     scan->due_ms = scan->step_ms + dwell_ms;
+    scan->waiting = false;
 }
 
 void scan_start(scan_t *scan, uint32_t dwell_ms, int direction)
@@ -75,6 +118,7 @@ void scan_start(scan_t *scan, uint32_t dwell_ms, int direction)
     scan->active = true;
     scan->direction = (int8_t)((direction < 0) ? -1 : 1);
     scan->swallow_key = UI_KEY_COUNT;
+    scan->floor = 0;
     scan_moved(scan, dwell_ms);
     radio_set_scanning(true);
     ui_timer_start(SCAN_TICK_MS);
@@ -88,17 +132,20 @@ void scan_stop(scan_t *scan)
     scan->active = false;
 }
 
-bool scan_tick(scan_t *scan, bool dmr)
+bool scan_tick(scan_t *scan, scan_kind_t kind)
 {
     uint32_t now = systime_get_ms();
+    bool digital = (kind != SCAN_ANALOG);
 
     if (!scan->active) {
         return false;
     }
-    if ((scan->state == STATE_SCANNING) && ((now - scan->step_ms) >= SETTLE_MS) &&
-        (dmr ? dmr_has_sync() : radio_has_carrier())) {
+    if (digital && (scan->state == STATE_SCANNING)) {
+        signal_check(scan);
+    }
+    if ((scan->state == STATE_SCANNING) && ((now - scan->step_ms) >= SETTLE_MS) && found(scan, kind, now)) {
         scan->state = STATE_SHORT_PAUSED;
-        scan->due_ms = now + (dmr ? DMR_SYNC_MS : SHORT_PAUSE_MS);
+        scan->due_ms = now + (digital ? SYNC_PAUSE_MS : SHORT_PAUSE_MS);
     }
     if ((scan->state == STATE_SHORT_PAUSED) ||
         ((scan->state == STATE_PAUSED) && (settings.scan_mode_pause == MODE_HOLD))) {
@@ -111,7 +158,13 @@ bool scan_tick(scan_t *scan, bool dmr)
             scan->state = STATE_PAUSED;
         }
     }
-    return (int32_t)(now - scan->due_ms) >= 0;
+    if ((int32_t)(now - scan->due_ms) < 0) {
+        return false;
+    }
+    if (digital && (scan->state == STATE_SCANNING)) {
+        floor_update(scan);
+    }
+    return true;
 }
 
 scan_key_t scan_key(scan_t *scan, const ui_event_t *ev)

@@ -108,6 +108,8 @@ static bool have_held;
 static p25_call_t call;
 static TickType_t last_ldu;
 static TickType_t last_unit; // a data unit decoded, or the receive (re)armed
+static volatile TickType_t heard_at; // a data unit with the channel's NAC decoded (p25_radio_heard_within())
+static volatile bool heard;
 static bool audio_on;
 static void ev(uint16_t event, uint16_t arg);
 
@@ -339,6 +341,8 @@ static void unit(int duid)
     }
     ev(10, (uint16_t)duid);
     last_unit = xTaskGetTickCount();
+    heard_at = last_unit;
+    heard = true;
     switch (duid) {
     case P25_DUID_HDU:
         call_begin();
@@ -644,6 +648,11 @@ void p25_radio_transmit(bool on)
 bool p25_radio_transmitting(void)
 {
     return tx_want || tx_busy;
+}
+
+bool p25_radio_heard_within(uint32_t ms)
+{
+    return heard && ((xTaskGetTickCount() - heard_at) < pdMS_TO_TICKS(ms));
 }
 
 static void task_main(void *arg)

@@ -415,9 +415,14 @@ static void scan_range(uint32_t *low, uint32_t *high)
     }
 }
 
+static scan_kind_t scan_kind(void)
+{
+    return (vfo()->mode == CODEPLUG_MODE_DMR) ? SCAN_DMR : (vfo()->mode == CODEPLUG_MODE_P25) ? SCAN_P25 : SCAN_ANALOG;
+}
+
 static uint32_t scan_dwell(void)
 {
-    return scan_dwell_ms(vfo()->mode == CODEPLUG_MODE_DMR, vfo()->rx_freq == vfo()->tx_freq);
+    return scan_dwell_ms(scan_kind());
 }
 
 static bool scan_skipped(uint32_t frequency)
@@ -480,7 +485,7 @@ static bool scan_step(void)
     bool was_active = scan.active;
     uint32_t f;
 
-    if (!scan_tick(&scan, vfo()->mode == CODEPLUG_MODE_DMR)) {
+    if (!scan_tick(&scan, scan_kind())) {
         return was_active && !scan.active;
     }
     f = scan_next();
