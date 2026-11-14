@@ -114,6 +114,16 @@ EXTRA = [
     ("power_to_all_ask", "All channels + VFOs", "所有信道和VFO", "Todos canales + VFO"),
     ("power_to_all_done", "Channels set", "已设置信道数", "Canales ajustados"),
     ("aprs_send_now", "Send beacon now", "立即发送信标", "Enviar baliza"),
+    ("boot_pin", "Power-on PIN", "开机密码", "PIN al encender"),
+    ("lock_pin", "Lock PIN", "锁屏密码", "PIN de bloqueo"),
+    ("change_pin", "Change PIN", "修改密码", "Cambiar PIN"),
+    ("ui_enter_pin", "Enter PIN", "输入密码", "Introduzca PIN"),
+    ("ui_new_pin", "New PIN", "新密码", "PIN nuevo"),
+    ("ui_confirm_pin", "Enter it again", "再输入一次", "Repitalo"),
+    ("ui_wrong_pin", "Wrong PIN", "密码错误", "PIN incorrecto"),
+    ("ui_pin_mismatch", "Not the same, again", "两次不一致，请重输", "No coinciden, otra vez"),
+    ("ui_pin_digits", "4 - 6 digits", "4 - 6 位数字", "4 - 6 digitos"),
+    ("ui_pin_wait", "Wait %u s", "请等待 %u 秒", "Espere %u s"),
     # The language row of the options: English in every language, so it can be found from a language one cannot read
     ("language_menu", "Language", "Language", "Language"),
 ]

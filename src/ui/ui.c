@@ -156,6 +156,11 @@ void ui_home(void)
     enter_top(NULL);
 }
 
+const ui_screen_t *ui_top_screen(void)
+{
+    return (depth > 0) ? stack[depth - 1].screen : NULL;
+}
+
 void *ui_arg(void)
 {
     return (depth > 0) ? stack[depth - 1].arg : NULL;

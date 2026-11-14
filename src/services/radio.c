@@ -60,6 +60,7 @@
 #include "hotspot.h"
 #include "adc.h"
 #include "radio.h"
+#include "security.h"
 #include "p25_radio.h"
 
 #define RADIO_TASK_PRIORITY 4
@@ -1037,6 +1038,15 @@ static void vox_check(void)
     vox_next_ms = now + VOX_SAMPLE_MS;
     level = vox_window_max;
     vox_window_max = 0;
+    // the power-on PIN not entered yet, or locked with the lock PIN (security.h): the VOX stays off
+    if (security_vox_blocked()) {
+        if (vox_keyed) {
+            vox_post(false);
+            vox_keyed = false;
+        }
+        vox_reset(VOX_SETTLE_MS);
+        return;
+    }
     // a sound into the mic starts it again, but not once it keyed the transmitter (the DMR start beep plays before
     // the transmission: that release cut every DMR VOX transmission at once)
     if (!vox_keyed && (vox_heard || (!transmitting && amp_for_beep))) {

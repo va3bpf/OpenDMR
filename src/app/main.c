@@ -67,13 +67,17 @@
 #include "hotspot.h"
 #include "hotspot_screen.h"
 #include "cps_screen.h"
+#include "security.h"
+#include "pin_screen.h"
+#include "lock_screen.h"
 
 volatile unsigned long freertos_assert_line = 0;
 
-// The screens that go over all others: the hotspot's, the CPS's
+// The screens that go over all others: the hotspot's (not before the power-on PIN), the CPS's (also then: the CPS
+// is the way back from a forgotten PIN)
 static bool screen_hooks(const ui_event_t *ev)
 {
-    return hotspot_screen_hook(ev) || cps_screen_hook(ev);
+    return (!security_boot_locked() && hotspot_screen_hook(ev)) || cps_screen_hook(ev);
 }
 
 int main(void)
@@ -95,6 +99,8 @@ int main(void)
     display_light_start();
     codeplug_init();
     dmr_ids_init();
+    security_load();
+    const ui_screen_t *lock = lock_screen_start();
     keymap_load();
     language_load();
     ui_list_places_load();
@@ -117,7 +123,9 @@ int main(void)
     ui_set_event_hook(screen_hooks);
     ui_start(((settings_valid() && (settings.initial_menu_number == VFO_SCREEN_MENU_VFO)) ? &vfo_screen
                                                                                           : &channel_screen),
-             (fm_radio_was_playing() ? &fm_radio_screen : NULL)); // switched off on the FM radio: back on it
+             // the power-on PIN first, else the lock screen (the lock PIN), else the FM radio if it was on
+             (security_boot_locked() ? &pin_screen
+                                     : (lock ? lock : (fm_radio_was_playing() ? &fm_radio_screen : NULL))));
     systime_watchdog_start(); // a stall from here on resets the radio
 
     vTaskStartScheduler();

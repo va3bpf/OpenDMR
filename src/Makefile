@@ -77,11 +77,11 @@ $(BUILD)/%.o: %.S
 	$(CC) $(ASFLAGS) -c -o $@ $<
 
 # The firmware information shows the git version and the build time: built every time. cable_link.c embeds the same
-# version for the radio info the CPS reads, so it is built every time too (the flag changes with git, which make does
-# not see)
+# version for the radio info the CPS reads, and security.c keeps an id of the build (another build turns the PINs off),
+# so they are built every time too (the flag changes with git, which make does not see)
 GITVERSION := $(shell git rev-parse --short HEAD 2>/dev/null)
-$(BUILD)/app/firmware_info.o $(BUILD)/services/cable_link.o: CFLAGS += $(if $(GITVERSION),-DGITVERSION=$(GITVERSION))
-$(BUILD)/app/firmware_info.o $(BUILD)/services/cable_link.o: FORCE
+$(BUILD)/app/firmware_info.o $(BUILD)/services/cable_link.o $(BUILD)/services/security.o: CFLAGS += $(if $(GITVERSION),-DGITVERSION=$(GITVERSION))
+$(BUILD)/app/firmware_info.o $(BUILD)/services/cable_link.o $(BUILD)/services/security.o: FORCE
 
 clean:
 	rm -rf $(BUILD)
