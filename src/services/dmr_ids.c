@@ -28,10 +28,13 @@
 
 /*
  * OpenDMR, service: the DMR ID database (dmr_ids.h), from the main firmware's uiUtilities.c dmrIDCacheInit(),
- * dmrIDLookup(), dmrDbTextDecode(), contactIDLookup() and updateLHItem() (OpenGD77). The OpenGD77 CPS writes it into
- * the flash window at 0x30000 (12 byte header "Id" + format + record length, the count at 8) and on from 0xB8000
- * (0x8F400 for the "Idn" format, over the voice prompts): records of a DMR ID (4 byte BCD, or 3 byte binary for the
- * compressed "IdN" / "Idn" formats) and its text, sorted by ID. A binary search, helped by ID_SLICES IDs read at init.
+ * dmrIDLookup(), dmrDbTextDecode(), contactIDLookup() and updateLHItem() (OpenGD77). The OpenGD77 CPS writes it at
+ * 0x30000 (12 byte header "Id" + format + record length, the count at 8) and on from 0xB8000 (0x8F400 for the "Idn"
+ * format, over the voice prompts): records of a DMR ID (4 byte BCD, or 3 byte binary for the compressed "IdN" / "Idn"
+ * formats) and its text, sorted by ID. A binary search, helped by ID_SLICES IDs read at init.
+ * Those are flash addresses of the GD-77: for the DM-32 (a C7000 radio) the CPS adds STM32_FLASH_ADDRESS_OFFSET
+ * (0x20000, the emulated EEPROM below them), as for the flash part of the codeplug (codeplug.c FLASH_PART_OFFSET), so
+ * in our window they are 0x50000, 0xD8000 and 0xAF400.
  */
 
 #include <stdio.h>
@@ -41,9 +44,10 @@
 #include "codeplug.h"
 #include "dmr_ids.h"
 
-#define LOCATION_1          0x30000
-#define LOCATION_2          0xB8000
-#define LOCATION_2_N_FORMAT 0x8F400 // VOICE_PROMPTS_FLASH_HEADER_ADDRESS
+#define FLASH_PART          0x20000 // the CPS's STM32_FLASH_ADDRESS_OFFSET (codeplug.c FLASH_PART_OFFSET)
+#define LOCATION_1          (FLASH_PART + 0x30000)
+#define LOCATION_2          (FLASH_PART + 0xB8000)
+#define LOCATION_2_N_FORMAT (FLASH_PART + 0x8F400) // VOICE_PROMPTS_FLASH_HEADER_ADDRESS
 #define HEADER_LENGTH       0x0C
 #define AREA_1_SPACE        0x40000
 #define TEXT_MAX            51 // MAX_DMR_ID_CONTACT_TEXT_LENGTH
