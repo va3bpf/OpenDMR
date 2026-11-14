@@ -1,6 +1,6 @@
 # OpenDMR — Baofeng DM-32UV 开源固件
 
-[English](README.en.md) · **[安装手册](docs/installation.md)** · **[使用说明书](docs/manual.md)**
+[English](README.en.md) · **[安装手册](docs/installation.md)** · **[使用说明书](docs/manual.md)** · [支持这个项目](#支持这个项目)
 
 **Baofeng DM-32 / DM-32UV**（SoC **HR_C7000** = CK803S CPU + DMR 调制解调 + 音频编解码）的开源固件。
 源码公开：非商业用途可以自由使用、修改、传播；商用须经作者同意（见「许可」）。
@@ -131,6 +131,19 @@ py tools\release\make_release.py --publish    # 再建 GitHub Release（tag v<�
 | 字体 `tools/fonts/ttf/` | Roboto Condensed、Noto Sans SC，都是 SIL Open Font License 1.1（许可文本在同一目录） |
 
 所以整个固件目前**不能商用**：要商用，至少要重写 DMR 引擎和热点，并确认 AMBE+2 的专利。
+
+## 支持这个项目
+
+OpenDMR 是业余时间做的免费项目，开发和测试要花不少时间和 AI 工具的费用。如果它对你有用，欢迎捐赠，支持后续的维护和新功能。
+
+- **微信赞赏**：扫下面的赞赏码
+- **Ko-fi**（信用卡等，国外用户）：<https://ko-fi.com/opendmr>
+
+<p align="center">
+  <img src="docs/donate/wechat.jpg" width="240" alt="微信赞赏码">
+</p>
+
+<a href="https://ko-fi.com/opendmr"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="在 Ko-fi 上支持 OpenDMR"></a>
 
 ## 致谢
 
