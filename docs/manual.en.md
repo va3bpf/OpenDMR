@@ -536,4 +536,5 @@ firmware: see the README.
 - No themes: the interface has fixed colours.
 - Safe Pwr-On and Sat (Manual / Auto) have no effect yet.
 - P25: simplex group calls in clear only; known issues in [docs/p25.md](p25.md), section 6.
-- Not fully tested on the air yet: APRS decoding, the hotspot's CW ID, satellite passes, talkaround, distance sort.
+- Not fully tested on the air yet: APRS beacons received by an APRS decoder (their frames are checked; the radio itself
+  does not decode APRS), the hotspot's CW ID, satellite passes, talkaround, distance sort.
