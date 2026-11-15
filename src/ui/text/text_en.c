@@ -396,6 +396,7 @@ const char *const text_en[TEXT_COUNT] = {
     [TEXT_KEY_ZONE_DOWN] = "Zone -",
     [TEXT_KEY_TX_UP] = "Change RX freq",
     [TEXT_KEY_TX_DOWN] = "Change TX freq",
+    [TEXT_KEY_HELD] = "long",
     [TEXT_KEY_SCAN_UP] = "Scan up",
     [TEXT_KEY_SCAN_DOWN] = "Scan down",
     [TEXT_KEY_APRS_TOGGLE] = "APRS on/off",

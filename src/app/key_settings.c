@@ -188,7 +188,7 @@ static void draw(void)
             break;
         }
 
-        list_view_row_t data = {.icon = ICONS_COUNT, .selected = ((at + 1) == selected)};
+        list_view_row_t data = {.icon = ICONS_COUNT, .selected = ((at + 1) == selected), .small_value = true};
 
         if ((at + 1) == (ROWS - 1)) {
             data.name = text(TEXT_KEY_DEFAULTS);

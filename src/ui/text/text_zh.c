@@ -396,6 +396,7 @@ const char *const text_zh[TEXT_COUNT] = {
     [TEXT_KEY_ZONE_DOWN] = "区域 -",
     [TEXT_KEY_TX_UP] = "改接收频率",
     [TEXT_KEY_TX_DOWN] = "改发射频率",
+    [TEXT_KEY_HELD] = "长按",
     [TEXT_KEY_SCAN_UP] = "向上扫描",
     [TEXT_KEY_SCAN_DOWN] = "向下扫描",
     [TEXT_KEY_APRS_TOGGLE] = "APRS 开/关",

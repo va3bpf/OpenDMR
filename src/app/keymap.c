@@ -248,7 +248,7 @@ void keymap_format(keymap_binding_t binding, char *out, size_t size)
     }
     snprintf(out, size, "%s%s%s%s%s", ((binding.modifiers & UI_MODIFIER_SK1) ? "SK1+" : ""),
              ((binding.modifiers & UI_MODIFIER_SK2) ? "SK2+" : ""), key_name(binding.key),
-             (binding.long_press ? " " : ""), (binding.long_press ? text(TEXT_KEY_LONG) : ""));
+             (binding.long_press ? " " : ""), (binding.long_press ? text(TEXT_KEY_HELD) : ""));
 }
 
 keymap_action_t keymap_set(keymap_action_t action, keymap_binding_t binding)

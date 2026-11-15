@@ -121,6 +121,18 @@ static void draw_value(int32_t x, int32_t y, const list_view_row_t *data, const 
     draw_fill_rect(x + before, y + font->line_height - 1, MAX(char_width, 4), 2, cursor_colour);
 }
 
+// The width of a value as draw_value() draws it (with room for the cursor after the text)
+static int32_t value_width(const list_view_row_t *data, const font_t *font)
+{
+    int32_t width = font_text_width(font, data->value);
+
+    if ((data->cursor > 0) && ((data->cursor - 1) >= (int32_t)strlen(data->value))) {
+        width += font_text_width(font, "0");
+    }
+    return width;
+}
+
+#define NAME_GAP      8 // at least between the name and the value
 #define SWATCH_WIDTH  28
 #define SWATCH_HEIGHT 18
 #define SWATCH_X      (FB_WIDTH - WIDGET_MARGIN - SWATCH_WIDTH)
@@ -148,8 +160,35 @@ void list_view_draw_row(int32_t row, const list_view_row_t *data)
              10;
     }
 
+    // the value first, the name in what is left: a long value (a key combination) a size smaller, then the name too,
+    // then the name cut
+    int32_t right = FB_WIDTH - WIDGET_MARGIN - (data->swatch ? (SWATCH_WIDTH + 8) : 0);
+    int32_t name_right = right;
+    const font_t *name_font = font;
+
+    if (data->value) {
+        const font_t *value_font = (data->small_value ? &font_roboto17 : font);
+        int32_t name_width = (data->name ? font_text_width(font, data->name) : 0);
+        int32_t width = value_width(data, value_font);
+
+        if ((x + name_width + NAME_GAP + width) > right) {
+            value_font = &font_roboto17;
+            width = value_width(data, value_font);
+            if ((x + name_width + NAME_GAP + width) > right) {
+                name_font = &font_roboto17;
+            }
+        }
+        draw_value(right, text_y + (font->ascent - value_font->ascent), data, value_font, value_colour,
+                   (data->selected ? THEME_COLOUR_ON_ACCENT : THEME_COLOUR_ACCENT));
+        name_right = right - width - NAME_GAP;
+    }
+
     if (data->name) {
-        draw_text(x, text_y, data->name, font, FONT_ALIGN_LEFT, name_colour);
+        char buffer[64];
+
+        draw_text(x, text_y + (font->ascent - name_font->ascent),
+                  fit_text(buffer, sizeof(buffer), data->name, name_font, name_right - x), name_font, FONT_ALIGN_LEFT,
+                  name_colour);
     }
 
     if (data->swatch) {
@@ -161,11 +200,6 @@ void list_view_draw_row(int32_t row, const list_view_row_t *data)
         draw_fill_rect(SWATCH_X, sy + SWATCH_HEIGHT - 1, SWATCH_WIDTH, 1, frame);
         draw_fill_rect(SWATCH_X, sy, 1, SWATCH_HEIGHT, frame);
         draw_fill_rect(SWATCH_X + SWATCH_WIDTH - 1, sy, 1, SWATCH_HEIGHT, frame);
-    }
-
-    if (data->value) {
-        draw_value(FB_WIDTH - WIDGET_MARGIN - (data->swatch ? (SWATCH_WIDTH + 8) : 0), text_y, data, font, value_colour,
-                   (data->selected ? THEME_COLOUR_ON_ACCENT : THEME_COLOUR_ACCENT));
     }
 }
 

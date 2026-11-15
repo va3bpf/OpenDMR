@@ -126,6 +126,7 @@ typedef struct {
     const char *sub; // two-line rows: the second line, in the label colour; NULL: none
     int16_t cursor;  // text entry in the value: 1 + byte index of the character above the underline (after the
                      // text when it is the length); 0: no cursor
+    bool small_value; // the value a size smaller (a list of long values: key combinations)
     bool swatch;     // a colour box on the right (after the value): a frame, filled by list_view_fill_swatch()
 } list_view_row_t;
 
