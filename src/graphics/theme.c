@@ -46,8 +46,8 @@ static const uint32_t THEMES[THEMES_COUNT][THEME_COLOUR_COUNT] = {
                     0xE9A23B,  // warning
                     0xFFFFFF}, // white
     [THEME_LIGHT] = {0xF6F7F9, // background
-                     0xD8DCE2, // line
-                     0xC2C8D0, // off
+                     0xA9AFB8, // line: dark enough to be seen on the background
+                     0xC8CDD4, // off
                      0x8B929C, // dim text
                      0x5E6571, // labels
                      0x333943, // second text
