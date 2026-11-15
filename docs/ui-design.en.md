@@ -58,7 +58,7 @@ Sizes are real screen pixels (240x320), and so are the screenshots.
 | `BACKGROUND` | Screen | #07131F | #FFFFFF |
 | `LINE` | The main area's separators, the empty part of bars | #1C3448 | #7A8696 |
 | `OFF` | Unlit: signal and S meter segments, digits not entered yet | #24425A | #C2CAD3 |
-| `TEXT_DIM` | The other path of the dual watch | #5E7D96 | #4F5B69 |
+| `TEXT_DIM` | The other path of the dual watch; unlit signal bars (Sunlight: the line colour) | #5E7D96 | #4F5B69 |
 | `TEXT_LABEL` | Zone, labels, units, place | #8FB0C9 | #2E3A48 |
 | `TEXT_SECOND` | Frequency, talk group | #CFE3F1 | #101820 |
 | `TEXT` | Channel name, callsign, main values | #F4FAFF | #000000 |
@@ -70,7 +70,7 @@ Sizes are real screen pixels (240x320), and so are the screenshots.
 | `ON_ACCENT` | Text on the accent | #04111C | #FFFFFF |
 | `PANEL` | The band: status bar, list title, bottom bar | #0E2A44 | #0B3D91 |
 | `PANEL_TEXT` | Text on the band | #F4FAFF | #FFFFFF |
-| `PANEL_LABEL` | Labels on the band, unlit signal bars (a stub at the foot) | #8FC3E6 | #A9C6F2 |
+| `PANEL_LABEL` | Labels on the band | #8FC3E6 | #A9C6F2 |
 
 These 16 colours are the whole palette: the frame buffer holds 4 bits a pixel, a palette index; anti-aliasing takes no
 colours of its own, it looks up a blend table by foreground, background and level. A theme is a palette

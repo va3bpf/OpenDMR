@@ -238,6 +238,9 @@ int32_t icons_draw(int32_t x, int32_t y, icons_id_t icon, theme_colour_t colour)
 
 void icons_draw_signal(int32_t x, int32_t y, int32_t level, theme_colour_t colour)
 {
+    theme_colour_t unlit = (theme_contrast(THEME_COLOUR_TEXT_DIM, THEME_COLOUR_PANEL) >= 2.5f) ? THEME_COLOUR_TEXT_DIM
+                                                                                            : THEME_COLOUR_LINE;
+
     for (int32_t bar = 0; bar < ICONS_SIGNAL_BARS; bar++) {
         int32_t h = 4 + (bar * 2);
         int32_t bx = x + (bar * 4);
@@ -245,9 +248,9 @@ void icons_draw_signal(int32_t x, int32_t y, int32_t level, theme_colour_t colou
         if (bar < level) {
             fb_fill(bx, y + 16 - h, bx + 3, y + 16, theme_colour(colour));
         } else {
-            // unlit: a stub at the foot, in the band's label colour (grey disappeared on a light theme's dark band; a
-            // whole bar in it was too close to a lit white one)
-            fb_fill(bx, y + 14, bx + 3, y + 16, theme_colour(THEME_COLOUR_PANEL_LABEL));
+            // unlit: the whole bar, dim (the dim text colour; the line colour where that doesn't show on the band:
+            // Sunlight's dark grey on its dark blue)
+            fb_fill(bx, y + 16 - h, bx + 3, y + 16, theme_colour(unlit));
         }
     }
 }
