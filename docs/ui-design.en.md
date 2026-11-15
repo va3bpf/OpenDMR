@@ -1,6 +1,6 @@
 # DM-32UV user interface
 
-Status: **implemented; this document matches the firmware** (2026-11-15, firmware commit cae8935).
+Status: **implemented; this document matches the firmware** (2026-11-15, firmware commit 9aff18c).
 中文版：[ui-design.md](ui-design.md).
 
 > Sections 1 - 5 were first built in the ucos firmware (RA4FHE's OpenDM32, `firmware/dh4570_IAP`) and carried over to the current firmware (`src/`). Section 6 outlines how `src/` builds its UI; the details are in section 6 of the Chinese version, [ui-design.md](ui-design.md).
@@ -197,6 +197,9 @@ segments.
 - Rows: icon (main menu, options) + name, the value right aligned; 7 rows a page;
 - Selected row on the accent, its text solid in `ON_ACCENT`;
 - Values (on/off, choices, numbers) change with left/right and the knob only, not with the menu key;
+- When name and value don't fit: the value a size smaller (17 px, same baseline), then the name too, and only then
+  the name cut; the key combinations of Key settings are always a size smaller (`small_value`), the same on the
+  whole page;
 - Bottom bar left key: `Select` on rows that open a submenu or screen, no label on a value row; `Save` in the
   channel details, `OK` in the quick menus; right key `Back`.
 
@@ -251,7 +254,6 @@ py tools/debug/fkey.py down green     # key events into the UI queue, to step th
 - **English quick menus**: "Add to dual watch" and "Replace VFO B" overlap (not in Chinese);
 - **English left in the Chinese interface**: `Tx <--> Rx`, `Rx --> Tx`, `Tx --> Rx` in the quick menu, the VFO's
   `RX`/`TX` chips;
-- **English key settings**: the `User power` row's name overlaps its key combination;
 - **S meter in DMR receive**: reads S7 while no or only 4 segments are lit (maybe a redraw during the capture;
   to check on the radio);
 - **Lock notice**: a short band above the bottom bar, gone before the capture.

@@ -546,7 +546,8 @@ new PIN, 4 - 6 digits, twice), **Change PIN** sets another one (for both).
 
 <img src="manual/en/key-settings.png" alt="Key settings"> <img src="manual/en/key-settings-2.png" alt="Key settings 2"> <img src="manual/en/key-settings-3.png" alt="Key settings 3">
 
-One row an action with its keys (the defaults: [1](#shortcuts-on-the-main-screens-defaults)).
+One row an action with its keys (the defaults: [1](#shortcuts-on-the-main-screens-defaults)); a long press shows as
+`long` after the keys (`SK2+Right long`).
 
 - The menu key on a row, then the new keys: SK1 / SK2 held with another key, a short or a long press, or SK1 or SK2
   alone. The back key keeps the old keys.
