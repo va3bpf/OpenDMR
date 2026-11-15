@@ -1480,9 +1480,11 @@ bool radio_audio_heard(void)
     return amp_for_audio;
 }
 
+// Something heard: the FM squelch (and tone) open, or DMR / P25 audio playing (the screens' green line and S meter;
+// speaker is the FM squelch's only)
 bool radio_is_receiving(void)
 {
-    return speaker;
+    return speaker || amp_for_audio;
 }
 
 uint8_t radio_signal(void)
