@@ -30,30 +30,82 @@
 #include "framebuffer.h"
 #include "panel.h"
 
-// RGB888, in theme_colour_t order, then four greys for the anti-aliased edges of text on the background
-static const uint32_t PALETTE_RGB888[16] = {0x000000, // background
-                                            0x1C2026, // line
-                                            0x3A3F47, // off
-                                            0x6E7580, // dim text
-                                            0x9AA1AB, // labels
-                                            0xD5D9DF, // second text
-                                            0xF2F4F7, // text
-                                            0x1E5AA8, // accent
-                                            0x2BD47D, // receive
-                                            0xC9302C, // transmit
-                                            0xE9A23B, // warning
-                                            0xFFFFFF, // white
-                                            0x0E1013, 0x2A2E35, 0x50565F, 0xB7BDC5};
+// RGB888, in theme_colour_t order; then four greys for the anti-aliased edges of text on the background, made from
+// the background and the text (AA_GREYS)
+static const uint32_t THEMES[THEMES_COUNT][THEME_COLOUR_COUNT] = {
+    [THEME_DARK] = {0x000000,  // background
+                    0x1C2026,  // line
+                    0x3A3F47,  // off
+                    0x6E7580,  // dim text
+                    0x9AA1AB,  // labels
+                    0xD5D9DF,  // second text
+                    0xF2F4F7,  // text
+                    0x1E5AA8,  // accent
+                    0x2BD47D,  // receive
+                    0xC9302C,  // transmit
+                    0xE9A23B,  // warning
+                    0xFFFFFF}, // white
+    [THEME_LIGHT] = {0xF6F7F9, // background
+                     0xD8DCE2, // line
+                     0xC2C8D0, // off
+                     0x8B929C, // dim text
+                     0x5E6571, // labels
+                     0x333943, // second text
+                     0x0F1217, // text
+                     0x1E5AA8, // accent
+                     0x12904B, // receive: darker than on black
+                     0xC9302C, // transmit
+                     0xB8740A, // warning: darker than on black
+                     0xFFFFFF}, // white
+};
+
+// Where the anti-aliasing greys lie from the background (0) to the text (256): those of the dark theme
+static const uint16_t AA_GREYS[16 - THEME_COLOUR_COUNT] = {17, 49, 91, 199};
+
+// Text on these is drawn without anti-aliasing (its edges would take the greys made for the background)
+#define SOLID_BACKGROUNDS ((1U << THEME_COLOUR_ACCENT) | (1U << THEME_COLOUR_RX) | (1U << THEME_COLOUR_TX) | \
+                           (1U << THEME_COLOUR_WARNING))
 
 static uint16_t palette[16];
+static theme_t current = THEME_DARK;
+
+static uint32_t mix(uint32_t from, uint32_t to, uint32_t part)
+{
+    uint32_t out = 0;
+
+    for (int shift = 0; shift < 24; shift += 8) {
+        int32_t a = (int32_t)((from >> shift) & 0xFF);
+        int32_t b = (int32_t)((to >> shift) & 0xFF);
+
+        out |= (uint32_t)(a + (((b - a) * (int32_t)part) / 256)) << shift;
+    }
+    return out;
+}
+
+void theme_set(theme_t theme)
+{
+    const uint32_t *colours = THEMES[(theme < THEMES_COUNT) ? theme : THEME_DARK];
+
+    current = (theme < THEMES_COUNT) ? theme : THEME_DARK;
+    for (int i = 0; i < THEME_COLOUR_COUNT; i++) {
+        palette[i] = panel_rgb888_to_native(colours[i]);
+    }
+    for (int i = THEME_COLOUR_COUNT; i < 16; i++) {
+        palette[i] = panel_rgb888_to_native(mix(colours[THEME_COLOUR_BACKGROUND], colours[THEME_COLOUR_TEXT],
+                                                AA_GREYS[i - THEME_COLOUR_COUNT]));
+    }
+    fb_set_solid_backgrounds(SOLID_BACKGROUNDS);
+    fb_set_palette(palette); // the buffer holds palette entries: the whole screen takes the new colours
+}
+
+theme_t theme_get(void)
+{
+    return current;
+}
 
 void theme_init(void)
 {
-    for (int i = 0; i < 16; i++) {
-        palette[i] = panel_rgb888_to_native(PALETTE_RGB888[i]);
-    }
-
-    fb_set_palette(palette);
+    theme_set(current);
 }
 
 uint16_t theme_colour(theme_colour_t colour)

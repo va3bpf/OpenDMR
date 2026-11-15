@@ -163,12 +163,19 @@ void fb_set_buffer(uint8_t *buffer)
 // searching the palette for the nearest one at every pixel (5 ms to redraw the status bar and the S meter).
 static uint8_t blend_table[16][16][16]; // [fg][bg][level]
 static uint16_t blend_table_ready = 0;  // bit per fg
+static uint16_t solid_backgrounds = 0;  // bit per bg: text on it without anti-aliasing (fb_set_solid_backgrounds())
 
 static const uint8_t *blend_table_for(uint8_t fg)
 {
     if ((blend_table_ready & (1 << fg)) == 0) {
         for (int bg = 0; bg < 16; bg++) {
+            bool solid = (solid_backgrounds & (1 << bg)) != 0;
+
             for (int level = 0; level < 16; level++) {
+                if (solid) {
+                    blend_table[fg][bg][level] = (level >= 8) ? fg : bg;
+                    continue;
+                }
                 blend_table[fg][bg][level] =
                     ((level == 0)
                          ? bg
@@ -181,6 +188,12 @@ static const uint8_t *blend_table_for(uint8_t fg)
     }
 
     return &blend_table[fg][0][0];
+}
+
+void fb_set_solid_backgrounds(uint16_t mask)
+{
+    solid_backgrounds = mask;
+    blend_table_ready = 0;
 }
 
 void fb_set_palette(const uint16_t colours[16])

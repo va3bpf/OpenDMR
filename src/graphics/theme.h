@@ -48,7 +48,16 @@ typedef enum {
     THEME_COLOUR_COUNT
 } theme_colour_t;
 
+// The themes: the same colours of the design, light or dark (Display options -> Theme)
+typedef enum {
+    THEME_DARK = 0,
+    THEME_LIGHT,
+    THEMES_COUNT
+} theme_t;
+
 void theme_init(void);                        // sets the LCD palette; call once the LCD type is known
+void theme_set(theme_t theme);                // another palette: the whole screen changes at once
+theme_t theme_get(void);
 uint16_t theme_colour(theme_colour_t colour); // native colour format
 
 #endif /* DM32_THEME_H */

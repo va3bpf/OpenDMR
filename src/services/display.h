@@ -40,4 +40,17 @@ void display_light_start(void);      // at power on, after the settings
 void display_light_key(bool sk1_alone);
 void display_light_tick(uint32_t elapsed_ms); // input task, each pass
 
+// The theme (Display options -> Theme, extra_options.h): dark, light, or auto (light from 7:00 to 19:00 local time,
+// dark without a clock). From the UI task: at start, when the option changes and each minute.
+typedef enum {
+    DISPLAY_THEME_DARK = 0,
+    DISPLAY_THEME_LIGHT,
+    DISPLAY_THEME_AUTO,
+    DISPLAY_THEMES
+} display_theme_t;
+
+display_theme_t display_theme(void);
+void display_theme_choose(display_theme_t theme); // saved, applied
+void display_theme_apply(void);
+
 #endif

@@ -34,6 +34,8 @@
 
 // Options of ours that the OpenGD77 settings have no room for, in a block of our own after them (extra_options.c)
 #define EXTRA_OPTION_HIDE_CALLER_PLACE (1UL << 0) // the DMR caller panel without the city and state (qso_panel.c)
+#define EXTRA_OPTION_LIGHT_THEME       (1UL << 1) // the light theme (display.c display_theme())
+#define EXTRA_OPTION_AUTO_THEME        (1UL << 2) // light by day, dark at night
 
 void extra_options_load(void); // after flash_init()
 bool extra_option(uint32_t bit);

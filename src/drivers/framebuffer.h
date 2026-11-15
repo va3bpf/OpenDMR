@@ -44,6 +44,7 @@ void fb_set_buffer(uint8_t *buffer); // draw into another buffer of FB_BYTES (NU
 
 void fb_set_palette(
     const uint16_t colours[16]); // fixed palette (theme.c); every colour gets the nearest entry
+void fb_set_solid_backgrounds(uint16_t mask); // palette entries (bit per index) text goes on without anti-aliasing
 void fb_clear(uint16_t colour);  // the whole buffer
 void fb_fill(int32_t x0, int32_t y0, int32_t x1, int32_t y1, uint16_t colour); // pixels [x0, x1) x [y0, y1), clipped
 void fb_set_pixel(int32_t x, int32_t y, uint16_t colour);

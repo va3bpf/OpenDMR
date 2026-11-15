@@ -178,6 +178,32 @@ static const ui_custom_t time_shown = {
     .select = time_shown_select,
 };
 
+// Dark, light, or auto (light by day): display.c
+static const text_id_t theme_names[DISPLAY_THEMES] = {TEXT_THEME_DARK, TEXT_THEME_LIGHT, TEXT_AUTO};
+
+static void theme_format(char *buffer, size_t size)
+{
+    snprintf(buffer, size, "%s", text(theme_names[display_theme()]));
+}
+
+static void theme_change(int direction, uint8_t modifiers)
+{
+    (void)modifiers;
+    display_theme_choose((display_theme_t)((display_theme() + DISPLAY_THEMES + ((direction > 0) ? 1 : -1)) %
+                                           DISPLAY_THEMES));
+}
+
+static void theme_select(void)
+{
+    theme_change(1, 0);
+}
+
+static const ui_custom_t theme_item = {
+    .format = theme_format,
+    .change = theme_change,
+    .select = theme_select,
+};
+
 // The DMR caller's city and state on its panel (extra_options.h; the country is always there)
 static void caller_place_format(char *buffer, size_t size)
 {
@@ -212,6 +238,7 @@ static const ui_item_t display_options_items[] = {
     {TEXT_TIMEZONE, ICONS_COUNT, UI_ITEM_CUSTOM, &timezone, NULL},
     {TEXT_TIME, ICONS_COUNT, UI_ITEM_CUSTOM, &time_shown, NULL},
     {TEXT_CALLER_PLACE, ICONS_COUNT, UI_ITEM_CUSTOM, &caller_place, NULL},
+    {TEXT_THEME, ICONS_COUNT, UI_ITEM_CUSTOM, &theme_item, NULL},
 };
 
 static const ui_list_t display_options = {

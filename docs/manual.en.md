@@ -435,7 +435,8 @@ SK2 + ▶ ◀ changes the one in use, and it is kept.
 
 Brightness (day), Nite bright, Min bright (the backlight when "off"); Mode (Auto / Squelch / Manual / Buttons),
 Timeout; Auto night; LEDs; Timezone (an hour a step, a quarter with SK2 held); Time shown in UTC or local time;
-Caller's place (the city and state of a DMR caller on the receive screen; the country always shows).
+Caller's place (the city and state of a DMR caller on the receive screen; the country always shows); Theme: Dark,
+Light (easier to read in the sun) or Auto (light from 7:00 to 19:00 local time, dark otherwise and without a clock).
 
 ### Sound options
 

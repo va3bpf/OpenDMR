@@ -426,5 +426,8 @@ const char *const text_en[TEXT_COUNT] = {
     [TEXT_UI_PIN_WAIT] = "Wait %u s",
     [TEXT_UI_ANY_KEY_UNLOCK] = "Any key to unlock",
     [TEXT_CALLER_PLACE] = "Caller's place",
+    [TEXT_THEME] = "Theme",
+    [TEXT_THEME_DARK] = "Dark",
+    [TEXT_THEME_LIGHT] = "Light",
     [TEXT_LANGUAGE_MENU] = "Language",
 };
