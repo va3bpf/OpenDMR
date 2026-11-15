@@ -38,9 +38,9 @@ const theme_t theme_graphite = {
         0x121316, // background
         0x2C2F35, // line: the separators of the main area
         0x3A3E45, // off
-        0x6B7079, // dim text
-        0x9EA3AC, // labels
-        0xD8DBE0, // second text
+        0x9EA3AC, // dim text
+        0xD8DBE0, // labels
+        0xF6F7F8, // second text
         0xF6F7F8, // text
         0xFF7A1A, // accent
         0x2FE0A0, // receive

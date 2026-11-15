@@ -272,6 +272,15 @@ void RAM_CODE fb_blend_pixel(int32_t x, int32_t y, uint16_t colour, int32_t alph
     set_index(x, y, palette_index(colour));
 }
 
+// Small text without anti-aliasing (fb_set_solid_levels()): a level of half or more is the colour, less nothing
+static bool solid_levels = false;
+#define SOLID_LEVEL(level) (solid_levels ? (((level) >= 8) ? 15 : 0) : (level))
+
+void fb_set_solid_levels(bool on)
+{
+    solid_levels = on;
+}
+
 // Levels 1..15 of colour over what is there, 0 leaves the pixel. Fonts: 2 pixels a byte (high nibble first), rows of
 // (width + 1) / 2 bytes.
 void RAM_CODE fb_draw_levels(int32_t x0, int32_t y0, const uint8_t *levels, int32_t width, int32_t height,
@@ -284,6 +293,8 @@ void RAM_CODE fb_draw_levels(int32_t x0, int32_t y0, const uint8_t *levels, int3
             for (int32_t gx = 0; gx < width; gx++) {
                 uint8_t level = (gx & 1) ? (levels[(gy * bytes_per_row) + (gx >> 1)] & 0x0F)
                                          : (levels[(gy * bytes_per_row) + (gx >> 1)] >> 4);
+
+                level = SOLID_LEVEL(level);
 
                 fb_blend_pixel(x0 + gx, y0 + gy, colour, (level * FB_ALPHA_OPAQUE) / 15);
             }
@@ -303,7 +314,7 @@ void RAM_CODE fb_draw_levels(int32_t x0, int32_t y0, const uint8_t *levels, int3
         mark_row_drawn(y);
         for (int32_t gx = 0; gx < width; gx++) {
             int32_t x = x0 + gx;
-            uint8_t level = (gx & 1) ? (levels[gx >> 1] & 0x0F) : (levels[gx >> 1] >> 4);
+            uint8_t level = SOLID_LEVEL((gx & 1) ? (levels[gx >> 1] & 0x0F) : (levels[gx >> 1] >> 4));
 
             if ((level != 0) && (x >= 0) && (x < FB_WIDTH)) {
                 set_index(x, y, table[(get_index(x, y) << 4) | level]);
@@ -314,6 +325,7 @@ void RAM_CODE fb_draw_levels(int32_t x0, int32_t y0, const uint8_t *levels, int3
 
 void RAM_CODE fb_draw_level(int32_t x, int32_t y, uint16_t colour, uint8_t level)
 {
+    level = SOLID_LEVEL(level);
     if ((level == 0) || (x < 0) || (y < 0) || (x >= FB_WIDTH) || (y >= FB_HEIGHT)) {
         return;
     }

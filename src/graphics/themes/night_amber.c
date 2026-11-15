@@ -39,9 +39,9 @@ const theme_t theme_night_amber = {
         0x050403, // background
         0x2A1E08, // line: the separators of the main area
         0x3A2A0C, // off
-        0x7A5A1E, // dim text
-        0xB0802C, // labels
-        0xE0A940, // second text
+        0xB0802C, // dim text
+        0xE0A940, // labels
+        0xFFC45C, // second text
         0xFFC45C, // text
         0xFFB000, // accent
         0x7CD957, // receive

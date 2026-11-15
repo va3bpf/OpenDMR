@@ -39,18 +39,18 @@ const theme_t theme_sunlight = {
         0xFFFFFF, // background
         0x7A8696, // line: the separators of the main area
         0xC2CAD3, // off
-        0x4F5B69, // dim text
-        0x2E3A48, // labels
-        0x101820, // second text
+        0x2E3A48, // dim text
+        0x101820, // labels
+        0x000000, // second text
         0x000000, // text
         0xB0420A, // accent
-        0x0A6E3E, // receive
-        0xB0102A, // transmit
+        0x009E4A, // receive
+        0xE0102E, // transmit
         0x8A5600, // warning
         0xFFFFFF, // on the receive / transmit / warning fills
         0xFFFFFF, // on the accent
         0x0B3D91, // panel
         0xFFFFFF, // panel text
-        0xA9C6F2, // panel labels
+        0xD4E2F8, // panel labels
     },
 };

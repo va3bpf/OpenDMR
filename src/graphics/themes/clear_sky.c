@@ -39,18 +39,18 @@ const theme_t theme_clear_sky = {
         0xFFFFFF, // background
         0xA9B4C2, // line: the separators of the main area
         0xDCE3EA, // off
-        0x7D8A98, // dim text
-        0x506072, // labels
-        0x223244, // second text
+        0x506072, // dim text
+        0x223244, // labels
+        0x0A1724, // second text
         0x0A1724, // text
         0xD9560F, // accent
-        0x0E9F5B, // receive
-        0xD7263D, // transmit
+        0x009E4A, // receive
+        0xE0102E, // transmit
         0xC27B00, // warning
         0xFFFFFF, // on the receive / transmit / warning fills
         0xFFFFFF, // on the accent
         0x0B3D91, // panel
         0xFFFFFF, // panel text
-        0xA9C6F2, // panel labels
+        0xD4E2F8, // panel labels
     },
 };

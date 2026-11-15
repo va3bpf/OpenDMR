@@ -118,9 +118,15 @@ int32_t font_text_width(const font_t *font, const char *text)
     return width;
 }
 
+// Fonts under this line height (12 - 22 px) are drawn without anti-aliasing: grey edges blur small text on this
+// screen; the large ones (32 px and up) keep it
+#define SOLID_BELOW_LINE_HEIGHT 30
+
 int32_t RAM_CODE font_draw_char(int32_t x, int32_t y, uint32_t code, const font_t *font, uint16_t colour)
 {
     const font_glyph_t *glyph = get_glyph(font, code);
+
+    fb_set_solid_levels(font->line_height < SOLID_BELOW_LINE_HEIGHT);
 
     if (glyph == NULL) {
         font_cjk_glyph_t ext;

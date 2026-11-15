@@ -39,9 +39,9 @@ const theme_t theme_deep_sea = {
         0x07131F, // background
         0x1C3448, // line: the separators of the main area
         0x24425A, // off
-        0x5E7D96, // dim text
-        0x8FB0C9, // labels
-        0xCFE3F1, // second text
+        0x8FB0C9, // dim text
+        0xCFE3F1, // labels
+        0xF4FAFF, // second text
         0xF4FAFF, // text
         0x00B4D8, // accent
         0x9BE15D, // receive
@@ -51,6 +51,6 @@ const theme_t theme_deep_sea = {
         0x04111C, // on the accent
         0x0E2A44, // panel
         0xF4FAFF, // panel text
-        0x8FC3E6, // panel labels
+        0xC2DEF2, // panel labels
     },
 };

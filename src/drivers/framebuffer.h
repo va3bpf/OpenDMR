@@ -29,6 +29,7 @@
 #ifndef DM32_FRAMEBUFFER_H
 #define DM32_FRAMEBUFFER_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 // Frame buffer of the 240 x 320 LCD (docs/ui-design.md, 6.1): 4 bit indexes into a 16 colour palette, 2 pixels per byte.
@@ -51,6 +52,8 @@ void fb_set_pixel(int32_t x, int32_t y, uint16_t colour);
 void fb_blend_pixel(int32_t x, int32_t y, uint16_t colour, int32_t alpha); // colour over what is there (anti-aliasing)
 
 // Font pixels: levels 0 (nothing) to 15 (the colour), anti-aliasing from a table computed once per colour
+// On: levels drawn as the colour (half or more) or nothing: small text, sharp on this low resolution screen
+void fb_set_solid_levels(bool on);
 void fb_draw_levels(int32_t x0, int32_t y0, const uint8_t *levels, int32_t width, int32_t height,
                     uint16_t colour); // 2 a byte, rows of (width + 1) / 2 bytes
 void fb_draw_level(int32_t x, int32_t y, uint16_t colour, uint8_t level);

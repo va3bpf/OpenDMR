@@ -39,9 +39,9 @@ const theme_t theme_high_contrast = {
         0xFFFFFF, // background
         0x9A9A9A, // line: the separators of the main area
         0xC8C8C8, // off
-        0x6A6A6A, // dim text
-        0x3D3D3D, // labels
-        0x1A1A1A, // second text
+        0x3D3D3D, // dim text
+        0x1A1A1A, // labels
+        0x000000, // second text
         0x000000, // text
         0xFFD400, // accent
         0x008A3E, // receive
