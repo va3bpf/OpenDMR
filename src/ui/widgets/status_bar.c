@@ -68,14 +68,14 @@ void status_bar_draw(const status_bar_data_t *data)
     draw_fill_rect(0, 0, FB_WIDTH, WIDGET_STATUS_BAR_HEIGHT, fill); // the bar only: the 2 rows under it the screen's
     draw_fill_rect(0, WIDGET_STATUS_BAR_HEIGHT, FB_WIDTH, 2, THEME_COLOUR_BACKGROUND);
 
+    // the signal bars, or transmitting the TX icon in their place: nothing else moves
     if (transmitting) {
-        x += icons_draw(x, (WIDGET_STATUS_BAR_HEIGHT - ICONS_SIZE) / 2, ICONS_TX, THEME_COLOUR_WHITE) + 4;
-        x = font_draw_text(x, text_y, "TX", font, FONT_ALIGN_LEFT, theme_colour(THEME_COLOUR_WHITE)) + 12;
+        icons_draw(x, (WIDGET_STATUS_BAR_HEIGHT - ICONS_SIZE) / 2, ICONS_TX, THEME_COLOUR_WHITE);
     } else {
         // the lit bars white (the band's text colour), or the colour on the green
         icons_draw_signal(x, (WIDGET_STATUS_BAR_HEIGHT - 16) / 2, data->signal_bars, text, receiving);
-        x += ICONS_SIGNAL_WIDTH + 14;
     }
+    x += ICONS_SIGNAL_WIDTH + 14;
 
     // right side first (battery, time, GPS, scanning): the items on the left only where they fit
     int32_t right = FB_WIDTH - WIDGET_MARGIN + 4;
