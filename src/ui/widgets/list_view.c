@@ -40,7 +40,7 @@ void list_view_draw_title(const char *title, const char *position)
     const int32_t text_y = (WIDGET_STATUS_BAR_HEIGHT - font->line_height) / 2;
 
     draw_fill_rect(0, 0, FB_WIDTH, WIDGET_STATUS_BAR_HEIGHT, THEME_COLOUR_PANEL); // the panel, no line
-    draw_fill_rect(0, WIDGET_STATUS_BAR_HEIGHT, FB_WIDTH, 2, THEME_COLOUR_PANEL);
+    draw_fill_rect(0, WIDGET_STATUS_BAR_HEIGHT, FB_WIDTH, 2, THEME_COLOUR_BACKGROUND); // as the status bar: 32 rows
 
     if (title) {
         draw_text(WIDGET_MARGIN, text_y, title, font, FONT_ALIGN_LEFT, THEME_COLOUR_PANEL_TEXT);

@@ -65,7 +65,8 @@ void status_bar_draw(const status_bar_data_t *data)
     int32_t x = WIDGET_MARGIN - 4;
     char buffer[16];
 
-    draw_fill_rect(0, 0, FB_WIDTH, WIDGET_STATUS_BAR_HEIGHT + 2, fill);
+    draw_fill_rect(0, 0, FB_WIDTH, WIDGET_STATUS_BAR_HEIGHT, fill); // the bar only: the 2 rows under it the screen's
+    draw_fill_rect(0, WIDGET_STATUS_BAR_HEIGHT, FB_WIDTH, 2, THEME_COLOUR_BACKGROUND);
 
     if (transmitting) {
         x += icons_draw(x, (WIDGET_STATUS_BAR_HEIGHT - ICONS_SIZE) / 2, ICONS_TX, THEME_COLOUR_WHITE) + 4;
