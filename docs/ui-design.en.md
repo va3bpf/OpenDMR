@@ -63,14 +63,14 @@ Sizes are real screen pixels (240x320), and so are the screenshots.
 | `TEXT_SECOND` | Frequency, talk group | #CFE3F1 | #101820 |
 | `TEXT` | Channel name, callsign, main values | #F4FAFF | #000000 |
 | `ACCENT` | Selected / current: the list row, mode chip, PTT chip | #00B4D8 | #B0420A |
-| `RX` | Receive: the green line under the status bar, signal bars, RX chip | #9BE15D | #0A6E3E |
+| `RX` | Receive: the green line under the status bar, the S meter, RX chip | #9BE15D | #0A6E3E |
 | `TX` | Transmit: the status bar while transmitting, TX chip | #FF5D5D | #B0102A |
 | `WARNING` | Warning: low battery, scan, timeout near | #FFC145 | #8A5600 |
 | `WHITE` | Text on the receive, transmit and warning colours | #FFFFFF | #FFFFFF |
 | `ON_ACCENT` | Text on the accent | #04111C | #FFFFFF |
 | `PANEL` | The band: status bar, list title, bottom bar | #0E2A44 | #0B3D91 |
 | `PANEL_TEXT` | Text on the band | #F4FAFF | #FFFFFF |
-| `PANEL_LABEL` | Labels on the band, unlit signal bars (hollow) | #8FC3E6 | #A9C6F2 |
+| `PANEL_LABEL` | Labels on the band, unlit signal bars (a stub at the foot) | #8FC3E6 | #A9C6F2 |
 
 These 16 colours are the whole palette: the frame buffer holds 4 bits a pixel, a palette index; anti-aliasing takes no
 colours of its own, it looks up a blend table by foreground, background and level. A theme is a palette
@@ -150,7 +150,7 @@ segments.
 
 ![DMR receive (channel)](manual/en/receive-channel.png) ![DMR receive (VFO)](manual/en/receive-vfo.png)
 
-- Green line under the status bar, green signal bars; the status bar still shows slot and colour code;
+- Green line under the status bar, the (white) signal bars lit; the status bar still shows slot and colour code;
 - Top line: the channel or VFO name (17 px bold, the size and place of the VFO screen's `VFO A`), the caller's DMR
   ID on the right;
 - Callsign (44 px bold; the DMR ID when neither the ID database nor the contacts know it) → name (22) → city,

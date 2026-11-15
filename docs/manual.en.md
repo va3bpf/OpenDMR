@@ -74,7 +74,7 @@ Also: SK2 + menu key opens the channel details directly; SK2 + a digit is a quic
 
 <img src="manual/en/channel-idle.png" alt="Channel screen"> <img src="manual/en/main-menu.png" alt="Main menu">
 
-- **Status bar** (top, on the theme's band): signal bars (unlit ones hollow), timeslot `TS1`/`TS2`, colour code `CC1`
+- **Status bar** (top, on the theme's band): signal bars (white where lit, a short stub where not), timeslot `TS1`/`TS2`, colour code `CC1`
   (DMR), scan icon, GPS pin (when the GPS is on: dim while it searches, lit with a fix), time, battery. A green line
   under it while receiving; the whole bar turns red while transmitting.
 - **Main area**: on the channel screen the zone and position, the channel name (large), the frequency, the talk
@@ -207,7 +207,7 @@ comes the talk group, with the NAC on the right of its line (e.g. `NAC 293`).
 
 <img src="manual/en/receive-vfo.png" alt="DMR receive (VFO)"> <img src="manual/en/receive-channel.png" alt="DMR receive (channel)">
 
-- A received signal: the green line under the status bar, green signal bars, the S meter value in green; above S9
+- A received signal: the green line under the status bar, the (white) signal bars lit, the S meter value in green; above S9
   the excess is shown in small red figures (`+xxdB`).
 - DMR, the caller panel (its lines stay where they are, whatever is known):
   - the channel or VFO name, and on the right the caller's DMR ID;

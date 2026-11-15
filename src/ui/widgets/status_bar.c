@@ -59,13 +59,9 @@ void status_bar_draw(const status_bar_data_t *data)
         x += icons_draw(x, (WIDGET_STATUS_BAR_HEIGHT - ICONS_SIZE) / 2, ICONS_TX, THEME_COLOUR_WHITE) + 4;
         x = font_draw_text(x, text_y, "TX", font, FONT_ALIGN_LEFT, theme_colour(THEME_COLOUR_WHITE)) + 12;
     } else {
-        // receiving: the bars in the receive colour, if it shows on the band (a light theme's green is dark, as its
-        // band: then in the band's text colour; the green line under the bar says it receives)
-        bool rx_shows = theme_contrasts(THEME_COLOUR_RX, THEME_COLOUR_PANEL);
-
-        icons_draw_signal(x, (WIDGET_STATUS_BAR_HEIGHT - 16) / 2, data->signal_bars,
-                          (((data->state == STATUS_BAR_RECEIVING) && rx_shows) ? THEME_COLOUR_RX
-                                                                               : THEME_COLOUR_PANEL_TEXT));
+        // the lit bars white (the band's text colour) in every theme: green was lost on a light theme's band; the
+        // green line under the bar says it receives
+        icons_draw_signal(x, (WIDGET_STATUS_BAR_HEIGHT - 16) / 2, data->signal_bars, THEME_COLOUR_PANEL_TEXT);
         x += ICONS_SIGNAL_WIDTH + 14;
     }
 

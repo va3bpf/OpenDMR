@@ -51,7 +51,7 @@ typedef enum {
     THEME_COLOUR_ON_ACCENT,   // text on the accent (the selected row, the mode chip, PTT)
     THEME_COLOUR_PANEL,       // the band under the status bar, the list titles and the bottom bar (no lines on it)
     THEME_COLOUR_PANEL_TEXT,  // text on the panel
-    THEME_COLOUR_PANEL_LABEL, // labels on the panel, unlit signal bars (hollow)
+    THEME_COLOUR_PANEL_LABEL, // labels on the panel, unlit signal bars (a stub)
     THEME_COLOUR_COUNT
 } theme_colour_t;
 
@@ -70,7 +70,5 @@ uint8_t theme_first(bool dark);               // the first dark (or light) one
 void theme_set(uint8_t index);                // its palette: the whole screen changes at once
 uint8_t theme_current(void);
 uint16_t theme_colour(theme_colour_t colour); // native colour format
-// The two colours of the theme in use tell apart: a WCAG contrast of 3:1 or more (text and icons on a fill)
-bool theme_contrasts(theme_colour_t a, theme_colour_t b);
 
 #endif /* DM32_THEME_H */
