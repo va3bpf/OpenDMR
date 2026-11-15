@@ -37,34 +37,42 @@
 
 #define ICONS_WIDTH 20 // icons.h: all icons are 20 x 18
 
+// What is drawn on the receive colour: white where it shows on it (3:1), else the darker of the theme's background
+// and text (a dark theme's green is light)
+static theme_colour_t on_receive(void)
+{
+    if (theme_contrast(THEME_COLOUR_WHITE, THEME_COLOUR_RX) >= 3.0f) {
+        return THEME_COLOUR_WHITE;
+    }
+    return (theme_contrast(THEME_COLOUR_BACKGROUND, THEME_COLOUR_RX) >= theme_contrast(THEME_COLOUR_TEXT, THEME_COLOUR_RX))
+               ? THEME_COLOUR_BACKGROUND
+               : THEME_COLOUR_TEXT;
+}
+
 // Signal bars on the left, then the items (time slot, colour code); GPS, scan icon, time and battery on the right.
-// Receiving: green line and bars. Transmitting: the whole bar red with "TX".
+// Receiving: the whole bar green; transmitting: red with "TX" (a line under the band was lost next to a light
+// theme's dark band). On those fills one colour for everything on them.
 void status_bar_draw(const status_bar_data_t *data)
 {
     const font_t *font = &font_roboto17_bold;
     const int32_t text_y = (WIDGET_STATUS_BAR_HEIGHT - font->line_height) / 2;
     bool transmitting = (data->state == STATUS_BAR_TRANSMITTING);
-    theme_colour_t text = (transmitting ? THEME_COLOUR_WHITE : THEME_COLOUR_PANEL_TEXT);
-    theme_colour_t label = (transmitting ? THEME_COLOUR_WHITE : THEME_COLOUR_PANEL_LABEL);
+    bool receiving = (data->state == STATUS_BAR_RECEIVING);
+    theme_colour_t fill = (transmitting ? THEME_COLOUR_TX : (receiving ? THEME_COLOUR_RX : THEME_COLOUR_PANEL));
+    theme_colour_t on = (transmitting ? THEME_COLOUR_WHITE : on_receive());
+    theme_colour_t text = ((transmitting || receiving) ? on : THEME_COLOUR_PANEL_TEXT);
+    theme_colour_t label = ((transmitting || receiving) ? on : THEME_COLOUR_PANEL_LABEL);
     int32_t x = WIDGET_MARGIN - 4;
     char buffer[16];
 
-    // On the panel colour, no line under it: only the receive line (green) or the transmit bar (red)
-    draw_fill_rect(0, 0, FB_WIDTH, WIDGET_STATUS_BAR_HEIGHT, (transmitting ? THEME_COLOUR_TX : THEME_COLOUR_PANEL));
-    // receiving: 4 px of green, into the main area's top margin (2 px were lost next to a light theme's dark band)
-    if (data->state == STATUS_BAR_RECEIVING) {
-        draw_fill_rect(0, WIDGET_STATUS_BAR_HEIGHT, FB_WIDTH, 4, THEME_COLOUR_RX);
-    } else {
-        draw_fill_rect(0, WIDGET_STATUS_BAR_HEIGHT, FB_WIDTH, 2, (transmitting ? THEME_COLOUR_TX : THEME_COLOUR_PANEL));
-    }
+    draw_fill_rect(0, 0, FB_WIDTH, WIDGET_STATUS_BAR_HEIGHT + 2, fill);
 
     if (transmitting) {
         x += icons_draw(x, (WIDGET_STATUS_BAR_HEIGHT - ICONS_SIZE) / 2, ICONS_TX, THEME_COLOUR_WHITE) + 4;
         x = font_draw_text(x, text_y, "TX", font, FONT_ALIGN_LEFT, theme_colour(THEME_COLOUR_WHITE)) + 12;
     } else {
-        // the lit bars white (the band's text colour) in every theme: green was lost on a light theme's band; the
-        // green line under the bar says it receives
-        icons_draw_signal(x, (WIDGET_STATUS_BAR_HEIGHT - 16) / 2, data->signal_bars, THEME_COLOUR_PANEL_TEXT);
+        // the lit bars white (the band's text colour), or the colour on the green
+        icons_draw_signal(x, (WIDGET_STATUS_BAR_HEIGHT - 16) / 2, data->signal_bars, text, receiving);
         x += ICONS_SIGNAL_WIDTH + 14;
     }
 
@@ -74,8 +82,8 @@ void status_bar_draw(const status_bar_data_t *data)
     bool low = battery_is_low();
     bool has_time = datetime_format_local_time(buffer, sizeof(buffer));
 
-    icons_draw_battery(right - 30, (WIDGET_STATUS_BAR_HEIGHT - 14) / 2, percent,
-                       (low ? THEME_COLOUR_WARNING : (transmitting ? THEME_COLOUR_WHITE : THEME_COLOUR_PANEL_TEXT)));
+    icons_draw_battery(right - 30, (WIDGET_STATUS_BAR_HEIGHT - 14) / 2, percent, (low ? THEME_COLOUR_WARNING : text),
+                       text);
     right -= 30 + 6;
 
     if (!has_time) {

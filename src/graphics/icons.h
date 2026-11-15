@@ -67,11 +67,12 @@ typedef enum {
 int32_t icons_draw(int32_t x, int32_t y, icons_id_t icon, theme_colour_t colour); // returns the icon width
 
 // Battery: 30 x 14, filled to percent (0 to 100), in colour (the outline in the text colour)
-void icons_draw_battery(int32_t x, int32_t y, int32_t percent, theme_colour_t colour);
+void icons_draw_battery(int32_t x, int32_t y, int32_t percent, theme_colour_t colour, theme_colour_t outline);
 
 // Signal: 7 bars of rising height, 27 x 16; the first 'level' (0 to ICONS_SIGNAL_BARS) in colour, the others unlit
 #define ICONS_SIGNAL_BARS  7
 #define ICONS_SIGNAL_WIDTH 27
-void icons_draw_signal(int32_t x, int32_t y, int32_t level, theme_colour_t colour);
+// on_fill: the bar on a fill (receiving): the unlit ones hollow in colour, as a dim tone would be lost on it
+void icons_draw_signal(int32_t x, int32_t y, int32_t level, theme_colour_t colour, bool on_fill);
 
 #endif /* DM32_ICONS_H */

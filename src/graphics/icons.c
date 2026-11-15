@@ -236,7 +236,7 @@ int32_t icons_draw(int32_t x, int32_t y, icons_id_t icon, theme_colour_t colour)
     return art->width;
 }
 
-void icons_draw_signal(int32_t x, int32_t y, int32_t level, theme_colour_t colour)
+void icons_draw_signal(int32_t x, int32_t y, int32_t level, theme_colour_t colour, bool on_fill)
 {
     theme_colour_t unlit = (theme_contrast(THEME_COLOUR_TEXT_DIM, THEME_COLOUR_PANEL) >= 2.5f) ? THEME_COLOUR_TEXT_DIM
                                                                                             : THEME_COLOUR_LINE;
@@ -247,6 +247,13 @@ void icons_draw_signal(int32_t x, int32_t y, int32_t level, theme_colour_t colou
 
         if (bar < level) {
             fb_fill(bx, y + 16 - h, bx + 3, y + 16, theme_colour(colour));
+        } else if (on_fill) {
+            uint16_t c = theme_colour(colour);
+
+            fb_fill(bx, y + 16 - h, bx + 1, y + 16, c);
+            fb_fill(bx + 2, y + 16 - h, bx + 3, y + 16, c);
+            fb_fill(bx + 1, y + 16 - h, bx + 2, y + 17 - h, c);
+            fb_fill(bx + 1, y + 15, bx + 2, y + 16, c);
         } else {
             // unlit: the whole bar, dim (the dim text colour; the line colour where that doesn't show on the band:
             // Sunlight's dark grey on its dark blue)
@@ -255,9 +262,9 @@ void icons_draw_signal(int32_t x, int32_t y, int32_t level, theme_colour_t colou
     }
 }
 
-void icons_draw_battery(int32_t x, int32_t y, int32_t percent, theme_colour_t colour)
+void icons_draw_battery(int32_t x, int32_t y, int32_t percent, theme_colour_t colour, theme_colour_t outline_colour)
 {
-    uint16_t outline = theme_colour(THEME_COLOUR_PANEL_TEXT); // on the status bar
+    uint16_t outline = theme_colour(outline_colour);
     int32_t inner =
         ((21 * ((percent < 0) ? 0 : ((percent > 100) ? 100 : percent))) + 50) / 100; // 21 px inside the outline
 
