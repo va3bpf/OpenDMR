@@ -431,8 +431,6 @@ typedef enum {
     TEXT_UI_ANY_KEY_UNLOCK,
     TEXT_CALLER_PLACE,
     TEXT_THEME,
-    TEXT_THEME_DARK,
-    TEXT_THEME_LIGHT,
     TEXT_LANGUAGE_MENU,
     TEXT_COUNT
 } text_id_t;

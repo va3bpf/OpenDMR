@@ -185,15 +185,9 @@ static void location_change(int direction, uint8_t modifiers)
     field_set(&FIELD_STATE, state | ((direction > 0) ? STATE_LOCATION_FROM_GPS : STATE_LOCATION_FROM_CHANNEL));
 }
 
-static void location_select(void)
-{
-    location_change(((field_get(&FIELD_STATE) & STATE_LOCATION_FROM_GPS) ? -1 : 1), 0);
-}
-
 static const ui_custom_t location = {
     .format = location_format,
     .change = location_change,
-    .select = location_select,
 };
 
 /* Initial interval, in minutes with one decimal */
@@ -235,15 +229,9 @@ static void decay_change(int direction, uint8_t modifiers)
     state_set(STATE_DECAY, (direction > 0));
 }
 
-static void decay_select(void)
-{
-    state_set(STATE_DECAY, !(field_get(&FIELD_STATE) & STATE_DECAY));
-}
-
 static const ui_custom_t decay = {
     .format = decay_format,
     .change = decay_change,
-    .select = decay_select,
 };
 
 static void compressed_format(char *buffer, size_t size)
@@ -257,15 +245,9 @@ static void compressed_change(int direction, uint8_t modifiers)
     state_set(STATE_COMPRESSED, (direction > 0));
 }
 
-static void compressed_select(void)
-{
-    state_set(STATE_COMPRESSED, !(field_get(&FIELD_STATE) & STATE_COMPRESSED));
-}
-
 static const ui_custom_t compressed = {
     .format = compressed_format,
     .change = compressed_change,
-    .select = compressed_select,
 };
 
 /* Smart beaconing */

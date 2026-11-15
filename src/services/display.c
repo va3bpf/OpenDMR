@@ -141,18 +141,21 @@ void display_light_tick(uint32_t elapsed_ms)
 #define AUTO_LIGHT_FROM 7  // local hours of the light theme in auto
 #define AUTO_LIGHT_TO   19
 
-display_theme_t display_theme(void)
+uint8_t display_theme_choices(void)
 {
-    if (extra_option(EXTRA_OPTION_AUTO_THEME)) {
-        return DISPLAY_THEME_AUTO;
-    }
-    return extra_option(EXTRA_OPTION_LIGHT_THEME) ? DISPLAY_THEME_LIGHT : DISPLAY_THEME_DARK;
+    return (uint8_t)(theme_count() + 1);
 }
 
-void display_theme_choose(display_theme_t theme)
+uint8_t display_theme_choice(void)
 {
-    extra_option_set(EXTRA_OPTION_AUTO_THEME, theme == DISPLAY_THEME_AUTO);
-    extra_option_set(EXTRA_OPTION_LIGHT_THEME, theme == DISPLAY_THEME_LIGHT);
+    uint8_t choice = extra_options_theme();
+
+    return (choice < display_theme_choices()) ? choice : (uint8_t)(display_theme_choices() - 1); // none yet: auto
+}
+
+void display_theme_choose(uint8_t choice)
+{
+    extra_options_set_theme((choice < display_theme_choices()) ? choice : 0);
     display_theme_apply();
 }
 
@@ -171,22 +174,15 @@ static int local_hour(void)
 
 void display_theme_apply(void)
 {
-    theme_t wanted = THEME_DARK;
+    uint8_t choice = display_theme_choice();
+    uint8_t wanted = choice;
 
-    switch (display_theme()) {
-        case DISPLAY_THEME_LIGHT:
-            wanted = THEME_LIGHT;
-            break;
-        case DISPLAY_THEME_AUTO: {
-            int hour = local_hour();
+    if (choice == (display_theme_choices() - 1)) { // auto
+        int hour = local_hour();
 
-            wanted = ((hour >= AUTO_LIGHT_FROM) && (hour < AUTO_LIGHT_TO)) ? THEME_LIGHT : THEME_DARK;
-            break;
-        }
-        default:
-            break;
+        wanted = theme_first(!((hour >= AUTO_LIGHT_FROM) && (hour < AUTO_LIGHT_TO)));
     }
-    if (wanted != theme_get()) {
+    if (wanted != theme_current()) {
         theme_set(wanted);
     }
 }

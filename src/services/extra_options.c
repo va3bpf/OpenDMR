@@ -42,6 +42,8 @@
 typedef struct {
     uint32_t magic;
     uint32_t bits;
+    uint8_t theme; // 0xFF: none chosen (a block written before it)
+    uint8_t reserved[3];
 } block_t;
 
 static block_t block;
@@ -49,6 +51,7 @@ static block_t block;
 void extra_options_load(void)
 {
     if (!flash_read(ADDRESS, (uint8_t *)&block, sizeof(block)) || (block.magic != MAGIC)) {
+        memset(&block, 0xFF, sizeof(block));
         block.magic = MAGIC;
         block.bits = 0;
     }
@@ -65,6 +68,19 @@ void extra_option_set(uint32_t bit, bool on)
 
     if (bits != block.bits) {
         block.bits = bits;
+        (void)flash_write(ADDRESS, (const uint8_t *)&block, sizeof(block));
+    }
+}
+
+uint8_t extra_options_theme(void)
+{
+    return block.theme;
+}
+
+void extra_options_set_theme(uint8_t theme)
+{
+    if (theme != block.theme) {
+        block.theme = theme;
         (void)flash_write(ADDRESS, (const uint8_t *)&block, sizeof(block));
     }
 }

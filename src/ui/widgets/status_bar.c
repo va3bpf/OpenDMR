@@ -40,23 +40,23 @@ void status_bar_draw(const status_bar_data_t *data)
     const font_t *font = &font_roboto17_bold;
     const int32_t text_y = (WIDGET_STATUS_BAR_HEIGHT - font->line_height) / 2;
     bool transmitting = (data->state == STATUS_BAR_TRANSMITTING);
-    theme_colour_t text = (transmitting ? THEME_COLOUR_WHITE : THEME_COLOUR_TEXT);
-    theme_colour_t label = (transmitting ? THEME_COLOUR_WHITE : THEME_COLOUR_TEXT_LABEL);
+    theme_colour_t text = (transmitting ? THEME_COLOUR_WHITE : THEME_COLOUR_PANEL_TEXT);
+    theme_colour_t label = (transmitting ? THEME_COLOUR_WHITE : THEME_COLOUR_PANEL_LABEL);
     int32_t x = WIDGET_MARGIN - 4;
     char buffer[16];
 
-    draw_fill_rect(0, 0, FB_WIDTH, WIDGET_STATUS_BAR_HEIGHT,
-                   (transmitting ? THEME_COLOUR_TX : THEME_COLOUR_BACKGROUND));
+    // On the panel colour, no line under it: only the receive line (green) or the transmit bar (red)
+    draw_fill_rect(0, 0, FB_WIDTH, WIDGET_STATUS_BAR_HEIGHT, (transmitting ? THEME_COLOUR_TX : THEME_COLOUR_PANEL));
     draw_fill_rect(0, WIDGET_STATUS_BAR_HEIGHT, FB_WIDTH, 2,
                    ((data->state == STATUS_BAR_RECEIVING) ? THEME_COLOUR_RX
-                                                          : (transmitting ? THEME_COLOUR_TX : THEME_COLOUR_LINE)));
+                                                          : (transmitting ? THEME_COLOUR_TX : THEME_COLOUR_PANEL)));
 
     if (transmitting) {
         x += icons_draw(x, (WIDGET_STATUS_BAR_HEIGHT - ICONS_SIZE) / 2, ICONS_TX, THEME_COLOUR_WHITE) + 4;
         x = font_draw_text(x, text_y, "TX", font, FONT_ALIGN_LEFT, theme_colour(THEME_COLOUR_WHITE)) + 12;
     } else {
         icons_draw_signal(x, (WIDGET_STATUS_BAR_HEIGHT - 16) / 2, data->signal_bars,
-                          ((data->state == STATUS_BAR_RECEIVING) ? THEME_COLOUR_RX : THEME_COLOUR_TEXT));
+                          ((data->state == STATUS_BAR_RECEIVING) ? THEME_COLOUR_RX : THEME_COLOUR_PANEL_TEXT));
         x += ICONS_SIGNAL_WIDTH + 14;
     }
 
@@ -77,7 +77,7 @@ void status_bar_draw(const status_bar_data_t *data)
     bool has_time = datetime_format_local_time(buffer, sizeof(buffer));
 
     icons_draw_battery(right - 30, (WIDGET_STATUS_BAR_HEIGHT - 14) / 2, percent,
-                       (low ? THEME_COLOUR_WARNING : (transmitting ? THEME_COLOUR_WHITE : THEME_COLOUR_TEXT)));
+                       (low ? THEME_COLOUR_WARNING : (transmitting ? THEME_COLOUR_WHITE : THEME_COLOUR_PANEL_TEXT)));
     right -= 30 + 6;
 
     if (!has_time) {

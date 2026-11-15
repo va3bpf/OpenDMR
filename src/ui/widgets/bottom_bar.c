@@ -55,27 +55,27 @@ void bottom_bar_draw(const bottom_bar_data_t *data)
     const int32_t text_y = bar_top + ((bar_height - font->line_height) / 2);
     int32_t x = WIDGET_MARGIN - 4;
 
-    draw_fill_rect(0, WIDGET_BOTTOM_BAR_TOP, FB_WIDTH, 2, THEME_COLOUR_LINE);
-    draw_fill_rect(0, bar_top, FB_WIDTH, bar_height, THEME_COLOUR_BACKGROUND);
+    draw_fill_rect(0, WIDGET_BOTTOM_BAR_TOP, FB_WIDTH, 2, THEME_COLOUR_PANEL); // the panel, no line
+    draw_fill_rect(0, bar_top, FB_WIDTH, bar_height, THEME_COLOUR_PANEL);
 
     if (data->mode) {
-        x += draw_chip(x, bar_top + ((bar_height - 24) / 2), 24, data->mode, &font_roboto17_bold, THEME_COLOUR_WHITE,
+        x += draw_chip(x, bar_top + ((bar_height - 24) / 2), 24, data->mode, &font_roboto17_bold, THEME_COLOUR_ON_ACCENT,
                        THEME_COLOUR_ACCENT) +
              12;
     }
 
     if (data->item1) {
-        x = font_draw_text(x, text_y, data->item1, font, FONT_ALIGN_LEFT, theme_colour(THEME_COLOUR_TEXT_SECOND)) + 12;
+        x = font_draw_text(x, text_y, data->item1, font, FONT_ALIGN_LEFT, theme_colour(THEME_COLOUR_PANEL_TEXT)) + 12;
     }
 
     if (data->item2) {
-        draw_text(x, text_y, data->item2, font, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT_LABEL);
+        draw_text(x, text_y, data->item2, font, FONT_ALIGN_LEFT, THEME_COLOUR_PANEL_LABEL);
     }
 
     int32_t right = FB_WIDTH - WIDGET_MARGIN;
 
     if (data->right) {
-        draw_text(right, text_y, data->right, font, FONT_ALIGN_RIGHT, THEME_COLOUR_TEXT_LABEL);
+        draw_text(right, text_y, data->right, font, FONT_ALIGN_RIGHT, THEME_COLOUR_PANEL_LABEL);
         right -= font_text_width(font, data->right) + 10;
     }
     draw_aprs_mark(right, text_y);
@@ -88,17 +88,17 @@ void bottom_bar_draw_soft_keys(const char *left, const char *right)
     const font_t *font = &font_roboto17_bold;
     const int32_t text_y = bar_top + ((bar_height - font->line_height) / 2);
 
-    draw_fill_rect(0, WIDGET_BOTTOM_BAR_TOP, FB_WIDTH, 2, THEME_COLOUR_LINE);
-    draw_fill_rect(0, bar_top, FB_WIDTH, bar_height, THEME_COLOUR_BACKGROUND);
+    draw_fill_rect(0, WIDGET_BOTTOM_BAR_TOP, FB_WIDTH, 2, THEME_COLOUR_PANEL); // the panel, no line
+    draw_fill_rect(0, bar_top, FB_WIDTH, bar_height, THEME_COLOUR_PANEL);
 
     if (left) {
-        draw_text(WIDGET_MARGIN, text_y, left, font, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT);
+        draw_text(WIDGET_MARGIN, text_y, left, font, FONT_ALIGN_LEFT, THEME_COLOUR_PANEL_TEXT);
     }
 
     int32_t edge = FB_WIDTH - WIDGET_MARGIN;
 
     if (right) {
-        draw_text(edge, text_y, right, font, FONT_ALIGN_RIGHT, THEME_COLOUR_TEXT);
+        draw_text(edge, text_y, right, font, FONT_ALIGN_RIGHT, THEME_COLOUR_PANEL_TEXT);
         edge -= font_text_width(font, right) + 12;
     }
     draw_aprs_mark(edge, text_y);

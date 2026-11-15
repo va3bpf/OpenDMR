@@ -831,7 +831,7 @@ static void draw(void)
         list_view_draw_row(row, &data);
     }
 
-    bottom_bar_draw_soft_keys(text(TEXT_UI_SELECT), text(TEXT_UI_BACK));
+    bottom_bar_draw_soft_keys(text(TEXT_UI_SAVE), text(TEXT_UI_BACK)); // the left key saves and goes home
 }
 
 const ui_screen_t channel_details_screen = {

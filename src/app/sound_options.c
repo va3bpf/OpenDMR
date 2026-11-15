@@ -211,17 +211,9 @@ static void talker_beep_change(int direction, uint8_t modifiers)
     }
 }
 
-static void talker_beep_select(void)
-{
-    if (talker_beep_available()) {
-        settings.beep_options ^= BEEP_RX_TALKER_BEGIN;
-    }
-}
-
 static const ui_custom_t talker_beep = {
     .format = talker_beep_format,
     .change = talker_beep_change,
-    .select = talker_beep_select,
 };
 
 // Taken at each transmission: DMR into the codec (HRC7000SetMicGainDMR()), FM into the FD6818

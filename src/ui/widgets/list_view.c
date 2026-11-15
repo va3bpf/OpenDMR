@@ -39,16 +39,16 @@ void list_view_draw_title(const char *title, const char *position)
     const font_t *font = &font_roboto17_bold;
     const int32_t text_y = (WIDGET_STATUS_BAR_HEIGHT - font->line_height) / 2;
 
-    draw_fill_rect(0, 0, FB_WIDTH, WIDGET_STATUS_BAR_HEIGHT, THEME_COLOUR_BACKGROUND);
-    draw_fill_rect(0, WIDGET_STATUS_BAR_HEIGHT, FB_WIDTH, 2, THEME_COLOUR_LINE);
+    draw_fill_rect(0, 0, FB_WIDTH, WIDGET_STATUS_BAR_HEIGHT, THEME_COLOUR_PANEL); // the panel, no line
+    draw_fill_rect(0, WIDGET_STATUS_BAR_HEIGHT, FB_WIDTH, 2, THEME_COLOUR_PANEL);
 
     if (title) {
-        draw_text(WIDGET_MARGIN, text_y, title, font, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT);
+        draw_text(WIDGET_MARGIN, text_y, title, font, FONT_ALIGN_LEFT, THEME_COLOUR_PANEL_TEXT);
     }
 
     if (position) {
         draw_text(FB_WIDTH - WIDGET_MARGIN, text_y, position, &font_roboto17, FONT_ALIGN_RIGHT,
-                  THEME_COLOUR_TEXT_LABEL);
+                  THEME_COLOUR_PANEL_LABEL);
     }
 }
 
@@ -132,8 +132,8 @@ void list_view_draw_row(int32_t row, const list_view_row_t *data)
     int32_t text_y = y + ((LIST_VIEW_ROW_HEIGHT - font->line_height) / 2);
     int32_t x = WIDGET_MARGIN;
     theme_colour_t name_colour =
-        (data->selected ? THEME_COLOUR_WHITE : (data->dimmed ? THEME_COLOUR_TEXT_DIM : THEME_COLOUR_TEXT));
-    theme_colour_t value_colour = (data->selected ? THEME_COLOUR_WHITE : THEME_COLOUR_TEXT_LABEL);
+        (data->selected ? THEME_COLOUR_ON_ACCENT : (data->dimmed ? THEME_COLOUR_TEXT_DIM : THEME_COLOUR_TEXT));
+    theme_colour_t value_colour = (data->selected ? THEME_COLOUR_ON_ACCENT : THEME_COLOUR_TEXT_LABEL);
 
     if ((row < 0) || (row >= LIST_VIEW_ROWS)) {
         return;
@@ -144,7 +144,7 @@ void list_view_draw_row(int32_t row, const list_view_row_t *data)
 
     if (data->icon < ICONS_COUNT) {
         x += icons_draw(x, y + ((LIST_VIEW_ROW_HEIGHT - ICONS_SIZE) / 2), data->icon,
-                        (data->selected ? THEME_COLOUR_WHITE : THEME_COLOUR_TEXT_LABEL)) +
+                        (data->selected ? THEME_COLOUR_ON_ACCENT : THEME_COLOUR_TEXT_LABEL)) +
              10;
     }
 
@@ -155,7 +155,7 @@ void list_view_draw_row(int32_t row, const list_view_row_t *data)
     if (data->swatch) {
         // the frame, filled later (list_view_fill_swatch())
         int32_t sy = y + ((LIST_VIEW_ROW_HEIGHT - SWATCH_HEIGHT) / 2);
-        theme_colour_t frame = (data->selected ? THEME_COLOUR_WHITE : THEME_COLOUR_TEXT_LABEL);
+        theme_colour_t frame = (data->selected ? THEME_COLOUR_ON_ACCENT : THEME_COLOUR_TEXT_LABEL);
 
         draw_fill_rect(SWATCH_X, sy, SWATCH_WIDTH, 1, frame);
         draw_fill_rect(SWATCH_X, sy + SWATCH_HEIGHT - 1, SWATCH_WIDTH, 1, frame);
@@ -165,7 +165,7 @@ void list_view_draw_row(int32_t row, const list_view_row_t *data)
 
     if (data->value) {
         draw_value(FB_WIDTH - WIDGET_MARGIN - (data->swatch ? (SWATCH_WIDTH + 8) : 0), text_y, data, font, value_colour,
-                   (data->selected ? THEME_COLOUR_WHITE : THEME_COLOUR_ACCENT));
+                   (data->selected ? THEME_COLOUR_ON_ACCENT : THEME_COLOUR_ACCENT));
     }
 }
 
@@ -193,24 +193,24 @@ void list_view_draw_row2(int32_t y, const list_view_row_t *data)
 
     if (data->icon < ICONS_COUNT) {
         x += icons_draw(x, y + ((LIST_VIEW_ROW2_HEIGHT - ICONS_SIZE) / 2), data->icon,
-                        (data->selected ? THEME_COLOUR_WHITE : THEME_COLOUR_TEXT_LABEL)) +
+                        (data->selected ? THEME_COLOUR_ON_ACCENT : THEME_COLOUR_TEXT_LABEL)) +
              10;
     }
 
     if (data->value) {
         draw_text(right, y + ((LIST_VIEW_ROW2_HEIGHT - font->line_height) / 2), data->value, font, FONT_ALIGN_RIGHT,
-                  (data->selected ? THEME_COLOUR_WHITE : THEME_COLOUR_TEXT_LABEL));
+                  (data->selected ? THEME_COLOUR_ON_ACCENT : THEME_COLOUR_TEXT_LABEL));
         right -= font_text_width(font, data->value) + 8;
     }
 
     if (data->name) {
         draw_text(x, name_y, fit_text(buffer, sizeof(buffer), data->name, font, right - x), font, FONT_ALIGN_LEFT,
-                  (data->selected ? THEME_COLOUR_WHITE : (data->dimmed ? THEME_COLOUR_TEXT_DIM : THEME_COLOUR_TEXT)));
+                  (data->selected ? THEME_COLOUR_ON_ACCENT : (data->dimmed ? THEME_COLOUR_TEXT_DIM : THEME_COLOUR_TEXT)));
     }
 
     if (data->sub) {
         draw_text(x, sub_y, fit_text(buffer, sizeof(buffer), data->sub, sub_font, right - x), sub_font, FONT_ALIGN_LEFT,
-                  (data->selected ? THEME_COLOUR_WHITE : THEME_COLOUR_TEXT_LABEL));
+                  (data->selected ? THEME_COLOUR_ON_ACCENT : THEME_COLOUR_TEXT_LABEL));
     }
 }
 

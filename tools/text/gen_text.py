@@ -128,8 +128,6 @@ EXTRA = [
     ("ui_any_key_unlock", "Any key to unlock", "按任意键解锁", "Tecla: desbloquear"),
     ("caller_place", "Caller's place", "对方地址", "Lugar llamante"),
     ("theme", "Theme", "主题", "Tema"),
-    ("theme_dark", "Dark", "深色", "Oscuro"),
-    ("theme_light", "Light", "浅色", "Claro"),
     # The language row of the options: English in every language, so it can be found from a language one cannot read
     ("language_menu", "Language", "Language", "Language"),
 ]

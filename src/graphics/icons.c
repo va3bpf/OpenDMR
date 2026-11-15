@@ -242,13 +242,13 @@ void icons_draw_signal(int32_t x, int32_t y, int32_t level, theme_colour_t colou
         int32_t h = 4 + (bar * 2);
         int32_t bx = x + (bar * 4);
 
-        fb_fill(bx, y + 16 - h, bx + 3, y + 16, theme_colour((bar < level) ? colour : THEME_COLOUR_OFF));
+        fb_fill(bx, y + 16 - h, bx + 3, y + 16, theme_colour((bar < level) ? colour : THEME_COLOUR_TEXT_DIM));
     }
 }
 
 void icons_draw_battery(int32_t x, int32_t y, int32_t percent, theme_colour_t colour)
 {
-    uint16_t outline = theme_colour(THEME_COLOUR_TEXT);
+    uint16_t outline = theme_colour(THEME_COLOUR_PANEL_TEXT); // on the status bar
     int32_t inner =
         ((21 * ((percent < 0) ? 0 : ((percent > 100) ? 100 : percent))) + 50) / 100; // 21 px inside the outline
 

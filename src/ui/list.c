@@ -150,7 +150,22 @@ static bool change_value(const ui_item_t *item, int direction, uint8_t modifiers
     return true;
 }
 
-// The left key on an item; true: it changed something to show
+// The left key does something on it: it opens a list or a screen, or it is an action (no value)
+static bool item_selectable(const ui_item_t *item)
+{
+    switch (item->type) {
+        case UI_ITEM_SCREEN:
+        case UI_ITEM_LIST:
+            return true;
+        case UI_ITEM_CUSTOM:
+            return ((const ui_custom_t *)item->target)->select && !((const ui_custom_t *)item->target)->change;
+        default:
+            return false;
+    }
+}
+
+// The left key on an item; true: it changed something to show. A value (on / off, a choice, a number) is changed
+// with the knob and the left / right keys only: the left key opens, or does what an item without a value does.
 static bool select_item(const ui_item_t *item)
 {
     switch (item->type) {
@@ -158,14 +173,8 @@ static bool select_item(const ui_item_t *item)
         case UI_ITEM_LIST:
             ui_list_open_item(item);
             return false;
-        case UI_ITEM_BIT:
-            bit_set(item->target, !bit_is_on(item->target));
-            break;
-        case UI_ITEM_CHOICE:
-            choice_change(item->target, 1, true);
-            break;
         case UI_ITEM_CUSTOM:
-            if (!((const ui_custom_t *)item->target)->select) {
+            if (!((const ui_custom_t *)item->target)->select || ((const ui_custom_t *)item->target)->change) {
                 return false;
             }
             ((const ui_custom_t *)item->target)->select();
@@ -436,7 +445,10 @@ static void draw(void)
         list_view_draw_row(row, &data);
     }
 
-    bottom_bar_draw_soft_keys(text(TEXT_UI_SELECT), text(TEXT_UI_BACK));
+    // "Select" only where the left key does something (select_item()): not on a value
+    bottom_bar_draw_soft_keys(((selected < l->count) && item_selectable(&l->items[selected])) ? text(TEXT_UI_SELECT)
+                                                                                             : NULL,
+                              text(TEXT_UI_BACK));
 }
 
 const ui_screen_t list_screen = {

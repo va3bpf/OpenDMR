@@ -467,7 +467,7 @@ static void draw_panel(int i, int tx)
 
         draw_fill_rect(right - w, top + 9, w, 18, THEME_COLOUR_ACCENT);
         draw_text(right - 5, top + 9 + ((18 - font_roboto14.line_height) / 2), "PTT", &font_roboto14, FONT_ALIGN_RIGHT,
-                  THEME_COLOUR_WHITE);
+                  THEME_COLOUR_ON_ACCENT);
         right -= w + 6;
     }
     if (known) {

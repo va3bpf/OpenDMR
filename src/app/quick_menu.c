@@ -549,7 +549,7 @@ static void draw(void)
         list_view_draw_row(row, &data);
     }
 
-    bottom_bar_draw_soft_keys(text(TEXT_UI_SELECT), text(TEXT_UI_BACK));
+    bottom_bar_draw_soft_keys(text(TEXT_UI_OK), text(TEXT_UI_BACK)); // the left key applies or does it, then closes
 }
 
 static void leave(void)

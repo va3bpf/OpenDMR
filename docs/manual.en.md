@@ -382,8 +382,9 @@ the GPS; APRS and the satellite screen can use the GPS location.
 
 ## 11. Options
 
-Main menu → Options. On every settings list: ▲ ▼ choose, **◀ ▶ change the value**, the menu key opens a sub list or
-toggles, the back key goes back. Settings work at once and are saved at power off. **The CPS doesn't read or write
+Main menu → Options. On every settings list: ▲ ▼ choose, **◀ ▶ (or the knob) change the value**, the menu key opens
+a sub list or does an action (it doesn't change a value; "Select" shows where it does something), the back key goes
+back. Settings work at once and are saved at power off. **The CPS doesn't read or write
 these settings.**
 
 <img src="manual/en/options.png" alt="Options">
@@ -435,8 +436,21 @@ SK2 + ▶ ◀ changes the one in use, and it is kept.
 
 Brightness (day), Nite bright, Min bright (the backlight when "off"); Mode (Auto / Squelch / Manual / Buttons),
 Timeout; Auto night; LEDs; Timezone (an hour a step, a quarter with SK2 held); Time shown in UTC or local time;
-Caller's place (the city and state of a DMR caller on the receive screen; the country always shows); Theme: Dark,
-Light (easier to read in the sun) or Auto (light from 7:00 to 19:00 local time, dark otherwise and without a clock).
+Caller's place (the city and state of a DMR caller on the receive screen; the country always shows); Theme (the
+whole look, colours and bands):
+
+| Theme | |
+|---|---|
+| Auto (the default) | Sunlight from 7:00 to 19:00 local time, Deep sea at night and without a clock |
+| Deep sea | Dark: navy, a sea blue band, cyan for what is selected |
+| Sunlight | Light, for outdoors: black text, every layer dark enough for bright light |
+| Clear sky | Light: white, a royal blue band, orange for what is selected |
+| Graphite | Dark: graphite and orange |
+| Night amber | Dark: amber on black, as night vision gear |
+| High contrast | Light: black on white, a black band, yellow for what is selected |
+
+Outdoors take a light theme and the brightness up: a dark background can't be seen in daylight. New themes are a file
+each in the source (`src/graphics/themes/`).
 
 ### Sound options
 

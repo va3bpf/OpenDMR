@@ -427,7 +427,5 @@ const char *const text_es[TEXT_COUNT] = {
     [TEXT_UI_ANY_KEY_UNLOCK] = "Tecla: desbloquear",
     [TEXT_CALLER_PLACE] = "Lugar llamante",
     [TEXT_THEME] = "Tema",
-    [TEXT_THEME_DARK] = "Oscuro",
-    [TEXT_THEME_LIGHT] = "Claro",
     [TEXT_LANGUAGE_MENU] = "Language",
 };

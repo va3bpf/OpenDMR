@@ -79,7 +79,8 @@ typedef struct {
     void (*changed)(void);
 } ui_number_t;
 
-// Anything else: shown by format(), changed by change() (-1 / +1, with the side buttons held), switched by select()
+// Anything else: shown by format(), changed by change() (-1 / +1, with the side buttons held); select(): what the
+// left key does on an item without change() (an action), none on an item with a value
 typedef struct {
     void (*format)(char *buffer, size_t size);
     void (*change)(int direction, uint8_t modifiers); // may be NULL

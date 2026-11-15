@@ -26,79 +26,55 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <stddef.h>
 #include "theme.h"
 #include "framebuffer.h"
 #include "panel.h"
-
-// RGB888, in theme_colour_t order; then four greys for the anti-aliased edges of text on the background, made from
-// the background and the text (AA_GREYS)
-static const uint32_t THEMES[THEMES_COUNT][THEME_COLOUR_COUNT] = {
-    [THEME_DARK] = {0x000000,  // background
-                    0x1C2026,  // line
-                    0x3A3F47,  // off
-                    0x6E7580,  // dim text
-                    0x9AA1AB,  // labels
-                    0xD5D9DF,  // second text
-                    0xF2F4F7,  // text
-                    0x1E5AA8,  // accent
-                    0x2BD47D,  // receive
-                    0xC9302C,  // transmit
-                    0xE9A23B,  // warning
-                    0xFFFFFF}, // white
-    [THEME_LIGHT] = {0xF6F7F9, // background
-                     0xA9AFB8, // line: dark enough to be seen on the background
-                     0xC8CDD4, // off
-                     0x8B929C, // dim text
-                     0x5E6571, // labels
-                     0x333943, // second text
-                     0x0F1217, // text
-                     0x1E5AA8, // accent
-                     0x12904B, // receive: darker than on black
-                     0xC9302C, // transmit
-                     0xB8740A, // warning: darker than on black
-                     0xFFFFFF}, // white
-};
-
-// Where the anti-aliasing greys lie from the background (0) to the text (256): those of the dark theme
-static const uint16_t AA_GREYS[16 - THEME_COLOUR_COUNT] = {17, 49, 91, 199};
+#include "themes/themes.h"
 
 // Text on these is drawn without anti-aliasing (its edges would take the greys made for the background)
-#define SOLID_BACKGROUNDS ((1U << THEME_COLOUR_ACCENT) | (1U << THEME_COLOUR_RX) | (1U << THEME_COLOUR_TX) | \
-                           (1U << THEME_COLOUR_WARNING))
+#define SOLID_BACKGROUNDS ((1U << THEME_COLOUR_ACCENT) | (1U << THEME_COLOUR_RX) | (1U << THEME_COLOUR_TX) |                            (1U << THEME_COLOUR_WARNING))
 
 static uint16_t palette[16];
-static theme_t current = THEME_DARK;
+static uint8_t current = 0;
 
-static uint32_t mix(uint32_t from, uint32_t to, uint32_t part)
+uint8_t theme_count(void)
 {
-    uint32_t out = 0;
-
-    for (int shift = 0; shift < 24; shift += 8) {
-        int32_t a = (int32_t)((from >> shift) & 0xFF);
-        int32_t b = (int32_t)((to >> shift) & 0xFF);
-
-        out |= (uint32_t)(a + (((b - a) * (int32_t)part) / 256)) << shift;
-    }
-    return out;
+    return THEMES_COUNT;
 }
 
-void theme_set(theme_t theme)
+const theme_t *theme_get(uint8_t index)
 {
-    const uint32_t *colours = THEMES[(theme < THEMES_COUNT) ? theme : THEME_DARK];
+    return (index < THEMES_COUNT) ? THEMES[index] : NULL;
+}
 
-    current = (theme < THEMES_COUNT) ? theme : THEME_DARK;
-    for (int i = 0; i < THEME_COLOUR_COUNT; i++) {
-        palette[i] = panel_rgb888_to_native(colours[i]);
+uint8_t theme_first(bool dark)
+{
+    for (uint8_t i = 0; i < THEMES_COUNT; i++) {
+        if (THEMES[i]->dark == dark) {
+            return i;
+        }
     }
-    for (int i = THEME_COLOUR_COUNT; i < 16; i++) {
-        palette[i] = panel_rgb888_to_native(mix(colours[THEME_COLOUR_BACKGROUND], colours[THEME_COLOUR_TEXT],
-                                                AA_GREYS[i - THEME_COLOUR_COUNT]));
+    return 0;
+}
+
+void theme_set(uint8_t index)
+{
+    const theme_t *theme = theme_get(index);
+
+    if (theme == NULL) {
+        index = 0;
+        theme = THEMES[0];
+    }
+    current = index;
+    for (int i = 0; i < THEME_COLOUR_COUNT; i++) {
+        palette[i] = panel_rgb888_to_native(theme->colours[i]);
     }
     fb_set_solid_backgrounds(SOLID_BACKGROUNDS);
     fb_set_palette(palette); // the buffer holds palette entries: the whole screen takes the new colours
 }
 
-theme_t theme_get(void)
+uint8_t theme_current(void)
 {
     return current;
 }
