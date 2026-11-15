@@ -72,7 +72,7 @@
 #include "contacts.h"
 #include "aprs.h"
 
-#define S_METER_Y 200 // under the channel panel, as the main firmware
+#define S_METER_Y 250 // the compact one over the bottom bar, as on the VFO screen
 
 #define POWER_LEVEL_MAX      8 // 10 W; 9 is the user power ("+W-")
 #define POWER_USER           9
@@ -736,6 +736,16 @@ static bool handle(const ui_event_t *ev)
     }
 }
 
+// The power of the bottom bar: the channel's, else the settings'; "Rx only" when it can't transmit
+static const char *power_text(void)
+{
+    int power = (channel.libre_dmr_power != 0) ? (channel.libre_dmr_power - 1) : settings.tx_power_level;
+
+    return (codeplug_mode_can_transmit(channel.mode) && codeplug_frequency_can_transmit(channel.tx_freq))
+               ? bottom_bar_power_label((power < 10) ? power : 9)
+               : text(TEXT_RX_ONLY); // AM, USB, LSB; the aviation band
+}
+
 static void draw(void)
 {
     status_bar_data_t status = {0};
@@ -755,12 +765,12 @@ static void draw(void)
 
     if ((channel.mode == CODEPLUG_MODE_DMR) && dmr_call(&call)) {
         format_names(zone_text, sizeof(zone_text), name, sizeof(name));
-        qso_panel_draw(&call, name);
+        qso_panel_draw(&call, name, channel.tx_colour, power_text());
         return;
     }
     if ((channel.mode == CODEPLUG_MODE_P25) && p25_radio_call(&p25) && (p25.src != 0)) {
         format_names(zone_text, sizeof(zone_text), name, sizeof(name));
-        qso_panel_draw_p25(&p25, name);
+        qso_panel_draw_p25(&p25, name, power_text());
         return;
     }
     meter.active = true;
@@ -839,14 +849,11 @@ static void draw(void)
         bottom.right = text(TEXT_UI_REVERSED);
     }
 
-    int power = (channel.libre_dmr_power != 0) ? (channel.libre_dmr_power - 1) : settings.tx_power_level;
-
-    bottom.item1 = (codeplug_mode_can_transmit(channel.mode) && codeplug_frequency_can_transmit(channel.tx_freq))
-                       ? bottom_bar_power_label((power < 10) ? power : 9)
-                       : text(TEXT_RX_ONLY); // AM, USB, LSB; the aviation band
+    bottom.item1 = power_text();
 
     status_bar_draw(&status);
     channel_panel_draw(&panel);
+    meter.compact = true; // as on the VFO screen and the caller panel
     s_meter_draw(S_METER_Y, &meter);
     bottom_bar_draw(&bottom);
 }

@@ -103,8 +103,11 @@ bool digit_entry_handle(digit_entry_t *entry, const ui_event_t *ev, digit_entry_
 
 void digit_entry_draw(const digit_entry_t *entry, int32_t x, int32_t y)
 {
-    const font_t *font = &font_roboto44_bold;
+    (void)digit_entry_draw_font(entry, x, y, &font_roboto44_bold);
+}
 
+int32_t digit_entry_draw_font(const digit_entry_t *entry, int32_t x, int32_t y, const font_t *font)
+{
     for (int i = 0; i < entry->max; i++) {
         char digit[2] = {((i < entry->count) ? entry->digits[i] : '0'), '\0'};
         int32_t start = x;
@@ -118,6 +121,7 @@ void digit_entry_draw(const digit_entry_t *entry, int32_t x, int32_t y)
             x = font_draw_text(x, y, ".", font, FONT_ALIGN_LEFT, theme_colour(THEME_COLOUR_TEXT));
         }
     }
+    return x;
 }
 
 void digit_entry_format_frequency(uint32_t frequency, char *out, size_t size)

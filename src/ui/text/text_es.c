@@ -394,8 +394,8 @@ const char *const text_es[TEXT_COUNT] = {
     [TEXT_KEY_POWER_USER] = "Pot. usuario",
     [TEXT_KEY_ZONE_UP] = "Zona +",
     [TEXT_KEY_ZONE_DOWN] = "Zona -",
-    [TEXT_KEY_TX_UP] = "Freq TX +",
-    [TEXT_KEY_TX_DOWN] = "Freq TX -",
+    [TEXT_KEY_TX_UP] = "Cambiar freq RX",
+    [TEXT_KEY_TX_DOWN] = "Cambiar freq TX",
     [TEXT_KEY_SCAN_UP] = "Scan +",
     [TEXT_KEY_SCAN_DOWN] = "Scan -",
     [TEXT_KEY_APRS_TOGGLE] = "APRS on/off",
@@ -425,5 +425,6 @@ const char *const text_es[TEXT_COUNT] = {
     [TEXT_UI_PIN_DIGITS] = "4 - 6 digitos",
     [TEXT_UI_PIN_WAIT] = "Espere %u s",
     [TEXT_UI_ANY_KEY_UNLOCK] = "Tecla: desbloquear",
+    [TEXT_CALLER_PLACE] = "Lugar llamante",
     [TEXT_LANGUAGE_MENU] = "Language",
 };

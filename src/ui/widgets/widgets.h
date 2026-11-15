@@ -36,6 +36,7 @@
 #include "icons.h"
 #include "theme.h"
 #include "framebuffer.h"
+#include "font.h"
 
 // Building blocks of the screens (docs/ui-design.md, 5 and 6.5). They only draw what they are given, in LCD pixels;
 // the screens collect the radio data. Areas of the screen:
@@ -162,6 +163,7 @@ uint32_t digit_entry_value(const digit_entry_t *entry);
 bool digit_entry_handle(digit_entry_t *entry, const ui_event_t *ev, digit_entry_set_t set);
 // The digits entered, then unlit zeros, the next one underlined; font_roboto44_bold from x, y
 void digit_entry_draw(const digit_entry_t *entry, int32_t x, int32_t y);
+int32_t digit_entry_draw_font(const digit_entry_t *entry, int32_t x, int32_t y, const font_t *font); // its end x
 // A frequency in 10 Hz as MHz with 5 decimals ("438.50000"), without the unit
 void digit_entry_format_frequency(uint32_t frequency, char *out, size_t size);
 

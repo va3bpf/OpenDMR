@@ -95,8 +95,8 @@ EXTRA = [
     ("key_power_user", "User power", "自定义功率", "Pot. usuario"),
     ("key_zone_up", "Zone +", "区域 +", "Zona +"),
     ("key_zone_down", "Zone -", "区域 -", "Zona -"),
-    ("key_tx_up", "TX freq up", "TX 频率加", "Freq TX +"),
-    ("key_tx_down", "TX freq down", "TX 频率减", "Freq TX -"),
+    ("key_tx_up", "Change RX freq", "改接收频率", "Cambiar freq RX"),
+    ("key_tx_down", "Change TX freq", "改发射频率", "Cambiar freq TX"),
     ("key_scan_up", "Scan up", "向上扫描", "Scan +"),
     ("key_scan_down", "Scan down", "向下扫描", "Scan -"),
     ("key_aprs_toggle", "APRS on/off", "APRS 开/关", "APRS on/off"),
@@ -126,6 +126,7 @@ EXTRA = [
     ("ui_pin_digits", "4 - 6 digits", "4 - 6 位数字", "4 - 6 digitos"),
     ("ui_pin_wait", "Wait %u s", "请等待 %u 秒", "Espere %u s"),
     ("ui_any_key_unlock", "Any key to unlock", "按任意键解锁", "Tecla: desbloquear"),
+    ("caller_place", "Caller's place", "对方地址", "Lugar llamante"),
     # The language row of the options: English in every language, so it can be found from a language one cannot read
     ("language_menu", "Language", "Language", "Language"),
 ]

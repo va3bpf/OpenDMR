@@ -37,6 +37,8 @@ typedef void (*uart_rx_handler_t)(uint8_t c); // called from the interrupt for e
 // UART0: the programming cable (115200 8N1)
 void uart0_init(uint32_t baud, uart_rx_handler_t handler);
 void uart0_write(const uint8_t *data, uint32_t length);
+void uart0_set_divisor(uint32_t divisor); // baud = 84 MHz / 16 / divisor, once what was written has gone out
+uint32_t uart0_divisor(uint32_t baud);    // the divisor of a baud rate
 
 // UART1: the GPS module (9600 8N1, receive only); uart1_init() leaves the receive interrupt off
 void uart1_init(uint32_t baud, uart_rx_handler_t handler);

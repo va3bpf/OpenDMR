@@ -429,6 +429,7 @@ typedef enum {
     TEXT_UI_PIN_DIGITS,
     TEXT_UI_PIN_WAIT,
     TEXT_UI_ANY_KEY_UNLOCK,
+    TEXT_CALLER_PLACE,
     TEXT_LANGUAGE_MENU,
     TEXT_COUNT
 } text_id_t;

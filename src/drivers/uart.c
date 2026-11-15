@@ -148,3 +148,24 @@ void RAM_CODE uart0_write(const uint8_t *data, uint32_t length)
         UART_THR(UART0_BASE) = data[i];
     }
 }
+
+uint32_t uart0_divisor(uint32_t baud)
+{
+    return ((clock_apb_hz >> 4) + (baud / 2)) / baud;
+}
+
+// The speed changed between two requests: the last reply out first (the transmitter empty), the receiver idle (the
+// divisor latch can't be written while the UART is busy)
+void uart0_set_divisor(uint32_t divisor)
+{
+    while ((UART_LSR(UART0_BASE) & 0x40) == 0) {
+        // the transmitter not empty yet
+    }
+    for (int i = 0; (i < 100000) && (UART_USR(UART0_BASE) & 0x01); i++) {
+        // busy
+    }
+    UART_LCR(UART0_BASE) |= (1 << 7);
+    UART_DLL(UART0_BASE) = divisor & 0xff;
+    UART_DLH(UART0_BASE) = (divisor >> 8) & 0xff;
+    UART_LCR(UART0_BASE) &= ~(1 << 7);
+}

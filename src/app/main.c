@@ -68,6 +68,7 @@
 #include "hotspot_screen.h"
 #include "cps_screen.h"
 #include "security.h"
+#include "extra_options.h"
 #include "pin_screen.h"
 #include "lock_screen.h"
 
@@ -88,6 +89,7 @@ int main(void)
 
     flash_init();
     security_load();
+    extra_options_load();
     panel_init();
     theme_init();
     backlight_set_percent(100);

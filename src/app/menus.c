@@ -36,6 +36,7 @@
 #include "settings.h"
 #include "language.h"
 #include "display.h"
+#include "extra_options.h"
 #include "text.h"
 #include "options.h"
 #include "contacts.h"
@@ -177,6 +178,29 @@ static const ui_custom_t time_shown = {
     .select = time_shown_select,
 };
 
+// The DMR caller's city and state on its panel (extra_options.h; the country is always there)
+static void caller_place_format(char *buffer, size_t size)
+{
+    snprintf(buffer, size, "%s", text(extra_option(EXTRA_OPTION_HIDE_CALLER_PLACE) ? TEXT_OFF : TEXT_ON));
+}
+
+static void caller_place_change(int direction, uint8_t modifiers)
+{
+    (void)modifiers;
+    extra_option_set(EXTRA_OPTION_HIDE_CALLER_PLACE, direction < 0);
+}
+
+static void caller_place_select(void)
+{
+    extra_option_set(EXTRA_OPTION_HIDE_CALLER_PLACE, !extra_option(EXTRA_OPTION_HIDE_CALLER_PLACE));
+}
+
+static const ui_custom_t caller_place = {
+    .format = caller_place_format,
+    .change = caller_place_change,
+    .select = caller_place_select,
+};
+
 static const ui_item_t display_options_items[] = {
     {TEXT_BRIGHTNESS, ICONS_COUNT, UI_ITEM_NUMBER, &brightness_day, NULL},
     {TEXT_BRIGHTNESS_NIGHT, ICONS_COUNT, UI_ITEM_NUMBER, &brightness_night, NULL},
@@ -187,6 +211,7 @@ static const ui_item_t display_options_items[] = {
     {TEXT_LEDS, ICONS_COUNT, UI_ITEM_BIT, &leds, NULL},
     {TEXT_TIMEZONE, ICONS_COUNT, UI_ITEM_CUSTOM, &timezone, NULL},
     {TEXT_TIME, ICONS_COUNT, UI_ITEM_CUSTOM, &time_shown, NULL},
+    {TEXT_CALLER_PLACE, ICONS_COUNT, UI_ITEM_CUSTOM, &caller_place, NULL},
 };
 
 static const ui_list_t display_options = {

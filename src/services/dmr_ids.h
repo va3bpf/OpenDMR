@@ -41,6 +41,18 @@ void dmr_ids_init(void); // reads the database header (again after a CPS write)
 uint32_t dmr_ids_count(void);
 bool dmr_ids_lookup(uint32_t id, char *text, size_t size);
 
+// Ours (tools/ids/id_db.py), when it is there: a caller with its place. "" for what is not known.
+typedef struct {
+    char callsign[16];
+    char name[64];
+    char city[64];
+    char state[64];
+    char country[64];
+} dmr_ids_info_t;
+
+bool dmr_ids_info(uint32_t id, dmr_ids_info_t *info);           // false: not in it (or no database of ours)
+bool dmr_ids_country(uint32_t id, char *country, size_t size); // from the ID's first digits, in the database or not
+
 // The text of a caller: its private call contact or its database entry, in the order of the settings; "" when none
 void dmr_ids_caller_text(uint32_t id, char *text, size_t size);
 bool dmr_ids_talker_alias_first(void); // the settings prefer the talker alias to the text

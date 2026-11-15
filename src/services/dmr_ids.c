@@ -43,6 +43,7 @@
 #include "settings.h"
 #include "codeplug.h"
 #include "dmr_ids.h"
+#include "dmr_countries.h"
 
 #define FLASH_PART          0x20000 // the CPS's STM32_FLASH_ADDRESS_OFFSET (codeplug.c FLASH_PART_OFFSET)
 #define LOCATION_1          (FLASH_PART + 0x30000)
@@ -72,6 +73,295 @@ static struct {
     uint32_t slices[ID_SLICES]; // [0] the first ID, [ID_SLICES - 1] the last one
 } db;
 
+// ---- Ours (tools/ids/id_db.py, its layout there): the header in the window's last sector, the rest below it
+
+#define NEW_HEADER     (FLASH_WINDOW_SIZE - FLASH_SECTOR_SIZE)
+#define NEW_BLOCK      4096
+#define NEW_BLOCK_MARK 0xD1
+#define NEW_CHUNK      16 // a list's entries from each 16th
+#define NEW_IDS        10000000
+#define NEW_TEXT_MAX   80 // an entry of a list: 2 + 60 bytes from the tool
+
+enum { FIELD_DELTA = 0, FIELD_CALL, FIELD_NAME, FIELD_PLACE, FIELD_OTHER, FIELDS };
+
+typedef struct {
+    char magic[4];
+    uint8_t version;
+    uint8_t reserved[3];
+    uint32_t records;
+    uint32_t blocks;
+    uint32_t countries;
+    uint32_t base;
+    uint32_t size;
+    uint32_t reserved2;
+    uint32_t index;         // from the base, as all the offsets
+    uint32_t prefix;        // 1000 bytes
+    uint32_t country_names; // list
+    uint32_t directory;     // per country: its callsign prefixes, states and places (lists)
+    uint32_t names;         // list
+    uint32_t other;         // u32 each
+    uint8_t classes[FIELDS][4];
+    uint32_t crc;
+} new_header_t;
+
+_Static_assert(sizeof(new_header_t) == 80, "tools/ids/id_db.py header");
+
+static new_header_t ours;
+static bool ours_valid = false;
+
+static uint32_t ours_u32(uint32_t offset)
+{
+    uint32_t value = 0;
+
+    (void)flash_read(ours.base + offset, (uint8_t *)&value, 4); // little endian
+    return value;
+}
+
+static void ours_init(void)
+{
+    ours_valid = flash_read(NEW_HEADER, (uint8_t *)&ours, sizeof(ours)) && (memcmp(ours.magic, "ODID", 4) == 0) &&
+                 (ours.version == 1) && (ours.records > 0) && (ours.blocks > 0) && (ours.countries < 255) &&
+                 (ours.base + ours.size == NEW_HEADER) && (ours.size <= NEW_HEADER);
+    for (int f = 0; ours_valid && (f < FIELDS); f++) {
+        for (int c = 0; c < 4; c++) {
+            ours_valid = ours_valid && (ours.classes[f][c] <= 24);
+        }
+    }
+}
+
+// Entry n of a list (front coded, from each 16th): its bytes, NUL terminated (cut to size), and their count;
+// false: no such entry
+static bool list_entry_bytes(uint32_t list, uint32_t n, char *out, size_t size, size_t *count)
+{
+    char text[NEW_TEXT_MAX + 1];
+    uint32_t at;
+    size_t length = 0;
+
+    if (n >= ours_u32(list)) {
+        return false;
+    }
+    at = list + ours_u32(list + 4 + (4 * (n / NEW_CHUNK)));
+    for (uint32_t i = 0; i <= (n % NEW_CHUNK); i++) {
+        uint8_t head[2]; // shared, length
+
+        if (!flash_read(ours.base + at, head, 2) || (head[0] > length) || ((head[0] + head[1]) > NEW_TEXT_MAX) ||
+            !flash_read(ours.base + at + 2, (uint8_t *)&text[head[0]], head[1])) {
+            return false;
+        }
+        length = head[0] + head[1];
+        at += 2 + head[1];
+    }
+    if (length >= size) {
+        length = size - 1;
+    }
+    memcpy(out, text, length);
+    out[length] = '\0';
+    if (count) {
+        *count = length;
+    }
+    return true;
+}
+
+static bool list_entry(uint32_t list, uint32_t n, char *out, size_t size)
+{
+    return list_entry_bytes(list, n, out, size, NULL);
+}
+
+// The country number of an ID (its first 3 digits), 0xFF: none
+static uint8_t ours_country(uint32_t id)
+{
+    uint8_t country = 0xFF;
+
+    if (id < NEW_IDS) {
+        (void)flash_read(ours.base + ours.prefix + (id / 10000), &country, 1);
+    }
+    return (country < ours.countries) ? country : 0xFF;
+}
+
+// The records of a block, bit packed (most significant bit first), read from the flash a little at a time
+typedef struct {
+    uint32_t address; // of the block's bits
+    uint32_t bit;
+    uint32_t buffer_at; // byte of buffer[0]
+    uint8_t buffer[32];
+    bool failed;
+} bit_reader_t;
+
+static uint32_t get_bits(bit_reader_t *r, int width)
+{
+    uint32_t value = 0;
+
+    while (width > 0) {
+        uint32_t byte = r->bit / 8;
+        int used = (int)(r->bit % 8);
+        int take = ((8 - used) < width) ? (8 - used) : width;
+
+        if (byte >= (NEW_BLOCK - 4)) {
+            r->failed = true;
+            return 0;
+        }
+        if ((byte < r->buffer_at) || (byte >= (r->buffer_at + sizeof(r->buffer)))) {
+            r->buffer_at = byte;
+            if (!flash_read(r->address + byte, r->buffer, sizeof(r->buffer))) {
+                r->failed = true;
+                return 0;
+            }
+        }
+        value = (value << take) | ((r->buffer[byte - r->buffer_at] >> (8 - used - take)) & ((1U << take) - 1));
+        r->bit += take;
+        width -= take;
+    }
+    return value;
+}
+
+// A number: a class (2 bits), then that class's width of bits
+static uint32_t get_number(bit_reader_t *r, int field)
+{
+    uint32_t c = get_bits(r, 2);
+    uint32_t base = 0;
+
+    for (uint32_t i = 0; i < c; i++) {
+        base += 1U << ours.classes[field][i];
+    }
+    return base + get_bits(r, ours.classes[field][c]);
+}
+
+static void get_text(bit_reader_t *r, char *out, size_t size)
+{
+    uint32_t length = get_bits(r, 8);
+
+    for (uint32_t i = 0; i < length; i++) {
+        char c = (char)get_bits(r, 8);
+
+        if ((i + 1) < size) {
+            out[i] = c;
+            out[i + 1] = '\0';
+        }
+    }
+    if (length == 0) {
+        out[0] = '\0';
+    }
+}
+
+static const uint8_t SUFFIX_BITS[5] = {0, 5, 10, 15, 19};
+
+static bool ours_info(uint32_t id, dmr_ids_info_t *info)
+{
+    uint32_t low = 0;
+    uint32_t high = ours.blocks - 1;
+    uint32_t block;
+    uint8_t head[4];
+    bit_reader_t r = {.buffer_at = 0xFFFFFFFF};
+    uint32_t current;
+    // what the target has, kept from the record that gave it (callsign, place: "the previous record's")
+    uint32_t call_id = 0;
+    uint32_t call_prefix = 0; // 0: call_text is the whole callsign
+    char call_text[sizeof(info->callsign)] = "";
+    uint32_t name_no = 0; // 0: info->name has it
+    uint32_t place_country = 0xFF;
+    uint32_t place_no = 0;
+
+    if ((id < ours_u32(ours.index)) || (id >= NEW_IDS)) {
+        return false;
+    }
+    while (low < high) {
+        uint32_t middle = (low + high + 1) / 2;
+
+        if (ours_u32(ours.index + (4 * middle)) <= id) {
+            low = middle;
+        } else {
+            high = middle - 1;
+        }
+    }
+    block = low;
+    if (!flash_read(ours.base + (block * NEW_BLOCK), head, sizeof(head)) || (head[0] != NEW_BLOCK_MARK)) {
+        return false;
+    }
+    r.address = ours.base + (block * NEW_BLOCK) + 4;
+    current = ours_u32(ours.index + (4 * block));
+    memset(info, 0, sizeof(*info));
+
+    for (uint32_t n = 0; n < (uint32_t)(head[2] | (head[3] << 8)); n++) {
+        uint32_t symbol;
+
+        if (n > 0) {
+            current += get_number(&r, FIELD_DELTA);
+        }
+        symbol = get_number(&r, FIELD_CALL);
+        if (symbol == 1) {
+            get_text(&r, call_text, sizeof(call_text));
+            call_prefix = 0;
+        } else if (symbol >= 2) {
+            uint32_t length = get_bits(&r, 3);
+            uint32_t value = get_bits(&r, (length < 5) ? SUFFIX_BITS[length] : 0);
+
+            call_id = current;
+            call_prefix = symbol - 1;
+            call_text[(length < 5) ? length : 0] = '\0';
+            for (int i = (int)length - 1; (i >= 0) && (length < 5); i--) {
+                call_text[i] = (char)('A' + (value % 26));
+                value /= 26;
+            }
+        }
+        name_no = get_number(&r, FIELD_NAME);
+        if (name_no == 0) {
+            get_text(&r, info->name, sizeof(info->name));
+        }
+        symbol = get_number(&r, FIELD_PLACE);
+        if (symbol == 1) {
+            uint32_t other = ours_u32(ours.other + (4 * get_number(&r, FIELD_OTHER)));
+
+            place_country = other >> 24;
+            place_no = other & 0xFFFFFF;
+        } else if (symbol >= 2) {
+            place_country = ours_country(current);
+            place_no = symbol - 2;
+        }
+        if (r.failed || (current > id)) {
+            return false;
+        }
+        if (current == id) {
+            break;
+        }
+    }
+    if (current != id) {
+        return false;
+    }
+
+    // The target's texts from the lists
+    if (call_prefix > 0) {
+        char prefix[sizeof(info->callsign)];
+        uint8_t country = ours_country(call_id);
+
+        if ((country == 0xFF) ||
+            !list_entry(ours_u32(ours.directory + (12 * country)), call_prefix - 1, prefix, sizeof(prefix))) {
+            return false;
+        }
+        snprintf(info->callsign, sizeof(info->callsign), "%s%s", prefix, call_text);
+    } else {
+        snprintf(info->callsign, sizeof(info->callsign), "%s", call_text);
+    }
+    if ((name_no > 0) && !list_entry(ours.names, name_no - 1, info->name, sizeof(info->name))) {
+        return false;
+    }
+    if (place_country < ours.countries) {
+        char place[NEW_TEXT_MAX + 1];
+        size_t length = 0;
+        uint32_t lists = ours.directory + (12 * place_country);
+
+        if (list_entry_bytes(ours_u32(lists + 8), place_no, place, sizeof(place), &length) && (length >= 2)) {
+            uint32_t state = ((uint32_t)(uint8_t)place[0] << 8) | (uint8_t)place[1];
+
+            snprintf(info->city, sizeof(info->city), "%.63s", &place[2]);
+            if (state != 0xFFFF) {
+                (void)list_entry(ours_u32(lists + 4), state, info->state, sizeof(info->state));
+            }
+        }
+        (void)list_entry(ours.country_names, place_country, info->country, sizeof(info->country));
+    }
+    return true;
+}
+
 static bool read_record(uint32_t offset, void *data, uint32_t length)
 {
     uint32_t address = (offset >= db.area_1_size) ? (db.location_2 + (offset - db.area_1_size))
@@ -93,6 +383,7 @@ void dmr_ids_init(void)
     uint8_t header[HEADER_LENGTH];
 
     memset(&db, 0, sizeof(db));
+    ours_init();
     // Not the old "ID" tag: too many corrupted databases had it
     if (!flash_read(LOCATION_1, header, sizeof(header)) || (header[0] != 'I') || (header[1] != 'd')) {
         return;
@@ -121,7 +412,49 @@ void dmr_ids_init(void)
 
 uint32_t dmr_ids_count(void)
 {
-    return db.entries;
+    return ours_valid ? ours.records : db.entries;
+}
+
+// A 9 digit ID: a 7 digit one and 2 more (a hotspot's ESSID)
+static uint32_t person(uint32_t id)
+{
+    return ((id >= 100000000) && (id < 1000000000)) ? (id / 100) : id;
+}
+
+bool dmr_ids_info(uint32_t id, dmr_ids_info_t *info)
+{
+    memset(info, 0, sizeof(*info));
+    if (!ours_valid) {
+        return false;
+    }
+    if (ours_info(id, info) || ((person(id) != id) && ours_info(person(id), info))) {
+        return true;
+    }
+    memset(info, 0, sizeof(*info));
+    return false;
+}
+
+bool dmr_ids_country(uint32_t id, char *country, size_t size)
+{
+    uint32_t prefix = person(id) / 10000;
+    uint8_t number;
+
+    country[0] = '\0';
+    if (ours_valid) {
+        number = ours_country(person(id));
+        return (number != 0xFF) && list_entry(ours.country_names, number, country, size);
+    }
+    // Without ours: the countries built in (dmr_countries.c)
+    if ((person(id) >= NEW_IDS) || (prefix < DMR_COUNTRY_FIRST_PREFIX) ||
+        (prefix >= (DMR_COUNTRY_FIRST_PREFIX + DMR_COUNTRY_PREFIXES))) {
+        return false;
+    }
+    number = DMR_COUNTRY_OF_PREFIX[prefix - DMR_COUNTRY_FIRST_PREFIX];
+    if (number >= DMR_COUNTRIES) {
+        return false;
+    }
+    snprintf(country, size, "%s", DMR_COUNTRY_NAMES[number]);
+    return true;
 }
 
 static uint32_t to_bcd(uint32_t value)
@@ -192,6 +525,15 @@ bool dmr_ids_lookup(uint32_t id, char *text, size_t size)
     uint32_t end;
 
     text[0] = '\0';
+    if (ours_valid) { // ours instead of the OpenGD77 one: "callsign name" as it has
+        dmr_ids_info_t info;
+
+        if (!dmr_ids_info(id, &info)) {
+            return false;
+        }
+        snprintf(text, size, "%s%s%s", info.callsign, (info.name[0] ? " " : ""), info.name);
+        return true;
+    }
     if ((db.entries == 0) || (target < db.slices[0]) || (target > db.slices[ID_SLICES - 1])) {
         return false;
     }

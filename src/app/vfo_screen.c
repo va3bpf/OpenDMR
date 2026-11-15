@@ -33,14 +33,14 @@
  * (compact); the bottom bar. The VFO shown is the one the radio receives (radio.c); the PTT transmits (tx_screen.c).
  *
  * Keys (as the main firmware on the DM-32):
- *   UP / DOWN, rotary   the RX frequency one step up / down (held: repeat); SK2 + rotary: the TX frequency (SK2 + UP /
- *                       DOWN too, keymap.c). The frequency stepped last is the large one and the one digits enter
+ *   UP / DOWN, rotary   the chosen frequency one step up / down (held: repeat); SK2 + UP / DOWN (keymap.c) chooses
+ *                       the RX (upper) or the TX (lower) one: in white, its step digit underlined, the one digits enter
  *   0 - 9               frequency entry (8 digits, xxx.xxxxx MHz; not 0 first); then the left key or the 8th digit
  *                       sets it, LEFT deletes a digit, the right key cancels
  *   SK1 + SK2 held      shows the frequencies swapped (reverse repeater)
  *   left key            menu; held: VFO quick menu; SK2 + left key: channel details of the VFO
  *   right key           channel screen; held: the other VFO
- *   the shortcuts of keymap.c (SK2 + UP / DOWN TX frequency, * timeslot or bandwidth, SK1 + * FM / DMR,
+ *   the shortcuts of keymap.c (SK2 + UP / DOWN the frequency changed, * timeslot or bandwidth, SK1 + * FM / DMR,
  *   LEFT / RIGHT TG or squelch, SK2 + LEFT / RIGHT power, # number entry ...)
  * The VFO goes to the radio with the timeslot and TG of tx_target.c. The screen doesn't tune the radio: it gives the VFO
  * (radio_channel()) when the UI task asks, after each event (ui_tune()), also while the menus are over it.
@@ -108,12 +108,13 @@
 #define TOP_Y       44
 #define CHIP_Y      42
 #define CHIP_HEIGHT 22
-#define BIG_Y       70
-#define MHZ_Y       126
-#define LINE_Y      154
-#define OTHER_Y     164
-#define TONE_Y      192 // DMR: the TG; FM: the squelch, then the tone below
-#define CSS_Y       220
+#define RX_Y        66 // roboto42_bold
+#define FREQ_CHIP_H   19 // the RX / TX label on the right of a frequency
+#define FREQ_CHIP_PAD 4
+#define TX_Y        118
+#define LINE_Y      174
+#define TONE_Y      184 // DMR: the TG; FM: the squelch, then the tone below
+#define CSS_Y       212
 #define S_METER_Y   250
 #define VALUE_X     (WIDGET_MARGIN + 70)
 #define LABEL_GAP   10
@@ -665,9 +666,9 @@ static bool do_action(keymap_action_t action)
         case KEYMAP_POWER_USER:
             change_power(1, true);
             return true;
-        case KEYMAP_TX_UP:
+        case KEYMAP_TX_UP: // SK2 + up / down: the RX (upper) or the TX (lower) frequency is the one changed
         case KEYMAP_TX_DOWN:
-            step_frequency(((action == KEYMAP_TX_UP) ? 1 : -1), true);
+            editing_tx = (action == KEYMAP_TX_DOWN);
             return true;
         case KEYMAP_TG_FROM_CALL:
             reply_to_call();
@@ -722,7 +723,7 @@ static bool handle_key(const ui_event_t *ev)
             if (!press || (held & (UI_MODIFIER_SK1 | UI_MODIFIER_SK2))) {
                 return false;
             }
-            step_frequency(((ev->key == UI_KEY_UP) ? 1 : -1), false);
+            step_frequency(((ev->key == UI_KEY_UP) ? 1 : -1), editing_tx); // the one chosen (SK2 + up / down)
             return true;
         case UI_KEY_GREEN:
             // held: the main menu; a press: the menu of the VFO (with SK2: its details)
@@ -789,7 +790,7 @@ static bool handle_event(const ui_event_t *ev)
             if (digit_entry_active(&entry)) {
                 return false;
             }
-            step_frequency(ev->steps, (held & UI_MODIFIER_SK2) != 0);
+            step_frequency(ev->steps, editing_tx); // the one chosen (SK2 + up / down)
             return true;
         case UI_EVENT_TIMER:
             if (tone_scan.active) {
@@ -875,6 +876,68 @@ static void draw_status_bar(const codeplug_channel_t *v)
     status_bar_draw(&status);
 }
 
+// The power of the bottom bar; "Rx only" when the VFO can't transmit (AM, SSB, the aviation band)
+static const char *power_text(const codeplug_channel_t *v)
+{
+    return (codeplug_mode_can_transmit(v->mode) && codeplug_frequency_can_transmit(v->tx_freq))
+               ? bottom_bar_power_label(vfo_power(v))
+               : text(TEXT_RX_ONLY);
+}
+
+// A frequency line: the frequency large (the digits typed while entering it), then on the right its label ("RX" on
+// green, "TX" on red) at the digits' top and "MHz" at their baseline. The one the keys change: white, its step
+// digit underlined.
+static void draw_frequency(int32_t y, bool is_tx, uint32_t frequency, unsigned step)
+{
+    const font_t *font = &font_roboto42_bold;
+    bool selected = (editing_tx == is_tx);
+    const char *label = text(is_tx ? TEXT_UI_TX : TEXT_UI_RX);
+    char buffer[16];
+    int32_t x = WIDGET_MARGIN;
+    int32_t right = FB_WIDTH - WIDGET_MARGIN;
+    int32_t chip_w = font_text_width(&font_roboto17_bold, label) + (2 * FREQ_CHIP_PAD);
+
+    // the chip from a little over the digits' top (their cap height about 0.72 of the size: 30 px), clear of "MHz"
+    draw_fill_rect(right - chip_w, y + (font->ascent - 30) - 5, chip_w, FREQ_CHIP_H,
+                   (is_tx ? THEME_COLOUR_TX : THEME_COLOUR_RX));
+    draw_text(right - FREQ_CHIP_PAD, y + (font->ascent - 30) - 5 + ((FREQ_CHIP_H - font_roboto17_bold.line_height) / 2),
+              label, &font_roboto17_bold, FONT_ALIGN_RIGHT, (is_tx ? THEME_COLOUR_WHITE : THEME_COLOUR_BACKGROUND));
+    draw_text(right, y + font->ascent - font_roboto17.ascent, "MHz", &font_roboto17, FONT_ALIGN_RIGHT,
+              THEME_COLOUR_TEXT_LABEL);
+    digit_entry_format_frequency(frequency, buffer, sizeof(buffer));
+    if (selected && digit_entry_active(&entry)) {
+        (void)digit_entry_draw_font(&entry, x, y, font); // its own cursor
+        return;
+    }
+    draw_text(x, y, buffer, font, FONT_ALIGN_LEFT, (selected ? THEME_COLOUR_TEXT : THEME_COLOUR_TEXT_LABEL));
+
+    // The one the keys and the knob change: the digit of its step underlined (the largest place not over it)
+    if (selected) {
+        unsigned place = 1;   // in 10 Hz, the 5th decimal
+        int decimals = 5;     // its decimal
+        char *dot = strchr(buffer, '.');
+
+        while (((place * 10) <= step) && (decimals > 1)) {
+            place *= 10;
+            decimals--;
+        }
+        if (dot) {
+            size_t at = (size_t)(dot - buffer) + (size_t)decimals; // the digit underlined
+            char part[16];
+            int32_t start;
+            int32_t end;
+
+            memcpy(part, buffer, at);
+            part[at] = '\0';
+            start = x + font_text_width(font, part);
+            part[at] = buffer[at];
+            part[at + 1] = '\0';
+            end = x + font_text_width(font, part);
+            draw_fill_rect(start, y + font->line_height - 3, end - start, 3, (is_tx ? THEME_COLOUR_TX : THEME_COLOUR_RX));
+        }
+    }
+}
+
 static void draw(void)
 {
     const codeplug_channel_t *v = vfo();
@@ -882,47 +945,31 @@ static void draw(void)
     uint32_t rx = (swapped ? v->tx_freq : v->rx_freq);
     uint32_t tx = (swapped ? v->rx_freq : v->tx_freq);
     unsigned step = step_of(v);
-    const char *selected = text(editing_tx ? TEXT_UI_TX : TEXT_UI_RX);
     char buffer[40];
-    int32_t x;
     dmr_call_t call;
     p25_call_t p25;
 
     if ((v->mode == CODEPLUG_MODE_DMR) && !digit_entry_active(&entry) && dmr_call(&call)) {
         snprintf(buffer, sizeof(buffer), "VFO %c", (vfo_screen_current() == 0) ? 'A' : 'B');
-        qso_panel_draw(&call, buffer);
+        qso_panel_draw(&call, buffer, v->tx_colour, power_text(v));
         return;
     }
     if ((v->mode == CODEPLUG_MODE_P25) && !digit_entry_active(&entry) && p25_radio_call(&p25) && (p25.src != 0)) {
         snprintf(buffer, sizeof(buffer), "VFO %c", (vfo_screen_current() == 0) ? 'A' : 'B');
-        qso_panel_draw_p25(&p25, buffer);
+        qso_panel_draw_p25(&p25, buffer, power_text(v));
         return;
     }
     draw_status_bar(v);
 
-    // Which VFO, which frequency the keys change, the step
+    // Which VFO, the step
     snprintf(buffer, sizeof(buffer), "VFO %c", (vfo_screen_current() == 0) ? 'A' : 'B');
-    x = font_draw_text(WIDGET_MARGIN, TOP_Y, buffer, &font_roboto17_bold, FONT_ALIGN_LEFT,
-                       theme_colour(THEME_COLOUR_TEXT));
-    draw_chip(x + LABEL_GAP, CHIP_Y, CHIP_HEIGHT, selected, &font_roboto17_bold, THEME_COLOUR_WHITE,
-              (editing_tx ? THEME_COLOUR_TX : THEME_COLOUR_ACCENT));
+    font_draw_text(WIDGET_MARGIN, TOP_Y, buffer, &font_roboto17_bold, FONT_ALIGN_LEFT, theme_colour(THEME_COLOUR_TEXT));
     snprintf(buffer, sizeof(buffer), "%s %u.%uk", text(TEXT_STEPFREQ), step / 100, (step % 100) / 10);
     draw_text(FB_WIDTH - WIDGET_MARGIN, TOP_Y, buffer, &font_roboto17, FONT_ALIGN_RIGHT, THEME_COLOUR_TEXT_LABEL);
 
-    // The frequency the keys change, large
-    if (digit_entry_active(&entry)) {
-        digit_entry_draw(&entry, WIDGET_MARGIN, BIG_Y);
-    } else {
-        digit_entry_format_frequency((editing_tx ? tx : rx), buffer, sizeof(buffer));
-        draw_text(WIDGET_MARGIN, BIG_Y, buffer, &font_roboto44_bold, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT);
-    }
-    draw_text(WIDGET_MARGIN, MHZ_Y, "MHz", &font_roboto17, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT_LABEL);
-    snprintf(buffer, sizeof(buffer), "%s: %s", text(TEXT_UI_SK2_KNOB), text(TEXT_UI_TX)); // the knob alone: RX
-    draw_text(FB_WIDTH - WIDGET_MARGIN, MHZ_Y, buffer, &font_roboto17, FONT_ALIGN_RIGHT, THEME_COLOUR_TEXT_LABEL);
-
-    draw_hline(WIDGET_MARGIN, LINE_Y, FB_WIDTH - (2 * WIDGET_MARGIN), THEME_COLOUR_LINE);
-
-    // The other frequency; while scanning, the range
+    // The receive and the transmit frequencies, as large; the one the keys change white, its step digit underlined. While
+    // scanning, the range instead of the transmit one.
+    draw_frequency(RX_Y, false, rx, step);
     if (scan.active) {
         uint32_t low;
         uint32_t high;
@@ -931,11 +978,12 @@ static void draw(void)
         snprintf(buffer, sizeof(buffer), "%lu.%03lu - %lu.%03lu", (unsigned long)(low / 100000),
                  (unsigned long)((low % 100000) / 100), (unsigned long)(high / 100000),
                  (unsigned long)((high % 100000) / 100));
-        draw_info_line(OTHER_Y, text(TEXT_SCAN), buffer);
+        draw_info_line(TX_Y + 10, text(TEXT_SCAN), buffer);
     } else {
-        digit_entry_format_frequency((editing_tx ? rx : tx), buffer, sizeof(buffer));
-        draw_info_line(OTHER_Y, text(editing_tx ? TEXT_UI_RX : TEXT_UI_TX), buffer);
+        draw_frequency(TX_Y, true, tx, step);
     }
+
+    draw_hline(WIDGET_MARGIN, LINE_Y, FB_WIDTH - (2 * WIDGET_MARGIN), THEME_COLOUR_LINE);
 
     // The TG or contact (DMR); the squelch and the tone (FM), a line each as the TX frequency
     if (v->mode == CODEPLUG_MODE_DMR) {
@@ -971,14 +1019,11 @@ static void draw(void)
 
     s_meter_data_t meter = {.compact = true, .active = true};
     bottom_bar_data_t bottom = {0};
-    int power = vfo_power(v);
 
     vfo_screen_signal(&meter);
     s_meter_draw(S_METER_Y, &meter);
     bottom.mode = codeplug_mode_name(v->mode);
-    bottom.item1 = (codeplug_mode_can_transmit(v->mode) && codeplug_frequency_can_transmit(v->tx_freq))
-                       ? bottom_bar_power_label(power)
-                       : text(TEXT_RX_ONLY);
+    bottom.item1 = power_text(v);
     bottom.item2 = ((v->mode == CODEPLUG_MODE_FM) && (v->flag4 & FLAG4_BANDWIDTH_25K)) ? "25K" : "12.5K";
     if (codeplug_mode_is_ssb(v->mode)) {
         bottom.item2 = "3K";

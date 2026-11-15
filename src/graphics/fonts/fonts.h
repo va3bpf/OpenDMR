@@ -45,5 +45,6 @@ extern const font_t font_roboto17;      // labels, bottom bar
 extern const font_t font_roboto17_bold; // status bar, mode chip
 extern const font_t font_roboto20;      // talk group, tone
 extern const font_t font_roboto32_bold; // channel name
+extern const font_t font_roboto42_bold; // the VFO's frequency (digits and the dot only)
 
 #endif /* DM32_FONTS_H */
