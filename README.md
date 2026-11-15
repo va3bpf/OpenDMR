@@ -79,7 +79,10 @@ DMR 热点（MMDVM）、VOX、可自定义的按键……见 [使用说明书](d
 
 ## 刷机（开发时）
 
-- 第一次装、电台起不来时：`dm32_dump.py --write`（关机，运行，30 秒内开机），步骤见 [安装手册](docs/installation.md) 第 3 节：
+下面命令里的 `COM6` 换成你的写频线的端口：插上写频线，在「设备管理器 → 端口 (COM 和 LPT)」里看是哪个 COM 口。
+
+- 第一次装、电台起不来时：`dm32_dump.py --write`，步骤见 [安装手册](docs/installation.md) 第 3 节。**每一条命令**都是：
+  电台关机 → 运行命令 → 30 秒内开机（不按键）→ 写完后关机，再运行下一条：
 
   ```powershell
   py -u tools\backup\dm32_dump.py COM6 program src\build\opendmr.bin --write --start 0xC000

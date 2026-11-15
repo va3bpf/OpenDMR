@@ -86,8 +86,12 @@ update mode). The vocoder is built straight from `vocoder/c/ambe/` by `src/Makef
 
 ## Flashing (development)
 
-- First install, or a radio that doesn't start: `dm32_dump.py --write` (radio off, run, switch on within 30 s); see
-  section 3 of the [installation guide](docs/installation.en.md):
+Replace `COM6` in the commands with your programming cable's port: plug the cable in and look under Device Manager →
+Ports (COM & LPT).
+
+- First install, or a radio that doesn't start: `dm32_dump.py --write`; see section 3 of the
+  [installation guide](docs/installation.en.md). **Each command** goes: radio off → run the command → switch the radio
+  on within 30 s (no keys) → when it is done, switch off again before the next command:
 
   ```powershell
   py -u tools\backup\dm32_dump.py COM6 program src\build\opendmr.bin --write --start 0xC000
