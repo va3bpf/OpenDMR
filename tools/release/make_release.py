@@ -43,6 +43,7 @@ FILES = {
     'tools/fonts/upload_cjk.py': 'tools/fonts/upload_cjk.py',
     'tools/debug/fw_update.py': 'tools/debug/fw_update.py',
     'tools/debug/updater/updater.bin': 'tools/debug/updater/updater.bin',
+    'tools/ids/id_db.py': 'tools/ids/id_db.py',  # the DMR ID database with places (manual, 13)
     'licences/OFL-RobotoCondensed.txt': 'tools/fonts/ttf/OFL-RobotoCondensed.txt',  # the fonts are OFL: their
     'licences/OFL-NotoSansSC.txt': 'tools/fonts/ttf/OFL-NotoSansSC.txt',            # licence goes with them
     'LICENSE': 'LICENSE',
