@@ -74,16 +74,17 @@ Also: SK2 + menu key opens the channel details directly; SK2 + a digit is a quic
 
 <img src="manual/en/channel-idle.png" alt="Channel screen"> <img src="manual/en/main-menu.png" alt="Main menu">
 
-- **Status bar** (top): signal bars, timeslot `TS1`/`TS2`, colour code `CC1`, scan icon, time, battery. A green line
+- **Status bar** (top, on the theme's band): signal bars, timeslot `TS1`/`TS2`, colour code `CC1`, scan icon, time, battery. A green line
   under it while receiving; the whole bar turns red while transmitting.
 - **Main area**: on the channel screen the zone and position, the channel name (large), the frequency, the talk
   group, the S meter.
-- **Bottom bar**: on the main screens the mode (`DMR`/`FM`/`AM`/`USB`/`LSB`), power and bandwidth; on lists what the two keys do.
-- **Lists** (menus, settings): the title bar shows the name and the position (`1/10`), the selected row is blue,
-  7 rows a page, ▲ ▼ wrap around at the ends.
+- **Bottom bar** (on the band too): on the main screens the mode (`DMR`/`FM`/`AM`/`USB`/`LSB`), power and bandwidth; on lists what the two keys do.
+- **Lists** (menus, settings): the title bar shows the name and the position (`1/10`), the selected row is in the
+  theme's highlight colour (cyan in Deep sea), 7 rows a page, ▲ ▼ wrap around at the ends.
 
-Colours mean something: green = receive, red = transmit, blue = selected / current, amber = warning (low battery,
-scan, timeout near).
+Colours mean something: green = receive, red = transmit, the highlight colour = selected / current, amber = warning
+(low battery, scan, timeout near). The colours themselves come from the theme (Display options → Theme); the
+screenshots here are in Deep sea.
 
 ---
 
@@ -449,6 +450,8 @@ whole look, colours and bands):
 | Night amber | Dark: amber on black, as night vision gear |
 | High contrast | Light: black on white, a black band, yellow for what is selected |
 
+<img src="manual/themes.png" alt="The six themes">
+
 Outdoors take a light theme and the brightness up: a dark background can't be seen in daylight. New themes are a file
 each in the source (`src/graphics/themes/`).
 
@@ -600,7 +603,6 @@ firmware: see the README.
 
 - No voice prompts (the radio has no voice data).
 - The calibration is read only: power and oscillator can't be changed.
-- No themes: the interface has fixed colours.
 - Safe Pwr-On and Sat (Manual / Auto) have no effect yet.
 - P25: simplex group calls in clear only; known issues in [docs/p25.md](p25.md), section 6.
 - Not fully tested on the air yet: APRS beacons received by an APRS decoder (their frames are checked; the radio itself
