@@ -75,8 +75,9 @@ Also: SK2 + menu key opens the channel details directly; SK2 + a digit is a quic
 <img src="manual/en/channel-idle.png" alt="Channel screen"> <img src="manual/en/main-menu.png" alt="Main menu">
 
 - **Status bar** (top, on the theme's band): signal bars (all there as on the S meter, the ones with signal lit white), timeslot `TS1`/`TS2`, colour code `CC1`
-  (DMR), scan icon, GPS pin (when the GPS is on: dim while it searches, lit with a fix), time, battery. A green line
-  under it while receiving; the whole bar turns red while transmitting.
+  (DMR), scan icon, GPS pin (when the GPS is on: dim while it searches, lit with a fix), time, battery. The whole bar
+  turns green while receiving and red while transmitting (the transmit icon in place of the signal bars, nothing
+  else moves).
 - **Main area**: on the channel screen the zone and position, the channel name (large), the frequency, the talk
   group, the S meter.
 - **Bottom bar** (on the band too): on the main screens the mode (`DMR`/`FM`/`AM`/`USB`/`LSB`), power and bandwidth; on lists what the two keys do.
@@ -207,7 +208,7 @@ comes the talk group, with the NAC on the right of its line (e.g. `NAC 293`).
 
 <img src="manual/en/receive-vfo.png" alt="DMR receive (VFO)"> <img src="manual/en/receive-channel.png" alt="DMR receive (channel)">
 
-- A received signal: the green line under the status bar, the (white) signal bars lit, the S meter value in green; above S9
+- A received signal: the whole status bar green, the signal bars lit, the S meter value in green; above S9
   the excess is shown in small red figures (`+xxdB`).
 - DMR, the caller panel (its lines stay where they are, whatever is known):
   - the channel or VFO name, and on the right the caller's DMR ID;
@@ -228,7 +229,8 @@ comes the talk group, with the NAC on the right of its line (e.g. `NAC 293`).
 
 Hold the **PTT** to transmit, release it to stop. The transmit screen (no screenshot in this manual):
 
-- The status bar turns red, with `TX` (and the timeslot and colour code in DMR);
+- The status bar turns red, the transmit icon in place of the signal bars (the timeslot and colour code in DMR as
+  before);
 - Main area: who is called ("Group Call" and the talk group, or the zone and the channel / VFO), the channel and the
   frequency, a large timer (with a transmit timeout: the time left and a bar, amber near the end), an 8 segment mic
   level;

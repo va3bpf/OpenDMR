@@ -58,19 +58,19 @@ Sizes are real screen pixels (240x320), and so are the screenshots.
 | `BACKGROUND` | Screen | #07131F | #FFFFFF |
 | `LINE` | The main area's separators, the empty part of bars | #1C3448 | #7A8696 |
 | `OFF` | Unlit: signal and S meter segments, digits not entered yet | #24425A | #C2CAD3 |
-| `TEXT_DIM` | The other path of the dual watch; unlit signal bars (Sunlight: the line colour) | #5E7D96 | #4F5B69 |
-| `TEXT_LABEL` | Zone, labels, units, place | #8FB0C9 | #2E3A48 |
-| `TEXT_SECOND` | Frequency, talk group | #CFE3F1 | #101820 |
+| `TEXT_DIM` | The other path of the dual watch; unlit signal bars (Sunlight: the line colour) | #8FB0C9 | #2E3A48 |
+| `TEXT_LABEL` | Zone, labels, units, place | #CFE3F1 | #101820 |
+| `TEXT_SECOND` | Frequency, talk group | #F4FAFF | #000000 |
 | `TEXT` | Channel name, callsign, main values | #F4FAFF | #000000 |
 | `ACCENT` | Selected / current: the list row, mode chip, PTT chip | #00B4D8 | #B0420A |
-| `RX` | Receive: the green line under the status bar, the S meter, RX chip | #9BE15D | #0A6E3E |
-| `TX` | Transmit: the status bar while transmitting, TX chip | #FF5D5D | #B0102A |
+| `RX` | Receive: the whole status bar while receiving, the S meter, RX chip | #9BE15D | #009E4A |
+| `TX` | Transmit: the status bar while transmitting, TX chip | #FF5D5D | #E0102E |
 | `WARNING` | Warning: low battery, scan, timeout near | #FFC145 | #8A5600 |
 | `WHITE` | Text on the receive, transmit and warning colours | #FFFFFF | #FFFFFF |
 | `ON_ACCENT` | Text on the accent | #04111C | #FFFFFF |
 | `PANEL` | The band: status bar, list title, bottom bar | #0E2A44 | #0B3D91 |
 | `PANEL_TEXT` | Text on the band | #F4FAFF | #FFFFFF |
-| `PANEL_LABEL` | Labels on the band | #8FC3E6 | #A9C6F2 |
+| `PANEL_LABEL` | Labels on the band | #C2DEF2 | #D4E2F8 |
 
 These 16 colours are the whole palette: the frame buffer holds 4 bits a pixel, a palette index; anti-aliasing takes no
 colours of its own, it looks up a blend table by foreground, background and level. A theme is a palette
@@ -90,15 +90,18 @@ theme in Display options, not single colours:
 
 - **Auto** (the default): the first light theme of the list (Sunlight) from 7:00 to 19:00 local time, the first dark
   one (Deep sea) at night and without a clock;
-- Text on the accent, receive, transmit and warning colours is not anti-aliased (`fb_set_solid_backgrounds()`): solid
-  letters with clean edges;
+- **Little grey**: the screen is small, low resolution and not bright, grey text is hard to read. Second text
+  (frequency, talk group) is in the text colour, labels one step lighter; text of 22 px and less is not anti-aliased
+  (`fb_set_solid_levels()`: half coverage or more is the colour, less nothing), the large fonts (32 px and up) keep
+  it; text on the accent, receive, transmit and warning colours is solid too (`fb_set_solid_backgrounds()`);
 - The light themes are made for outdoors: on this transmissive LCD a dark background can't be seen in sunlight (tried
   outdoors), so the text contrast is as high as it goes;
 - Icons and text on the band use the band's own colours (`PANEL_TEXT`, `PANEL_LABEL`): no grey on grey.
 
 ### 4.2 Fonts
 
-- Digits and Latin: Roboto Condensed, made by `tools/fonts/mkfont.py`, 16 grey levels, in the program flash;
+- Digits and Latin: Roboto Condensed, made by `tools/fonts/mkfont.py`, 16 grey levels, in the program flash; drawn
+  without them up to 22 px (see 4.1);
 - Chinese: Noto Sans SC cut down to GB2312, made by `tools/fonts/mkcjk.py`: 17 px (all of GB2312) and 32 px bold
   (3755 common characters), 4 bit anti-aliased, in the data flash at 0x280000 (2.6 MB), written by
   `tools/fonts/upload_cjk.py`;
@@ -110,7 +113,7 @@ theme in Display options, not single colours:
 ```
 y=0   ┌──────────────────────────────┐
       │ status bar (band)              │ signal · slot · colour code …… scan · GPS · time · battery
-      │                              │ a green line under it when receiving; all red when transmitting
+      │                              │ all green when receiving; all red when transmitting, the TX icon for the bars
       │ main area, 12 px margins        │ the separators in the main area stay
       │                              │
       │ bottom bar (band)               │ mode chip · power · bandwidth/CC, or key labels
@@ -118,7 +121,8 @@ y=320 └───────────────────────�
 ```
 
 The status bar, list titles and bottom bar are the theme's band, set apart from the main area by colour, with no
-lines. List screens (menus, settings) have a title and position (`4/9`) at the top instead of the signal status bar.
+lines. The status bar and list titles are 32 rows in every state (green or red fill no taller); transmitting, only
+the signal bars change to the transmit icon, nothing else moves. List screens (menus, settings) have a title and position (`4/9`) at the top instead of the signal status bar.
 The main screens (channel, VFO, DMR receive, dual watch) all have the same compact S meter: one line, S value and
 segments.
 
@@ -150,7 +154,8 @@ segments.
 
 ![DMR receive (channel)](manual/en/receive-channel.png) ![DMR receive (VFO)](manual/en/receive-vfo.png)
 
-- Green line under the status bar, the (white) signal bars lit; the status bar still shows slot and colour code;
+- The whole status bar green (its text, bars and icons dark on a dark theme's light green, white on a light theme's,
+  by contrast); it still shows slot and colour code;
 - Top line: the channel or VFO name (17 px bold, the size and place of the VFO screen's `VFO A`), the caller's DMR
   ID on the right;
 - Callsign (44 px bold; the DMR ID when neither the ID database nor the contacts know it) → name (22) → city,
@@ -166,7 +171,7 @@ segments.
 
 (No screenshot of the transmit screen.)
 
-- Red status bar, `TX` (and slot / colour code in DMR);
+- Red status bar, the transmit icon in place of the signal bars, nothing else moves (slot / colour code in DMR);
 - Main area: what is called (`Group Call` + talk group, or zone + channel/VFO) → channel and frequency →
   large timer (with a timeout: time left, "Time left of m:ss" and a bar, amber from the timeout warning on;
   without: elapsed time) → 8 segment mic level;
