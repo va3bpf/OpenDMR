@@ -72,6 +72,7 @@ typedef struct {
     icons_id_t line_icon;  // ICONS_COUNT: no line
     const char *line_text;
     const char *line_detail; // after line_text, in the label colour; NULL: none
+    const char *line_right;  // right aligned on the line, in the label colour (P25: the NAC); NULL: none
 } channel_panel_data_t;
 
 void channel_panel_draw(const channel_panel_data_t *data);

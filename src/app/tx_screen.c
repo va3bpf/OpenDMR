@@ -492,7 +492,7 @@ static void draw(void)
     status_bar_data_t bar = {.state = STATUS_BAR_TRANSMITTING}; // "TX" is the bar's own; FM has no items
     char buffer[32];
     char ts[8];
-    char cc[8];
+    char cc[12];
 
     if ((tx.state == TX_REFUSED) || (tx.state == TX_TIMEOUT) || (tx.state == TX_NO_REPEATER)) {
         draw_refused();
@@ -505,9 +505,6 @@ static void draw(void)
         bar.item1 = ts;
         bar.item1_bold = true;
         bar.item2 = cc;
-    } else if (tx.channel.mode == CODEPLUG_MODE_P25) {
-        snprintf(cc, sizeof(cc), "NAC%03X", codeplug_p25_nac(&tx.channel));
-        bar.item2 = cc;
     }
     status_bar_draw(&bar);
     draw_text(WIDGET_MARGIN, LABEL_Y, tx.label, &font_roboto17, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT_LABEL);
@@ -519,6 +516,11 @@ static void draw(void)
         draw_text(WIDGET_MARGIN, DETAIL_Y, tx.target.name, &font_roboto20, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT);
     } else {
         draw_text(WIDGET_MARGIN, DETAIL_Y, buffer, &font_roboto20, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT_SECOND);
+        if (tx.channel.mode == CODEPLUG_MODE_P25) { // the NAC on the frequency's line, right
+            snprintf(cc, sizeof(cc), "NAC %03X", codeplug_p25_nac(&tx.channel));
+            draw_text(FB_WIDTH - WIDGET_MARGIN, DETAIL_Y + 2, cc, &font_roboto17, FONT_ALIGN_RIGHT,
+                      THEME_COLOUR_TEXT_LABEL);
+        }
     }
     draw_hline(WIDGET_MARGIN, SEPARATOR_Y, FB_WIDTH - (2 * WIDGET_MARGIN), THEME_COLOUR_LINE);
     draw_timer();

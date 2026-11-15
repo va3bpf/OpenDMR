@@ -32,8 +32,12 @@
 #include "fonts.h"
 #include "battery.h"
 #include "datetime.h"
+#include "settings.h"
+#include "gps.h"
 
-// Signal bars on the left, then the items (time slot, colour code); scan icon and battery on the right.
+#define ICONS_WIDTH 20 // icons.h: all icons are 20 x 18
+
+// Signal bars on the left, then the items (time slot, colour code); GPS, scan icon, time and battery on the right.
 // Receiving: green line and bars. Transmitting: the whole bar red with "TX".
 void status_bar_draw(const status_bar_data_t *data)
 {
@@ -55,22 +59,17 @@ void status_bar_draw(const status_bar_data_t *data)
         x += icons_draw(x, (WIDGET_STATUS_BAR_HEIGHT - ICONS_SIZE) / 2, ICONS_TX, THEME_COLOUR_WHITE) + 4;
         x = font_draw_text(x, text_y, "TX", font, FONT_ALIGN_LEFT, theme_colour(THEME_COLOUR_WHITE)) + 12;
     } else {
+        // receiving: the bars in the receive colour, if it shows on the band (a light theme's green is dark, as its
+        // band: then in the band's text colour; the green line under the bar says it receives)
+        bool rx_shows = theme_contrasts(THEME_COLOUR_RX, THEME_COLOUR_PANEL);
+
         icons_draw_signal(x, (WIDGET_STATUS_BAR_HEIGHT - 16) / 2, data->signal_bars,
-                          ((data->state == STATUS_BAR_RECEIVING) ? THEME_COLOUR_RX : THEME_COLOUR_PANEL_TEXT));
+                          (((data->state == STATUS_BAR_RECEIVING) && rx_shows) ? THEME_COLOUR_RX
+                                                                               : THEME_COLOUR_PANEL_TEXT));
         x += ICONS_SIGNAL_WIDTH + 14;
     }
 
-    if (data->item1) {
-        x = font_draw_text(x, text_y, data->item1, (data->item1_bold ? &font_roboto17_bold : &font_roboto17),
-                           FONT_ALIGN_LEFT, theme_colour(text)) +
-            10;
-    }
-
-    if (data->item2) {
-        font_draw_text(x, text_y, data->item2, &font_roboto17, FONT_ALIGN_LEFT, theme_colour(label));
-    }
-
-    // right side: battery, scanning
+    // right side first (battery, time, GPS, scanning): the items on the left only where they fit
     int32_t right = FB_WIDTH - WIDGET_MARGIN + 4;
     int percent = battery_percent();
     bool low = battery_is_low();
@@ -87,7 +86,25 @@ void status_bar_draw(const status_bar_data_t *data)
                            theme_colour((low && !has_time) ? THEME_COLOUR_WARNING : (has_time ? text : label)));
     right -= font_text_width(&font_roboto17, buffer) + 8;
 
+    // the GPS on: its pin, dim while it searches, lit with a fix
+    if (settings_valid() && (settings.gps >= GPS_MODE_ON)) {
+        icons_draw(right - ICONS_WIDTH, (WIDGET_STATUS_BAR_HEIGHT - ICONS_SIZE) / 2, ICONS_LOCATION,
+                   (gps_has_fix() ? text : label));
+        right -= ICONS_WIDTH + 4;
+    }
+
     if (data->scanning) {
         icons_draw(right - 18, (WIDGET_STATUS_BAR_HEIGHT - ICONS_SIZE) / 2, ICONS_SCAN, THEME_COLOUR_WARNING);
+        right -= ICONS_WIDTH + 4;
+    }
+
+    if (data->item1) {
+        x = font_draw_text(x, text_y, data->item1, (data->item1_bold ? &font_roboto17_bold : &font_roboto17),
+                           FONT_ALIGN_LEFT, theme_colour(text)) +
+            10;
+    }
+
+    if (data->item2 && ((x + font_text_width(&font_roboto17, data->item2)) <= right)) {
+        font_draw_text(x, text_y, data->item2, &font_roboto17, FONT_ALIGN_LEFT, theme_colour(label));
     }
 }

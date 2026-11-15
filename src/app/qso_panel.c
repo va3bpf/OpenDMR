@@ -147,7 +147,7 @@ static void look_up(uint32_t id)
 }
 
 static void draw(const dmr_call_t *call, const char *mode, const char *status_item, const char *status_item2,
-                 const char *channel_name, const char *power)
+                 const char *channel_name, const char *power, const char *tg_right)
 {
     const int32_t x = WIDGET_MARGIN;
     const int32_t width = FB_WIDTH - (2 * WIDGET_MARGIN);
@@ -249,7 +249,13 @@ static void draw(const dmr_call_t *call, const char *mode, const char *status_it
 
     draw_hline(x, SEPARATOR_Y, width, THEME_COLOUR_LINE);
     lx = x + icons_draw(x, TG_Y + 5, (private_call ? ICONS_CONTACT : ICONS_TALKGROUP), THEME_COLOUR_TEXT_LABEL) + 8;
-    draw_fitted(lx, TG_Y, line, &font_roboto20, x + width - lx, THEME_COLOUR_TEXT);
+    int32_t tg_end = x + width;
+
+    if (tg_right) { // P25: the NAC of the call, right
+        draw_text(x + width, TG_Y + 2, tg_right, &font_roboto17, FONT_ALIGN_RIGHT, THEME_COLOUR_TEXT_LABEL);
+        tg_end -= font_text_width(&font_roboto17, tg_right) + 10;
+    }
+    draw_fitted(lx, TG_Y, line, &font_roboto20, tg_end - lx, THEME_COLOUR_TEXT);
 
     s_meter_draw(S_METER_Y, &meter);
     bottom_bar_draw(&bottom);
@@ -262,14 +268,14 @@ void qso_panel_draw(const dmr_call_t *call, const char *channel_name, uint8_t co
 
     snprintf(ts_text, sizeof(ts_text), "TS%d", call->timeslot + 1);
     snprintf(cc_text, sizeof(cc_text), "CC%u", (unsigned)colour_code);
-    draw(call, "DMR", ts_text, cc_text, channel_name, power);
+    draw(call, "DMR", ts_text, cc_text, channel_name, power, NULL);
 }
 
 void qso_panel_draw_p25(const p25_call_t *call, const char *channel_name, const char *power)
 {
     dmr_call_t shown = {.source = call->src, .tg_or_pc = p25_call_tg_or_pc(call)};
-    char nac_text[8];
+    char nac_text[12];
 
-    snprintf(nac_text, sizeof(nac_text), "NAC%03X", call->nac);
-    draw(&shown, "P25", nac_text, NULL, channel_name, power);
+    snprintf(nac_text, sizeof(nac_text), "NAC %03X", call->nac);
+    draw(&shown, "P25", NULL, NULL, channel_name, power, nac_text);
 }

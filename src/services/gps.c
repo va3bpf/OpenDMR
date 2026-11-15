@@ -53,6 +53,7 @@
 #include "settings.h"
 #include "datetime.h"
 #include "cable_link.h"
+#include "ui.h"
 #include "gps.h"
 
 #define PIN_GPS_POWER     0x2C // SEL_GPS_Pin, low = on
@@ -372,9 +373,16 @@ static void gps_task(void *arg)
         }
 
         if (parsed_any && enabled) {
+            bool had_fix = data.fix;
+
             taskENTER_CRITICAL();
             memcpy(&data, &parsed, sizeof(data));
             taskEXIT_CRITICAL();
+            if (data.fix != had_fix) { // the status bar's GPS icon
+                ui_event_t ev = {.type = UI_EVENT_DATA, .what = UI_DATA_GPS};
+
+                ui_post(&ev);
+            }
         }
     }
 }
@@ -400,6 +408,11 @@ void gps_set_enabled(bool on)
     taskEXIT_CRITICAL();
     gpio_output(PIN_GPS_POWER, !on);
     uart1_receive(on);
+}
+
+bool gps_has_fix(void)
+{
+    return enabled && data.fix;
 }
 
 void gps_read(gps_data_t *out)

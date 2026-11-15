@@ -811,11 +811,12 @@ static void draw(void)
         bottom.mode = "DMR";
         bottom.item2 = "12.5K";
     } else if (channel.mode == CODEPLUG_MODE_P25) {
-        // P25: the NAC where DMR has the colour code; the talk group transmitted to (tx_target_apply())
+        // P25: the talk group transmitted to (tx_target_apply()), the NAC on its line (not in the status bar: it is
+        // long, and the status bar has the GPS and scan icons too)
         codeplug_text_nac(codeplug_p25_nac(&channel), cc_text, sizeof(cc_text));
-        status.item2 = cc_text;
+        panel.line_icon = ICONS_TALKGROUP;
+        panel.line_right = cc_text;
         if (target.id != 0) {
-            panel.line_icon = ICONS_TALKGROUP;
             panel.line_text = target.name;
             snprintf(detail, sizeof(detail), "%s %lu", text(TEXT_TG), (unsigned long)(target.id & 0xFFFF));
             if (strcmp(detail, target.name) != 0) {

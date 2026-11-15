@@ -58,7 +58,7 @@ Sizes are real screen pixels (240x320), and so are the screenshots.
 | `BACKGROUND` | Screen | #07131F | #FFFFFF |
 | `LINE` | The main area's separators, the empty part of bars | #1C3448 | #7A8696 |
 | `OFF` | Unlit: signal and S meter segments, digits not entered yet | #24425A | #C2CAD3 |
-| `TEXT_DIM` | The other path of the dual watch; unlit signal bars on the band | #5E7D96 | #4F5B69 |
+| `TEXT_DIM` | The other path of the dual watch | #5E7D96 | #4F5B69 |
 | `TEXT_LABEL` | Zone, labels, units, place | #8FB0C9 | #2E3A48 |
 | `TEXT_SECOND` | Frequency, talk group | #CFE3F1 | #101820 |
 | `TEXT` | Channel name, callsign, main values | #F4FAFF | #000000 |
@@ -70,7 +70,7 @@ Sizes are real screen pixels (240x320), and so are the screenshots.
 | `ON_ACCENT` | Text on the accent | #04111C | #FFFFFF |
 | `PANEL` | The band: status bar, list title, bottom bar | #0E2A44 | #0B3D91 |
 | `PANEL_TEXT` | Text on the band | #F4FAFF | #FFFFFF |
-| `PANEL_LABEL` | Labels on the band | #8FC3E6 | #A9C6F2 |
+| `PANEL_LABEL` | Labels on the band, unlit signal bars (hollow) | #8FC3E6 | #A9C6F2 |
 
 These 16 colours are the whole palette: the frame buffer holds 4 bits a pixel, a palette index; anti-aliasing takes no
 colours of its own, it looks up a blend table by foreground, background and level. A theme is a palette
@@ -94,7 +94,7 @@ theme in Display options, not single colours:
   letters with clean edges;
 - The light themes are made for outdoors: on this transmissive LCD a dark background can't be seen in sunlight (tried
   outdoors), so the text contrast is as high as it goes;
-- Icons and text on the band use the band's own colours (`PANEL_TEXT`, `PANEL_LABEL`, `TEXT_DIM`): no grey on grey.
+- Icons and text on the band use the band's own colours (`PANEL_TEXT`, `PANEL_LABEL`): no grey on grey.
 
 ### 4.2 Fonts
 
@@ -109,7 +109,7 @@ theme in Display options, not single colours:
 
 ```
 y=0   ┌──────────────────────────────┐
-      │ status bar (band)              │ signal · slot · colour code …… time · battery
+      │ status bar (band)              │ signal · slot · colour code …… scan · GPS · time · battery
       │                              │ a green line under it when receiving; all red when transmitting
       │ main area, 12 px margins        │ the separators in the main area stay
       │                              │

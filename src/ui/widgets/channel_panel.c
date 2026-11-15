@@ -72,5 +72,10 @@ void channel_panel_draw(const channel_panel_data_t *data)
         if (data->line_detail) {
             draw_text(lx, LINE_Y + 2, data->line_detail, &font_roboto17, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT_LABEL);
         }
+
+        if (data->line_right) {
+            draw_text(FB_WIDTH - WIDGET_MARGIN, LINE_Y + 2, data->line_right, &font_roboto17, FONT_ALIGN_RIGHT,
+                      THEME_COLOUR_TEXT_LABEL);
+        }
     }
 }

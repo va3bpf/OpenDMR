@@ -87,6 +87,7 @@ typedef enum {
 #define UI_DATA_AUTOLOCK   0x0010 // idle.c: no key for the auto lock time (the home screens lock)
 #define UI_DATA_HOTSPOT    0x0020 // hotspot.c: a host wants it, it ended, or what it shows changed
 #define UI_DATA_CPS        0x0040 // cps_screen.c: the CPS opened, rendered or closed its screen, or more data went
+#define UI_DATA_GPS        0x0080 // gps.c: the fix came or went (the status bar's GPS icon)
 
 typedef struct {
     ui_event_type_t type;

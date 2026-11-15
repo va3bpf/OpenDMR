@@ -242,7 +242,17 @@ void icons_draw_signal(int32_t x, int32_t y, int32_t level, theme_colour_t colou
         int32_t h = 4 + (bar * 2);
         int32_t bx = x + (bar * 4);
 
-        fb_fill(bx, y + 16 - h, bx + 3, y + 16, theme_colour((bar < level) ? colour : THEME_COLOUR_TEXT_DIM));
+        if (bar < level) {
+            fb_fill(bx, y + 16 - h, bx + 3, y + 16, theme_colour(colour));
+        } else {
+            // unlit: hollow, in the band's label colour (grey disappeared on a dark band of a light theme)
+            uint16_t c = theme_colour(THEME_COLOUR_PANEL_LABEL);
+
+            fb_fill(bx, y + 16 - h, bx + 1, y + 16, c);
+            fb_fill(bx + 2, y + 16 - h, bx + 3, y + 16, c);
+            fb_fill(bx + 1, y + 16 - h, bx + 2, y + 17 - h, c);
+            fb_fill(bx + 1, y + 15, bx + 2, y + 16, c);
+        }
     }
 }
 

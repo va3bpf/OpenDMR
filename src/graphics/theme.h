@@ -39,7 +39,7 @@ typedef enum {
     THEME_COLOUR_BACKGROUND = 0,
     THEME_COLOUR_LINE,        // the main area's separators, empty part of bars
     THEME_COLOUR_OFF,         // unlit (signal, digits not entered yet)
-    THEME_COLOUR_TEXT_DIM,    // the other channel when dual watching; unlit indicators on the panel
+    THEME_COLOUR_TEXT_DIM,    // the other channel when dual watching
     THEME_COLOUR_TEXT_LABEL,  // zone, labels, units
     THEME_COLOUR_TEXT_SECOND, // frequency, talk group
     THEME_COLOUR_TEXT,        // channel name, important values
@@ -51,7 +51,7 @@ typedef enum {
     THEME_COLOUR_ON_ACCENT,   // text on the accent (the selected row, the mode chip, PTT)
     THEME_COLOUR_PANEL,       // the band under the status bar, the list titles and the bottom bar (no lines on it)
     THEME_COLOUR_PANEL_TEXT,  // text on the panel
-    THEME_COLOUR_PANEL_LABEL, // labels on the panel
+    THEME_COLOUR_PANEL_LABEL, // labels on the panel, unlit signal bars (hollow)
     THEME_COLOUR_COUNT
 } theme_colour_t;
 
@@ -70,5 +70,7 @@ uint8_t theme_first(bool dark);               // the first dark (or light) one
 void theme_set(uint8_t index);                // its palette: the whole screen changes at once
 uint8_t theme_current(void);
 uint16_t theme_colour(theme_colour_t colour); // native colour format
+// The two colours of the theme in use tell apart: a WCAG contrast of 3:1 or more (text and icons on a fill)
+bool theme_contrasts(theme_colour_t a, theme_colour_t b);
 
 #endif /* DM32_THEME_H */

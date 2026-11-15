@@ -869,9 +869,6 @@ static void draw_status_bar(const codeplug_channel_t *v)
         status.item1 = ts_text;
         status.item1_bold = true;
         status.item2 = cc_text;
-    } else if (v->mode == CODEPLUG_MODE_P25) {
-        codeplug_text_nac(codeplug_p25_nac(v), cc_text, sizeof(cc_text));
-        status.item2 = cc_text;
     }
     status_bar_draw(&status);
 }
@@ -994,11 +991,14 @@ static void draw(void)
             draw_text(VALUE_X, TONE_Y, target.name, &font_roboto20, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT);
         }
     } else if (v->mode == CODEPLUG_MODE_P25) {
-        // P25: the talk group transmitted to (tx_target_apply()); the NAC is in the status bar, as the colour code
+        // P25: the talk group transmitted to (tx_target_apply()), the NAC on its line, right
+        icons_draw(WIDGET_MARGIN, TONE_Y + 3, ICONS_TALKGROUP, THEME_COLOUR_TEXT_LABEL);
         if (target.id != 0) {
-            icons_draw(WIDGET_MARGIN, TONE_Y + 3, ICONS_TALKGROUP, THEME_COLOUR_TEXT_LABEL);
             draw_text(VALUE_X, TONE_Y, target.name, &font_roboto20, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT);
         }
+        codeplug_text_nac(codeplug_p25_nac(v), buffer, sizeof(buffer));
+        draw_text(FB_WIDTH - WIDGET_MARGIN, TONE_Y + 2, buffer, &font_roboto17, FONT_ALIGN_RIGHT,
+                  THEME_COLOUR_TEXT_LABEL);
     } else {
         uint16_t tone = ((v->rx_tone != CODEPLUG_CSS_NONE) ? v->rx_tone : v->tx_tone);
 

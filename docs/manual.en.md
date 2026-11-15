@@ -74,7 +74,8 @@ Also: SK2 + menu key opens the channel details directly; SK2 + a digit is a quic
 
 <img src="manual/en/channel-idle.png" alt="Channel screen"> <img src="manual/en/main-menu.png" alt="Main menu">
 
-- **Status bar** (top, on the theme's band): signal bars, timeslot `TS1`/`TS2`, colour code `CC1`, scan icon, time, battery. A green line
+- **Status bar** (top, on the theme's band): signal bars (unlit ones hollow), timeslot `TS1`/`TS2`, colour code `CC1`
+  (DMR), scan icon, GPS pin (when the GPS is on: dim while it searches, lit with a fix), time, battery. A green line
   under it while receiving; the whole bar turns red while transmitting.
 - **Main area**: on the channel screen the zone and position, the channel name (large), the frequency, the talk
   group, the S meter.
@@ -173,8 +174,8 @@ right. The mode is kept with the channel and the VFO; the CPS sees such a channe
 **108 – 137 MHz (aviation) is receive only**, in any mode: set AM (SK1 + \*) to listen. The radio's front end is made for
 137 MHz and up, so it is less sensitive there; the PTT shows "OUT OF BAND".
 
-**P25** (APCO P25 Phase 1 conventional voice: simplex, group calls, clear): the bottom bar shows `P25`, the status bar
-the NAC (e.g. `NAC293`), and below the frequency come the talk group and the NAC.
+**P25** (APCO P25 Phase 1 conventional voice: simplex, group calls, clear): the bottom bar shows `P25`; below the frequency
+comes the talk group, with the NAC on the right of its line (e.g. `NAC 293`).
 
 - The **NAC** (network access code, 12 bits in hex, 293 by default) works like DMR's colour code: only calls with the
   same NAC are received; `F7E` receives them all. It is set in the channel details (on a P25 channel the colour code

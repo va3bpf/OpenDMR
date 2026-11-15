@@ -69,6 +69,6 @@ void codeplug_text_nac(uint16_t nac, char *out, size_t out_size)
     if ((nac == CODEPLUG_P25_NAC_RX_ANY) || (nac == 0xF7F)) {
         snprintf(out, out_size, "NAC %s", text(TEXT_ALL));
     } else {
-        snprintf(out, out_size, "NAC%03X", nac);
+        snprintf(out, out_size, "NAC %03X", nac);
     }
 }

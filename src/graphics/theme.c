@@ -88,3 +88,23 @@ uint16_t theme_colour(theme_colour_t colour)
 {
     return palette[(colour < THEME_COLOUR_COUNT) ? colour : THEME_COLOUR_TEXT];
 }
+
+// WCAG relative luminance of an RGB888 colour, 0 - 1 (the sRGB curve as a square: close enough to compare)
+static float luminance(uint32_t rgb)
+{
+    float r = (float)((rgb >> 16) & 0xFF) / 255.0f;
+    float g = (float)((rgb >> 8) & 0xFF) / 255.0f;
+    float b = (float)(rgb & 0xFF) / 255.0f;
+
+    return (0.2126f * r * r) + (0.7152f * g * g) + (0.0722f * b * b);
+}
+
+bool theme_contrasts(theme_colour_t a, theme_colour_t b)
+{
+    const theme_t *t = THEMES[current];
+    float la = luminance(t->colours[a]);
+    float lb = luminance(t->colours[b]);
+    float ratio = (la > lb) ? ((la + 0.05f) / (lb + 0.05f)) : ((lb + 0.05f) / (la + 0.05f));
+
+    return ratio >= 3.0f;
+}
