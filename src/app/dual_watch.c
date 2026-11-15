@@ -51,6 +51,8 @@
 #include "systime.h"
 #include "radio.h"
 #include "dmr.h"
+#include "dmr_ids.h"
+#include "last_heard.h"
 #include "tones.h"
 #include "text.h"
 #include "menus.h"
@@ -419,7 +421,8 @@ static void draw_panel(int i, int tx)
     int32_t x = WIDGET_MARGIN + 4;
     int32_t lx = x;
     bool receiving = (i == current) && !paths_same() && ((state == STATE_RECEIVING) || (state == STATE_HANG));
-    bool bright = receiving || (i == tx);
+    bool ptt = (i == tx);
+    int32_t right = FB_WIDTH - WIDGET_MARGIN;
     int power = (ch->libre_dmr_power != 0) ? (ch->libre_dmr_power - 1) : settings.tx_power_level;
     char buffer[48];
     char detail[24];
@@ -428,45 +431,83 @@ static void draw_panel(int i, int tx)
     if (paths_same() && (i == 1)) {
         return; // one path only
     }
-    if (i == 1) {
-        draw_hline(0, top - 1, FB_WIDTH, THEME_COLOUR_LINE);
+    // The path with a signal: a green bar on the left
+    if (i == 1) { // between the two paths, to be seen
+        draw_fill_rect(WIDGET_MARGIN, top - 2, FB_WIDTH - (2 * WIDGET_MARGIN), 2, THEME_COLOUR_OFF);
     }
     if (receiving) {
-        draw_fill_rect(0, top + 4, 5, PANEL_HEIGHT - 8, THEME_COLOUR_RX); // the path with a signal
+        draw_fill_rect(0, top + 4, 5, PANEL_HEIGHT - 8, THEME_COLOUR_RX);
     }
 
-    // PTT (the transmit path), receiving, or channel / VFO; the mode and the power
-    if (i == tx) {
-        lx += draw_chip(lx, top + 8, 22, "PTT", &font_roboto17_bold, THEME_COLOUR_WHITE, THEME_COLOUR_ACCENT) + 6;
+    // A DMR call heard on this path: who is talking takes the large line, the path's name goes to the header
+    bool caller = receiving && (ch->mode == CODEPLUG_MODE_DMR) && dmr_call(&call);
+    bool known = false; // its callsign: the large line, the ID top right; else the ID large
+    char who[LAST_HEARD_TEXT_SIZE];
+
+    if (caller) {
+        dmr_ids_caller_text(call.source, who, sizeof(who)); // "callsign name": the callsign only
+        who[strcspn(who, " ")] = '\0';
+        known = (who[0] != '\0');
+        if (!known) {
+            snprintf(who, sizeof(who), "%lu", (unsigned long)call.source);
+        }
     }
-    if (receiving) {
-        draw_chip(lx, top + 8, 22, text(TEXT_UI_DW_RECEIVING), &font_roboto17_bold, THEME_COLOUR_BACKGROUND,
-                  THEME_COLOUR_RX);
+
+    // Channel n or VFO (a call: the path's name); on the right "PTT" (the transmit path), the mode and the power
+    if (caller) {
+        draw_text(lx, top + 8, p->name, &font_roboto17, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT_LABEL);
     } else if (p->vfo) {
         draw_text(lx, top + 8, "VFO", &font_roboto17, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT_LABEL);
     } else {
         snprintf(buffer, sizeof(buffer), "%s %d", text(TEXT_APRS_CHANNEL), path_ref(i));
         draw_text(lx, top + 8, buffer, &font_roboto17, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT_LABEL);
     }
-    snprintf(buffer, sizeof(buffer), "%s  %s", codeplug_mode_name(ch->mode),
-             bottom_bar_power_label((power < 10) ? power : 9));
-    draw_text(FB_WIDTH - WIDGET_MARGIN, top + 8, buffer, &font_roboto17, FONT_ALIGN_RIGHT, THEME_COLOUR_TEXT_LABEL);
+    if (ptt) {
+        int32_t w = font_text_width(&font_roboto14, "PTT") + 10;
 
-    // The name, large
-    draw_text(x, top + 32, p->name, &font_roboto32_bold, FONT_ALIGN_LEFT,
-              (bright ? THEME_COLOUR_TEXT : THEME_COLOUR_TEXT_SECOND));
+        draw_fill_rect(right - w, top + 9, w, 18, THEME_COLOUR_ACCENT);
+        draw_text(right - 5, top + 9 + ((18 - font_roboto14.line_height) / 2), "PTT", &font_roboto14, FONT_ALIGN_RIGHT,
+                  THEME_COLOUR_WHITE);
+        right -= w + 6;
+    }
+    if (known) {
+        snprintf(buffer, sizeof(buffer), "ID %lu", (unsigned long)call.source);
+    } else {
+        snprintf(buffer, sizeof(buffer), "%s  %s", codeplug_mode_name(ch->mode),
+                 bottom_bar_power_label((power < 10) ? power : 9));
+    }
+    draw_text(right, top + 8, buffer, &font_roboto17, FONT_ALIGN_RIGHT, THEME_COLOUR_TEXT_LABEL);
 
-    // The frequency, then the tone, the TG, or who is talking
-    snprintf(buffer, sizeof(buffer), "%lu.%04lu", (unsigned long)(ch->rx_freq / 100000),
-             (unsigned long)((ch->rx_freq % 100000) / 10));
+    // The name, large; a call: the caller's callsign (its ID when not known)
+    draw_text(x, top + 32, (caller ? who : p->name), &font_roboto32_bold, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT);
+
+    // "RX" and "TX" small, each before its frequency
+    lx = x;
+    for (int f = 0; f < 2; f++) {
+        uint32_t frequency = f ? ch->tx_freq : ch->rx_freq;
+
+        lx = font_draw_text(lx, top + 70 + (font_roboto20.ascent - font_roboto14.ascent), text(f ? TEXT_UI_TX : TEXT_UI_RX),
+                            &font_roboto14, FONT_ALIGN_LEFT, theme_colour(THEME_COLOUR_TEXT_LABEL)) +
+             2;
+        snprintf(buffer, sizeof(buffer), "%lu.%05lu", (unsigned long)(frequency / 100000),
+                 (unsigned long)(frequency % 100000));
+        lx = font_draw_text(lx, top + 70, buffer, &font_roboto20, FONT_ALIGN_LEFT,
+                            theme_colour(THEME_COLOUR_TEXT_SECOND)) +
+             6; // both within the margin: xxx.xxxxx twice
+    }
+
+    // Receiving: the S meter; else the timeslot and TG, or the tone
+    if (receiving) {
+        s_meter_data_t meter = {.compact = true, .active = true, .open = radio_is_receiving()};
+
+        s_meter_set_signal(&meter, radio_signal());
+        s_meter_draw(top + 96, &meter);
+        return;
+    }
     detail[0] = '\0';
     if (ch->mode == CODEPLUG_MODE_DMR) {
-        if (receiving && dmr_call(&call)) {
-            snprintf(detail, sizeof(detail), "ID %lu", (unsigned long)call.source);
-        } else {
-            snprintf(detail, sizeof(detail), "TS%d  TG %lu", ((ch->flag2 & 0x40) ? 2 : 1),
-                     (unsigned long)(p->talk_group & CODEPLUG_CONTACT_ID_MAX));
-        }
+        snprintf(detail, sizeof(detail), "TS%d  TG %lu", ((ch->flag2 & 0x40) ? 2 : 1),
+                 (unsigned long)(p->talk_group & CODEPLUG_CONTACT_ID_MAX));
     } else {
         uint16_t tone = (ch->rx_tone != CODEPLUG_CSS_NONE) ? ch->rx_tone : ch->tx_tone;
 
@@ -475,18 +516,8 @@ static void draw_panel(int i, int tx)
         }
     }
     if (detail[0] != '\0') {
-        size_t length = strlen(buffer);
-
-        snprintf(buffer + length, sizeof(buffer) - length, "  %s", detail);
-    }
-    draw_text(x, top + 72, buffer, &font_roboto20, FONT_ALIGN_LEFT,
-              (bright ? THEME_COLOUR_TEXT_SECOND : THEME_COLOUR_TEXT_DIM));
-
-    if (receiving) {
-        s_meter_data_t meter = {.compact = true, .active = true, .open = radio_is_receiving()};
-
-        s_meter_set_signal(&meter, radio_signal());
-        s_meter_draw(top + 100, &meter);
+        draw_text(x, top + 96, detail, &font_roboto17, FONT_ALIGN_LEFT,
+                  THEME_COLOUR_TEXT_LABEL);
     }
 }
 

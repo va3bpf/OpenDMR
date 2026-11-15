@@ -40,8 +40,8 @@ def main():
 
     rgb = []
     for c in palette:
-        c = ((c & 0xFF) << 8) | (c >> 8)  # native colours are byte swapped RGB565
-        rgb.append((((c >> 11) & 0x1F) * 255 // 31, ((c >> 5) & 0x3F) * 255 // 63, (c & 0x1F) * 255 // 31))
+        c = ((c & 0xFF) << 8) | (c >> 8)  # native colours are byte swapped BGR565 (panel.c panel_rgb888_to_native())
+        rgb.append(((c & 0x1F) * 255 // 31, ((c >> 5) & 0x3F) * 255 // 63, ((c >> 11) & 0x1F) * 255 // 31))
     img = Image.new('RGB', (WIDTH, HEIGHT))
     px = img.load()
     for i, b in enumerate(data):
