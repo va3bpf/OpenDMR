@@ -39,6 +39,7 @@ that folder). It holds:
 | `tools/fonts/ttf/RobotoCondensed-VF.ttf` | The font that tool uses for the text on the radio's screen |
 | `tools/debug/fw_update.py`, `tools/debug/updater/updater.bin` | Updates (while the radio runs OpenDMR) |
 | `tools/fonts/upload_cjk.py` | Writes the Chinese font again while the radio runs OpenDMR |
+| `tools/debug/pin_wipe.py` | Clears a forgotten power-on / lock PIN (radio off, run, switch on within 30 s; codeplug and settings kept) |
 | `tools/ids/id_db.py` | Builds and writes the DMR ID database with places (user manual, section 13) |
 | `docs/manual.md`, `docs/manual.en.md`, `docs/manual/` | User manual |
 | `opendmr-cps.html` | Our codeplug software (OpenDMR CPS): double-click it, in Chrome / Edge; see [5](#5-writing-the-codeplug) |
