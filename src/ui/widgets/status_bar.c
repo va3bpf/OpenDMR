@@ -51,9 +51,12 @@ void status_bar_draw(const status_bar_data_t *data)
 
     // On the panel colour, no line under it: only the receive line (green) or the transmit bar (red)
     draw_fill_rect(0, 0, FB_WIDTH, WIDGET_STATUS_BAR_HEIGHT, (transmitting ? THEME_COLOUR_TX : THEME_COLOUR_PANEL));
-    draw_fill_rect(0, WIDGET_STATUS_BAR_HEIGHT, FB_WIDTH, 2,
-                   ((data->state == STATUS_BAR_RECEIVING) ? THEME_COLOUR_RX
-                                                          : (transmitting ? THEME_COLOUR_TX : THEME_COLOUR_PANEL)));
+    // receiving: 4 px of green, into the main area's top margin (2 px were lost next to a light theme's dark band)
+    if (data->state == STATUS_BAR_RECEIVING) {
+        draw_fill_rect(0, WIDGET_STATUS_BAR_HEIGHT, FB_WIDTH, 4, THEME_COLOUR_RX);
+    } else {
+        draw_fill_rect(0, WIDGET_STATUS_BAR_HEIGHT, FB_WIDTH, 2, (transmitting ? THEME_COLOUR_TX : THEME_COLOUR_PANEL));
+    }
 
     if (transmitting) {
         x += icons_draw(x, (WIDGET_STATUS_BAR_HEIGHT - ICONS_SIZE) / 2, ICONS_TX, THEME_COLOUR_WHITE) + 4;
