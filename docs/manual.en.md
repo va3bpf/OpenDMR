@@ -59,7 +59,7 @@ All of these can be changed in Options → Key settings (see [12](#12-lock-quick
 | ▶ / ◀ | Talk group + / − (through the RX group list) | Squelch + / − |
 | SK2 + ▶ / ◀ | Power + / − | Same |
 | SK2 + ▶ long | User power | Same |
-| SK2 + ▲ / ▼ | Zone + / − (channel mode); transmit frequency + / − (VFO) | Same |
+| SK2 + ▲ / ▼ | Zone + / − (channel mode); which frequency ▲ ▼ and the knob change, RX or TX (VFO) | Same |
 | SK2 alone | Call back the talk group just heard | — |
 | SK1 alone | FM broadcast radio | Same |
 | SK1 + ▲ / ▼ | Scan up / down | Same |
@@ -79,10 +79,10 @@ Also: SK2 + menu key opens the channel details directly; SK2 + a digit is a quic
 - **Main area**: on the channel screen the zone and position, the channel name (large), the frequency, the talk
   group, the S meter.
 - **Bottom bar**: on the main screens the mode (`DMR`/`FM`/`AM`/`USB`/`LSB`), power and bandwidth; on lists what the two keys do.
-- **Lists** (menus, settings): the title bar shows the name and the position (`1/10`), the selected row is orange,
+- **Lists** (menus, settings): the title bar shows the name and the position (`1/10`), the selected row is blue,
   7 rows a page, ▲ ▼ wrap around at the ends.
 
-Colours mean something: green = receive, red = transmit, orange = selected / current, amber = warning (low battery,
+Colours mean something: green = receive, red = transmit, blue = selected / current, amber = warning (low battery,
 scan, timeout near).
 
 ---
@@ -152,14 +152,16 @@ and B): **hold the back key** to switch, or choose in the VFO menu.
 
 | To | Keys |
 |---|---|
-| Change the receive frequency | ▲ ▼ or the knob (one step) |
-| Change the transmit frequency | SK2 + knob, or SK2 + ▲ ▼ |
+| Change the frequency chosen | ▲ ▼ or the knob (one step) |
+| Choose the receive / the transmit frequency | SK2 + ▲ / SK2 + ▼ |
 | Type a frequency | Digits (e.g. `43500000`: it is set after the 8th digit, or with the menu key; the back key deletes one) |
 | Swap Rx and Tx while held | SK1 + SK2 |
 | Mode: FM → AM → USB → LSB → DMR → P25 | SK1 + * |
 | Squelch (FM, AM, SSB) / talk group (DMR, P25) | ▶ ◀ |
 
-The top line shows which frequency is being changed (`RX` or `TX`) and the step.
+Both frequencies are shown large: the receive one with `RX` (green) on its right, the transmit one with `TX` (red).
+The one the keys change is white, and the digit its step changes is underlined (in its colour): a 12.5 or 25 kHz step
+underlines the second decimal, 2.5 – 6.25 kHz the third. The top line shows the VFO and the step itself.
 
 **AM, USB and LSB are receive only** (the RF chip can only transmit FM): the bottom bar shows `Rx Only`, and the PTT
 shows "Switch to FM or DMR". Their squelch is on the signal strength (0 %: always open); it closes after the signal
@@ -201,17 +203,20 @@ the NAC (e.g. `NAC293`), and below the frequency come the talk group and the NAC
 
 ## 5. Receiving
 
-<img src="manual/zh/channel.png" alt="DMR receive (channel)"> <img src="manual/zh/vfo.png" alt="DMR receive (VFO)">
-
-(These two were taken with the Chinese interface: "接收中" is "Receiving".)
+<img src="manual/en/receive-vfo.png" alt="DMR receive (VFO)"> <img src="manual/en/receive-channel.png" alt="DMR receive (channel)">
 
 - A received signal: the green line under the status bar, green signal bars, the S meter value in green; above S9
   the excess is shown in small red figures (`+xxdB`).
-- DMR: "Receiving", the caller (callsign or DMR ID, large), the name, the ID, the talk group. The caller shows within
-  about 0.7 s. Names come from the contacts and from the DMR ID database written by the CPS.
-- If the call carries a position (ETSI GPS Info, as sent by other radios), the receive screen shows the distance and
-  the direction from your position on the ID line ("12.3 km NE"); without your position it shows the caller's
-  coordinates. Last heard keeps a short distance, or the coordinates.
+- DMR, the caller panel (its lines stay where they are, whatever is known):
+  - the channel or VFO name, and on the right the caller's DMR ID;
+  - the caller's callsign, large (its DMR ID when not known);
+  - the name, the city and state, the country (from the DMR ID database, see
+    [13](#13-cps-hotspot-firmware-update); the city and state can be hidden: Display options → Caller's place). The
+    country also shows without the database: it comes from the ID's first 3 digits;
+  - the position: the pin lights up when the call carries one (ETSI GPS Info, as sent by other radios), with the
+    distance and the direction from your position ("12.3 km NE"); without your position, the caller's coordinates;
+  - the talk group (or whom a private call is for), the S meter, the bottom bar as on the screen under it.
+  The caller shows within about 0.7 s. Names come from the contacts, the DMR ID database, or the caller's talker alias.
 - Calls go into Last heard. **SK2** calls back the talk group just heard (a private call: the caller).
 - FM: audio when the squelch opens; ▶ ◀ change the squelch, shown on the screen for a moment.
 
@@ -264,6 +269,10 @@ Two paths watched at once, each **any channel or VFO A / B** (both may be the sa
   a channel or VFO puts it in (into the path shown on the right; the next add replaces the other path).
 - The paths are watched in turn; a path with a signal is kept while the signal lasts and a moment after (for the
   answer).
+- Each path: channel number or VFO, mode and power, `PTT` on the right of the transmit path; the name large; the
+  receive and transmit frequencies; the timeslot and talk group, or the tone.
+- A path with a signal: a green bar on its left, its S meter on the last line. A DMR call: the caller's callsign
+  replaces the name (its ID when not known), the ID goes top right and the path's name to the left of the header.
 - Transmit: on the path heard last (it has the `PTT` badge); ▲ / ▼ fix the upper / lower path for transmit.
 - Menu key: the main menu; menu key held: the dual watch menu (off, the transmit path). Back key: back to the single
   watch. Kept over power off.
@@ -425,7 +434,8 @@ SK2 + ▶ ◀ changes the one in use, and it is kept.
 <img src="manual/en/display-options.png" alt="Display options"> <img src="manual/en/display-options-2.png" alt="Display options 2">
 
 Brightness (day), Nite bright, Min bright (the backlight when "off"); Mode (Auto / Squelch / Manual / Buttons),
-Timeout; Auto night; LEDs; Timezone (an hour a step, a quarter with SK2 held); Time shown in UTC or local time.
+Timeout; Auto night; LEDs; Timezone (an hour a step, a quarter with SK2 held); Time shown in UTC or local time;
+Caller's place (the city and state of a DMR caller on the receive screen; the country always shows).
 
 ### Sound options
 
@@ -537,6 +547,21 @@ The OpenGD77 CPS (download it from <https://www.opengd77.com/>: see the [install
 
 It writes: channels, zones, contacts, TG lists, DTMF contacts, APRS configurations, satellite keps, the DMR ID
 database (for the callers' names).
+
+### DMR ID database with places
+
+OpenDMR also reads a database of its own, with each caller's callsign, name, city, state and country (from
+RadioID's list: about 317 000 IDs in 3.5 MB). It is written with the programming cable, from a computer with Python 3
+and pyserial:
+
+```
+py tools\ids\id_db.py build                  (downloads RadioID's list and packs it: ids.bin)
+py tools\ids\id_db.py write COM6             (the radio on, the cable in)
+```
+
+`build --countries "Canada,United States"` keeps only those countries (smaller, written faster). The first write takes
+about 3 minutes (the cable goes up to 750 000 baud); writing a newer list again only sends the parts that changed.
+While it is there it is used instead of the CPS's database; RadioID's list has no surnames.
 
 ### DMR hotspot (MMDVM)
 

@@ -46,6 +46,7 @@ DMR 热点（MMDVM）、VOX、可自定义的按键……见 [使用说明书](d
 | `tools/fonts/` | 字体转换（`mkfont.py`）、中文字库（`mkcjk.py` → `build/cjk.bin`，`upload_cjk.py` 写入电台） |
 | `tools/text/` | 界面文字表的生成脚本和原始语言文件（来自 OpenGD77） |
 | `tools/satellite/` | 业余卫星轨道根数写入（`write_keps.py`） |
+| `tools/ids/` | 带地址的 DMR ID 数据库（`id_db.py`：从 RadioID 名单生成、经编程线写入；固件内置的国家表） |
 | `tools/release/` | 发布脚本 `make_release.py` |
 
 ---

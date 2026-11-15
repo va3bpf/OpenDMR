@@ -51,6 +51,7 @@ Users: download the package from [Releases](../../releases) and follow the
 | `tools/fonts/` | Font conversion (`mkfont.py`), the Chinese font (`mkcjk.py` → `build/cjk.bin`, `upload_cjk.py` writes it to the radio) |
 | `tools/text/` | The generator of the interface text tables and the original language files (from OpenGD77) |
 | `tools/satellite/` | Writes the satellite keps (`write_keps.py`) |
+| `tools/ids/` | The DMR ID database with places (`id_db.py`: build it from RadioID's list, write it over the cable; the countries built into the firmware) |
 | `tools/release/` | The release script `make_release.py` |
 
 ---
