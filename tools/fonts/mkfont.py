@@ -27,6 +27,10 @@ HEADER = '''/*
 '''
 
 
+# Characters of Latin-1 Supplement (accented letters for Spanish, Portuguese, French, German, etc.)
+LATIN1_CHARS = ''.join(chr(c) for c in range(0x20, 0x100) if c < 0x7F or c >= 0xA0)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('ttf')
@@ -34,6 +38,8 @@ def main():
     ap.add_argument('name', help='C name of the font, e.g. font_roboto24')
     ap.add_argument('--weight', default='Regular', help='variation name of a variable font')
     ap.add_argument('--chars', help='characters to include (default: printable ASCII)')
+    ap.add_argument('--latin1', action='store_true', help='include Latin-1 Supplement (0xA0-0xFF, accented characters)')
+    ap.add_argument('--out-file', help='output file name without .c extension (defaults to name stripped of font_ prefix)')
     ap.add_argument('--licence', default='OFL-RobotoCondensed.txt')
     args = ap.parse_args()
 
@@ -44,7 +50,12 @@ def main():
         pass
     ascent, descent = font.getmetrics()
 
-    chars = sorted(set(args.chars)) if args.chars else [chr(c) for c in range(0x20, 0x7F)]
+    if args.chars:
+        chars = sorted(set(args.chars))
+    elif args.latin1:
+        chars = sorted(set(LATIN1_CHARS))
+    else:
+        chars = [chr(c) for c in range(0x20, 0x7F)]
     codes = [ord(c) for c in chars]
     first, last = codes[0], codes[-1]
 
@@ -80,14 +91,15 @@ def main():
     out.append('};\n\n')
     out.append('static const font_glyph_t glyphs[] FLASH_CONST = {\n')
     for code, (w, h, xo, yo, adv, off) in zip(range(first, last + 1), glyphs):
-        label = chr(code) if 0x20 < code < 0x7F and chr(code) not in '\\\'' else 'U+%04X' % code
+        label = chr(code) if ((0x20 < code < 0x7F) or (0xA0 <= code <= 0xFF)) and chr(code) not in '\\\'' else 'U+%04X' % code
         out.append('\t{ %d, %d, %d, %d, %d, %s }, // %s\n' % (w, h, xo, yo, adv, ('FONT_GLYPH_NONE' if off == 0xFFFFFFFF else str(off)), label))
     out.append('};\n\n')
     out.append('const font_t %s FLASH_CONST = { %d, %d, 0x%04X, %d, glyphs, bitmap };\n'
                % (args.name, ascent + descent, ascent, first, last - first + 1))
 
     os.makedirs(OUT_DIR, exist_ok=True)
-    path = os.path.join(OUT_DIR, args.name + '.c')
+    file_name = args.out_file or (args.name[5:] if args.name.startswith('font_') else args.name)
+    path = os.path.join(OUT_DIR, file_name + '.c')
     with open(path, 'w', encoding='utf-8', newline='\n') as f:
         f.write(''.join(out))
     print('%s: %d glyphs, %d bytes of bitmap, line %d px' % (path, len(codes), len(bitmap), ascent + descent))
