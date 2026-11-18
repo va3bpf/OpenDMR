@@ -140,6 +140,7 @@ EXTRA = [
     ("ui_pin_wait", "Wait %u s", "请等待 %u 秒", "Espere %u s"),
     ("ui_any_key_unlock", "Any key to unlock", "按任意键解锁", "Tecla: desbloquear"),
     ("caller_place", "Caller's place", "对方地址", "Lugar llamante"),
+    ("show_recent_callers", "Recent callers", "显示最近主叫", "Últ. llamadas"),
     ("theme", "Theme", "主题", "Tema"),
     # The language row of the options: English in every language, so it can be found from a language one cannot read
     ("language_menu", "Language", "Language", "Language"),
