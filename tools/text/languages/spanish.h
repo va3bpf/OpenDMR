@@ -1,4 +1,4 @@
-/* -*- coding: windows-1252-unix; -*- */
+/* -*- coding: utf-8; -*- */
 /*
  * Copyright (C) 2019-2024 Roger Clark, VK3KYY / G4KYF
  *
@@ -35,10 +35,7 @@
 #define USER_INTERFACE_LANGUAGES_SPANISH_H_
 /********************************************************************
  *
- * VERY IMPORTANT.
- * This file should not be saved with UTF-8 encoding
- * Use Notepad++ on Windows with ANSI encoding
- * or emacs on Linux with windows-1252-unix encoding
+ * This file is UTF-8 encoded.
  *
  ********************************************************************/
 #if defined(PLATFORM_GD77) || defined(PLATFORM_GD77S) || defined(PLATFORM_DM1801) || defined(PLATFORM_DM1801A) || defined(PLATFORM_RD5R)
@@ -47,14 +44,14 @@ __attribute__((section(".upper_text")))
 const stringsTable_t spanishLanguage =
 {
 .magicNumber                            = { LANGUAGE_TAG_MAGIC_NUMBER, LANGUAGE_TAG_VERSION },
-.LANGUAGE_NAME 				= "Espanol", // MaxLen: 16
-.menu					= "Menu", // MaxLen: 16
-.credits				= "Creditos", // MaxLen: 16
+.LANGUAGE_NAME 				= "Español", // MaxLen: 16
+.menu					= "Menú", // MaxLen: 16
+.credits				= "Créditos", // MaxLen: 16
 .zone					= "Zona", // MaxLen: 16
 .rssi					= "RSSI", // MaxLen: 16
-.battery				= "Bateria", // MaxLen: 16
+.battery				= "Batería", // MaxLen: 16
 .contacts				= "Contactos", // MaxLen: 16
-.last_heard				= "Ult. escuchado", // MaxLen: 16
+.last_heard				= "Últ. escuchado", // MaxLen: 16
 .firmware_info				= "Info firmware", // MaxLen: 16
 .options				= "Opciones", // MaxLen: 16
 .display_options			= "Opc. pantalla", // MaxLen: 16
@@ -85,7 +82,7 @@ const stringsTable_t spanishLanguage =
 .accept_call				= "Devolver llamada", // MaxLen: 16
 .private_call				= "Llamada privada", // MaxLen: 16
 .squelch				= "Squelch", // MaxLen: 8
-.quick_menu 				= "Menu rapido", // MaxLen: 16
+.quick_menu 				= "Menú rápido", // MaxLen: 16
 .filter					= "Filtro", // MaxLen: 7 (with ':' + settings: .none, "CC", "CC,TS", "CC,TS,TG")
 .all_channels				= "Todos canales", // MaxLen: 16
 .gotoChannel				= "IR A",  // MaxLen: 11 (" 1024")
@@ -105,7 +102,7 @@ const stringsTable_t spanishLanguage =
 .pc					= "PC", // MaxLen: 8
 .ts					= "TS", // MaxLen: 8
 .mode					= "Modo",  // MaxLen: 12
-.colour_code				= "Codigo color", // MaxLen: 16 (with ':' * .n_a)
+.colour_code				= "Código color", // MaxLen: 16 (with ':' * .n_a)
 .n_a					= "N/A",// MaxLen: 16 (with ':' * .colour_code)
 .bandwidth				= "Ancho banda", // MaxLen: 16 (with : + .n_a, "25kHz" or "12.5kHz")
 .stepFreq				= "Paso", // MaxLen: 7 (with ':' + xx.xxkHz fitted)
@@ -113,10 +110,10 @@ const stringsTable_t spanishLanguage =
 .off					= "No", // MaxLen: 16 (with ':' + .timeout_beep, .band_limits, aprs_decay)
 .zone_skip				= "Salto zona", // MaxLen: 16 (with ':' + .yes or .no)
 .all_skip				= "Saltar todo", // MaxLen: 16 (with ':' + .yes or .no)
-.yes					= "Si", // MaxLen: 16 (with ':' + .zone_skip, .all_skip)
+.yes					= "Sí", // MaxLen: 16 (with ':' + .zone_skip, .all_skip)
 .no					= "No", // MaxLen: 16 (with ':' + .zone_skip, .all_skip, .aprs_decay)
 .tg_list				= "Lista TG", // MaxLen: 16 (with ':' and codeplug group name)
-.on					= "Si", // MaxLen: 16 (with ':' + .band_limits)
+.on					= "Sí", // MaxLen: 16 (with ':' + .band_limits)
 .timeout_beep				= "Aviso timeout", // MaxLen: 16 (with ':' + .n_a or 5..20 + 's')
 .list_full				= "Lista llena",
 .dmr_cc_scan				= "Scan CC", // MaxLen: 12 (with ':' + settings: .on or .off).
@@ -134,14 +131,14 @@ const stringsTable_t spanishLanguage =
 .screen_normal				= "Normal", // MaxLen: 16
 .backlight_timeout			= "Tiempo apagado", // MaxLen: 16 (with ':' + .no to 30s)
 .scan_delay				= "Demora scan", // MaxLen: 16 (with ':' + 1..30 + 's')
-.yes___in_uppercase			= "SI", // MaxLen: 8 (choice above green/red buttons)
+.yes___in_uppercase			= "SÍ", // MaxLen: 8 (choice above green/red buttons)
 .no___in_uppercase			= "NO", // MaxLen: 8 (choice above green/red buttons)
 .DISMISS				= "CERRAR", // MaxLen: 8 (choice above green/red buttons)
 .scan_mode				= "Modo scan", // MaxLen: 16 (with ':' + .hold, .pause or .stop)
 .hold					= "Mantener", // MaxLen: 16 (with ':' + .scan_mode)
 .pause					= "Pausa", // MaxLen: 16 (with ':' + .scan_mode)
-.list_empty				= "Lista vacia", // MaxLen: 16
-.delete_contact_qm			= "Eliminar?", // MaxLen: 16
+.list_empty				= "Lista vacía", // MaxLen: 16
+.delete_contact_qm			= "¿Eliminar?", // MaxLen: 16
 .contact_deleted			= "Eliminado", // MaxLen: 16
 .contact_used				= "Contacto usado", // MaxLen: 16
 .in_tg_list				= "en lista TG", // MaxLen: 16
@@ -151,14 +148,14 @@ const stringsTable_t spanishLanguage =
 .group_call				= "Llamada grupo", // MaxLen: 16
 .all_call				= "Llamar a todos", // MaxLen: 16
 .tone_scan				= "Scan tono", // MaxLen: 16
-.low_battery				= "BATERIA BAJA!", // MaxLen: 16
+.low_battery				= "¡BATERÍA BAJA!", // MaxLen: 16
 .Auto					= "Auto", // MaxLen 16 (with .mode + ':', .mode)
 .manual					= "Manual",  // MaxLen 16 (with .mode + ':', .mode)
 .ptt_toggle				= "PTT fijo", // MaxLen 16 (with ':' + .on or .off)
 .private_call_handling			= "Permitir PC", // MaxLen 16 (with ':' + .on or .off)
 .stop					= "Parar", // Maxlen 16 (with ':' + .scan_mode/.dmr_beep)
-.one_line				= "1 linea", // MaxLen 16 (with ':' + .contact)
-.two_lines				= "2 lineas", // MaxLen 16 (with ':' + .contact)
+.one_line				= "1 línea", // MaxLen 16 (with ':' + .contact)
+.two_lines				= "2 líneas", // MaxLen 16 (with ':' + .contact)
 .new_channel				= "Nuevo canal", // MaxLen: 16, leave room for a space and four channel digits after
 .priority_order				= "Orden", // MaxLen 16 (with ':' + 'Cc/DB/TA')
 .dmr_beep				= "Aviso DMR", // MaxLen 16 (with ':' + .star/.stop/.both/.none)
@@ -189,20 +186,20 @@ const stringsTable_t spanishLanguage =
 .dtmf_contact_list			= "Contactos DTMF", // Maxlen: 16
 .channel_power				= "Pot. canal", //Displayed as "Ch Power:" + .from_master or "Ch Power:"+ power text e.g. "Power:500mW" . Max total length 16
 .from_master				= "Maestro",// Displayed if per-channel power is not enabled  the .channel_power, and also with .location in APRS settings.
-.set_quickkey				= "Guardar rapido", // MaxLen: 16
+.set_quickkey				= "Guardar rápido", // MaxLen: 16
 .dual_watch				= "Doble escucha", // MaxLen: 16
 .info					= "Info", // MaxLen: 16 (with ':' + .off or .ts or .pwr or .both)
 .pwr					= "Pot.",
 .user_power				= "Pot. usuario",
 .temperature				= "Temperatura", // MaxLen: 16 (with ':' + .celcius or .fahrenheit)
-.celcius				= "�C",
+.celcius				= "°C",
 .seconds				= "segundos",
 .radio_info				= "Info radio",
 .temperature_calibration		= "Calib. temp.",
-.pin_code				= "Codigo PIN",
-.please_confirm				= "Confirmar?", // MaxLen: 15
+.pin_code				= "Código PIN",
+.please_confirm				= "¿Confirmar?", // MaxLen: 15
 .vfo_freq_bind_mode			= "Vinc. frec.",
-.overwrite_qm				= "Sobrescribir?", //Maxlen: 14 chars
+.overwrite_qm				= "¿Sobrescribir?", //Maxlen: 14 chars
 .eco_level				= "Nivel eco",
 .buttons				= "Botones",
 .leds					= "LEDs",
@@ -215,14 +212,14 @@ const stringsTable_t spanishLanguage =
 .dtmf_entry				= "Entrada DTMF",
 .name					= "Nombre",
 .carrier				= "Portadora",
-.zone_empty 				= "Zona vacia", // Maxlen: 12 chars.
+.zone_empty 				= "Zona vacía", // Maxlen: 12 chars.
 .time					= "Hora",
 .uptime					= "Activo",
 .hours					= "Horas",
 .minutes				= "Minutos",
-.satellite				= "Satelite",
+.satellite				= "Satélite",
 .alarm_time				= "Hora alarma",
-.location				= "Ubicacion",
+.location				= "Ubicación",
 .date					= "Fecha",
 .timeZone				= "Zona horaria",
 .suspend				= "Suspender",
@@ -253,34 +250,34 @@ const stringsTable_t spanishLanguage =
 .freq_set_VHF			= "Frec. VHF",
 .gps_acquiring			= "Buscando",
 .altitude				= "Alt",
-.calibration            = "Calibracion",
+.calibration            = "Calibración",
 .freq_set_UHF           = "Frec. UHF",
 .cal_frequency          = "Frec.",
 .cal_pwr                = "Nivel pot.",
 .pwr_set                = "Ajustar",
-.factory_reset          = "Restabl. fabrica",
+.factory_reset          = "Restabl. fábrica",
 .rx_tune				= "Ajuste RX",
 .transmitTalkerAliasTS2	= "TA Tx TS2", // Maxlen 16 (with : + .ta_text, 'APRS' , .both or .off)
 .ta_text				= "Texto",
-.daytime_theme_day			= "Tema dia", // MaxLen: 16
+.daytime_theme_day			= "Tema día", // MaxLen: 16
 .daytime_theme_night			= "Tema noche", // MaxLen: 16
 .theme_chooser				= "Elegir tema", // Maxlen: 16
 .theme_options				= "Opc. tema",
 .theme_fg_default			= "Texto def.", // MaxLen: 16 (+ colour rect)
 .theme_bg				= "Fondo", // MaxLen: 16 (+ colour rect)
-.theme_fg_decoration			= "Decoracion", // MaxLen: 16 (+ colour rect)
+.theme_fg_decoration			= "Decoración", // MaxLen: 16 (+ colour rect)
 .theme_fg_text_input			= "Entrada texto", // MaxLen: 16 (+ colour rect)
 .theme_fg_splashscreen			= "Texto arranque", // MaxLen: 16 (+ colour rect)
 .theme_bg_splashscreen			= "Fondo arranque", // MaxLen: 16 (+ colour rect)
 .theme_fg_notification			= "Texto aviso", // MaxLen: 16 (+ colour rect)
-.theme_fg_warning_notification		= "Aviso precaucion", // MaxLen: 16 (+ colour rect)
+.theme_fg_warning_notification		= "Aviso precaución", // MaxLen: 16 (+ colour rect)
 .theme_fg_error_notification		= "Texto error", // MaxLen: 16 (+ colour rect)
 .theme_bg_notification                  = "Fondo aviso", // MaxLen: 16 (+ colour rect)
-.theme_fg_menu_name			= "Nombre menu", // MaxLen: 16 (+ colour rect)
-.theme_bg_menu_name			= "Fondo menu", // MaxLen: 16 (+ colour rect)
-.theme_fg_menu_item			= "Item menu", // MaxLen: 16 (+ colour rect)
-.theme_fg_menu_item_selected		= "Item resaltado", // MaxLen: 16 (+ colour rect)
-.theme_fg_options_value			= "Valor opcion", // MaxLen: 16 (+ colour rect)
+.theme_fg_menu_name			= "Nombre menú", // MaxLen: 16 (+ colour rect)
+.theme_bg_menu_name			= "Fondo menú", // MaxLen: 16 (+ colour rect)
+.theme_fg_menu_item			= "Ítem menú", // MaxLen: 16 (+ colour rect)
+.theme_fg_menu_item_selected		= "Ítem resaltado", // MaxLen: 16 (+ colour rect)
+.theme_fg_options_value			= "Valor opción", // MaxLen: 16 (+ colour rect)
 .theme_fg_header_text			= "Texto cabecera", // MaxLen: 16 (+ colour rect)
 .theme_bg_header_text			= "Fondo cabecera", // MaxLen: 16 (+ colour rect)
 .theme_fg_rssi_bar			= "Barra RSSI", // MaxLen: 16 (+ colour rect)
@@ -295,7 +292,7 @@ const stringsTable_t spanishLanguage =
 .theme_fg_tx_counter			= "Contador TX", // MaxLen: 16 (+ colour rect)
 .theme_fg_polar_drawing			= "Polar", // MaxLen: 16 (+ colour rect)
 .theme_fg_satellite_colour		= "Punto sat.", // MaxLen: 16 (+ colour rect)
-.theme_fg_gps_number			= "Num. GPS", // MaxLen: 16 (+ colour rect)
+.theme_fg_gps_number			= "Núm. GPS", // MaxLen: 16 (+ colour rect)
 .theme_fg_gps_colour			= "Punto GPS", // MaxLen: 16 (+ colour rect)
 .theme_fg_bd_colour			= "Punto BeiDou", // MaxLen: 16 (+ colour rect)
 .theme_colour_picker_red		= "Rojo", // MaxLen 16 (with ':' + 3 digits value)
@@ -312,11 +309,11 @@ const stringsTable_t spanishLanguage =
 .aprs_interval				= "Intervalo", // MaxLen 16 (with ':' + 0.2..60 + 'min')
 .aprs_message_interval			= "Int. mensaje", // MaxLen 16 (with ':' + 3..30)
 .aprs_slow_rate				= "Tasa lenta", // MaxLen 16 (with ':' + 1..100 + 'min')
-.aprs_fast_rate				= "Tasa rapida", // MaxLen 16 (with ':' + 10..180 + 's')
+.aprs_fast_rate				= "Tasa rápida", // MaxLen 16 (with ':' + 10..180 + 's')
 .aprs_low_speed				= "Vel. baja", // MaxLen 16 (with ':' + 2..30 + 'km/h')
 .aprs_high_speed			= "Vel. alta", // MaxLen 16 (with ':' + 2..90 + 'km/h')
-.aprs_turn_angle			= "Ang. giro", // MaxLen 16 (with ':' + 5..90 + '�')
-.aprs_turn_slope			= "Pend. giro", // MaxLen 16 (with ':' + 1..255 + '�/v')
+.aprs_turn_angle			= "Áng. giro", // MaxLen 16 (with ':' + 5..90 + '°')
+.aprs_turn_slope			= "Pend. giro", // MaxLen 16 (with ':' + 1..255 + '°/v')
 .aprs_turn_time				= "Tiempo giro", // MaxLen 16 (with ':' + 5..180 + 's')
 .auto_lock				= "Bloq. auto", // MaxLen 16 (with ':' + .off or 0.5..15 (.5 step) + 'min')
 .trackball				= "Trackball", // MaxLen 16 (with ':' + .on or .off)
@@ -333,7 +330,7 @@ const stringsTable_t spanishLanguage =
 .ui_delete = "Borrar",
 .ui_sk2_knob = "SK2+Perilla",
 .fm_radio = "Radio FM",
-.ui_stereo = "Estereo",
+.ui_stereo = "Estéreo",
 .ui_seeking = "Buscando",
 .ui_fm_hint = "Giro: sinton. #*: ir",
 .ui_latitude = "Lat",
@@ -348,8 +345,8 @@ const stringsTable_t spanishLanguage =
 .ui_tone = "Tono",
 .ui_no_keps = "Cargar keps (CPS)",
 .ui_start = "Inicio",
-.ui_duration = "Duracion",
-.ui_dw_add = "Anadir a DW",
+.ui_duration = "Duración",
+.ui_dw_add = "Añadir a DW",
 .ui_dw_tx = "TX doble esc.",
 .ui_dw_follow = "Seguir",
 .ui_dw_watching = "Vigilando",
@@ -358,7 +355,7 @@ const stringsTable_t spanishLanguage =
 .ui_me = "yo",
 .ui_minutes_short = "min",
 .ui_hours_short = "h",
-.ui_number = "Numero",
+.ui_number = "Número",
 .ui_save = "Guardar",
 .ui_tx_refused = "No se puede TX",
 .ui_tx_timeout = "Timeout TX",
@@ -367,7 +364,7 @@ const stringsTable_t spanishLanguage =
 .ui_release_ptt = "Soltar el PTT",
 .ui_unlock_hint = "SK1 + * desbloq.",
 .ui_pc_incoming = "Llam. entrante",
-.ui_call_back_qm = "Devolver?",
+.ui_call_back_qm = "¿Devolver?",
 .ui_pc_to = "PC a",
 .ui_hash_type = "# Tipo",
 .ui_up_down_step = "Arr./Abajo: +/-1",
@@ -379,17 +376,14 @@ const stringsTable_t spanishLanguage =
 .ui_qk_knob = "Perilla > + < -",
 .ui_chip = "Chip",
 .ui_model = "Modelo",
-.ui_battery_graph = "Grafico bateria",
+.ui_battery_graph = "Gráfico batería",
 .ui_up_down = "Arr./Abajo",
 .ui_down_full_list = "Abajo: completa",
 .ui_edit = "Editar",
 };
 /********************************************************************
  *
- * VERY IMPORTANT.
- * This file should not be saved with UTF-8 encoding
- * Use Notepad++ on Windows with ANSI encoding
- * or emacs on Linux with windows-1252-unix encoding
+ * This file is UTF-8 encoded.
  *
  ********************************************************************/
 #endif /* USER_INTERFACE_LANGUAGES_SPANISH_H_ */
