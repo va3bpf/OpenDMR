@@ -54,6 +54,8 @@
 #define RX_RAM_INFO              0x30
 #define P25_SYNC_H               0x805575F5 // the frame sync 0x5575F5FF77FF, 24 bits a register (Open25-DM32)
 #define P25_SYNC_L               0x00FF77FF
+#define SYS_SOFT_RSTN            (volatile uint32_t *)(MODEM_REG_BASE + 0x0000)
+#define PHY_SOFT_RSTN            0x02
 
 p25_phy_block_t p25_phy_buf[P25_PHY_BLOCKS];
 volatile uint32_t p25_phy_count;
@@ -99,6 +101,15 @@ static void restore(void)
     active = false;
 }
 
+// The physical layer soft reset (SYS_SOFT_RSTN bit 1 low, then high; only status registers change): its timing from
+// the start, as after power on
+static void phy_soft_reset(void)
+{
+    uint32_t rst = *SYS_SOFT_RSTN;
+    *SYS_SOFT_RSTN = rst & ~PHY_SOFT_RSTN;
+    *SYS_SOFT_RSTN = rst | PHY_SOFT_RSTN;
+}
+
 // the registers saved, the physical layer receive on
 static void setup(bool p25_sync)
 {
@@ -114,6 +125,10 @@ static void setup(bool p25_sync)
 
     active = true; // the DMR interrupt handlers stand aside from here (dmr.c)
     *LAYER2_TXRX_CTRL = 0;
+    // Reset first: after a DMR transmission (the DMR engine's own send) the physical layer found no sync at all, every
+    // P25 call missed until a P25 or NXDN transmission reset it (measured 2026-11-18: 0 in 5 seconds heard, three
+    // calls of three, each time; with this reset, as before the DMR transmission)
+    phy_soft_reset();
     *WORK_MODE = WORK_MODE_PHY_CONTINUOUS;
     *LAYER2_CONTROL = LAYER2_PHY_RECEIVE;
     if (saved_p25_sync) {
@@ -370,8 +385,6 @@ void RAM_CODE p25_phy_rx_slot_isr(void)
 #define TX_BLOCK_DIBITS   (P25_PHY_BLOCK_BYTES * 4)
 #define TX_UNDERRUN_STOP  10
 #define TX_RF_SETUP_MS    30   // radio_phy_tx(): the set up and the PA ramp, then the modem
-#define SYS_SOFT_RSTN     (volatile uint32_t *)(MODEM_REG_BASE + 0x0000)
-#define PHY_SOFT_RSTN     0x02
 #define LAYER2_STATUS_REG (volatile uint32_t *)(MODEM_REG_BASE + 0x041C)
 
 volatile uint32_t p25_phy_tx_state;
@@ -488,9 +501,7 @@ int p25_phy_tx_begin(bool low_power)
     saved_tx_layer2 = *LAYER2_CONTROL;
     saved_tx_txrx = *LAYER2_TXRX_CTRL;
     *LAYER2_TXRX_CTRL = 0;
-    uint32_t rst = *SYS_SOFT_RSTN; // the modem's send timing from the start (above)
-    *SYS_SOFT_RSTN = rst & ~PHY_SOFT_RSTN;
-    *SYS_SOFT_RSTN = rst | PHY_SOFT_RSTN;
+    phy_soft_reset(); // the modem's send timing from the start (above)
     *WORK_MODE = WORK_MODE_PHY_CONTINUOUS;
     *LAYER2_CONTROL = LAYER2_PHY_SEND;
     uint8_t b[P25_PHY_BLOCK_BYTES];
@@ -513,9 +524,7 @@ void p25_phy_tx_end(void)
     // The physical layer reset again: else the modulator keeps its last output after the send, and the next signal
     // received (one call, whatever its length) came with every level a step up, +1 taken as +3 (~10 % of the symbols
     // wrong; measured 2026-11-12: 6 calls in 8 without it, none in 10 with it)
-    uint32_t rst = *SYS_SOFT_RSTN;
-    *SYS_SOFT_RSTN = rst & ~PHY_SOFT_RSTN;
-    *SYS_SOFT_RSTN = rst | PHY_SOFT_RSTN;
+    phy_soft_reset();
     *LAYER2_CONTROL = saved_tx_layer2;
     *WORK_MODE = saved_tx_work_mode;
     *LAYER2_TXRX_CTRL = saved_tx_txrx;
