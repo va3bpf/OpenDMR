@@ -148,9 +148,38 @@ static void not_yet(void)
 {
 }
 
-// The work of each tick by state: none here yet, the squelch, VOX and power saving still run in radio_task's loop
-static void tick_work_in_loop(void)
+/* The work of each tick (25 ms), by state: the machine calls receive_work() in RX, SCAN and BEACON_LISTEN,
+   transmit_work() in TX_VOICE, TX_ENDING and DATA_SEND (none in BEACON_SEND: the frame goes out in one call) */
+
+// The signal: the squelch in FM / AM / SSB (not while transmitting), the S meter in DMR / P25 / NXDN; nothing while
+// the power saving has the receiver off
+static void read_signal(void)
 {
+    if (eco_rx_off()) {
+        return;
+    }
+    if (is_analog() && !rs.transmitting) {
+        squelch_check();
+    } else if (rs.dmr_on) {
+        dmr_signal();
+    }
+}
+
+// Receiving: the VOX, the signal, the receive end beep, the power saving
+static void receive_work(void)
+{
+    vox_pass();
+    read_signal();
+    rx_beep_end_check();
+    eco_tick();
+}
+
+// Transmitting: the tones asked (radio_tx_signal(): DTMF and the like), then as receiving (the VOX releases the PTT,
+// the power saving stays off)
+static void transmit_work(void)
+{
+    tx_signal_update();
+    receive_work();
 }
 
 static const rfsm_ops_t FSM_OPS = {
@@ -174,17 +203,18 @@ static const rfsm_ops_t FSM_OPS = {
     .data_send = not_yet_id,
     .data_clear = not_yet,
     // each tick
-    .rx_work = tick_work_in_loop,
-    .scan_work = tick_work_in_loop,
-    .tx_work = tick_work_in_loop,
-    .ending_work = tick_work_in_loop,
+    .rx_work = receive_work,
+    .scan_work = receive_work,
+    .tx_work = transmit_work,
+    .ending_work = transmit_work,
     // a request's result
     .notify = fsm_notify,
 };
 
 /* One pass of the machine, in three parts, in this order:
    1. what was asked: the scan's level, a beacon request, the PTT's level;
-   2. the tick: the state's timed work (the beacon listening for a free channel, the data timeout);
+   2. the tick: the state's work (receive_work() / transmit_work(), the beacon listening for a free channel, the data
+      timeout);
    3. what came of it: a transmission over.
    The PTT before the tick: a PTT pressed while the beacon listens wins, the beacon is given up before the tick could
    start sending it. The results after the tick: the tick sends the beacon frame, the same pass ends it. */
@@ -215,14 +245,10 @@ static void fsm_pass(void)
 /* The task. It sleeps until radio_wake() or SAMPLE_MS (25 ms), then makes a pass, in this order:
    1. a new channel to the machine (applied now, or after a transmission);
    2. scanning a digital channel: a signal reading (see below);
-   3. the machine's pass (fsm_pass(), above);
-   4. the tones asked during a transmission (radio_tx_signal(): DTMF and the like);
-   5. the VOX;
-   6. the signal: the squelch in FM / AM / SSB, the S meter in DMR / P25 / NXDN;
-   7. the receive end beep;
-   8. the power saving.
+   3. the machine's pass (fsm_pass(), above): the requests, the tick with the state's work (receive_work() /
+      transmit_work(): the tones, the VOX, the signal, the receive end beep, the power saving), the results.
    Scanning a digital channel it wakes every SCAN_SAMPLE_MS (5 ms) to read the signal, a DMR burst being on the air
-   only 27.5 ms of every 60; steps 3 - 8 still run every 25 ms only. */
+   only 27.5 ms of every 60; step 3 still runs every 25 ms only. */
 static void RAM_CODE radio_task(void *arg)
 {
     TickType_t last_full_pass = 0;
@@ -248,27 +274,6 @@ static void RAM_CODE radio_task(void *arg)
 
         // 3. the state machine
         fsm_pass();
-
-        // 4. the transmit tones
-        tx_signal_update();
-
-        // 5. the VOX
-        vox_pass();
-
-        // 6. the signal
-        if (eco_rx_off()) {
-            // the receiver is off (power saving): nothing to read
-        } else if (is_analog() && !rs.transmitting) {
-            squelch_check();
-        } else if (rs.dmr_on) {
-            dmr_signal();
-        }
-
-        // 7. the receive end beep
-        rx_beep_end_check();
-
-        // 8. the power saving
-        eco_tick();
     }
 }
 

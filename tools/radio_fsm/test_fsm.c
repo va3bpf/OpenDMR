@@ -113,11 +113,11 @@ static const cell_t TABLE[RFSM_STATES][RFSM_EVENTS] = {
     [TE] = {{TE, ""}, {TE, ""}, {TE, ""}, {TE, "", 0, 0, 1}, {TE, "", 0, 0, 1}, {TE, "endw"}, {RX, "end"},
             {TE, "", 1}, {RX, "end", 0, 1}},
     [BL] = {{TV, "notify(7,abandoned),restore,tx_begin(voice)"}, {BL, ""}, {RX, "notify(7,abandoned),restore,apply"},
-            {BL, "", 0, 0, 1}, {BL, "", 0, 0, 1}, {BS, "tx_begin(beacon),send(7)"}, {BL, "", 1}, {BL, "", 1},
+            {BL, "", 0, 0, 1}, {BL, "", 0, 0, 1}, {BS, "rx,tx_begin(beacon),send(7)"}, {BL, "", 1}, {BL, "", 1},
             {RX, "notify(7,failed),restore", 0, 1}},
     [BS] = {{BS, ""}, {BS, ""}, {BS, ""}, {BS, "", 0, 0, 1}, {BS, "", 0, 0, 1}, {BS, ""},
             {RX, "end,notify(7,sent),restore"}, {BS, "", 1}, {RX, "end,notify(7,failed),restore", 0, 1}},
-    [DS] = {{DS, ""}, {DS, ""}, {DS, ""}, {DS, "", 0, 0, 1}, {DS, "", 0, 0, 1}, {DS, ""}, {DS, "", 1},
+    [DS] = {{DS, ""}, {DS, ""}, {DS, ""}, {DS, "", 0, 0, 1}, {DS, "", 0, 0, 1}, {DS, "txw"}, {DS, "", 1},
             {RX, "end,notify(9,sent)"}, {RX, "clear,end,notify(9,failed)", 0, 1}},
 };
 
@@ -189,10 +189,10 @@ static void sequences(void)
     carrier_on = true;
     now = 2500;
     step(&m, RFSM_TICK, 0);
-    expect("busy: still listening", &m, BL, "");
+    expect("busy: still listening", &m, BL, "rx");
     now = 3000;
     step(&m, RFSM_TICK, 0);
-    expect("busy: given up", &m, RX, "notify(1,busy),restore");
+    expect("busy: given up", &m, RX, "rx,notify(1,busy),restore");
     carrier_on = false;
 
     // the PTT while listening: the beacon given up, the voice at once; then the release and the end
@@ -274,7 +274,7 @@ static void sequences(void)
     step(&m, RFSM_DATA_REQ, 22);
     now = 12000;
     step(&m, RFSM_TICK, 0);
-    expect("burst timeout", &m, RX, "clear,end,notify(22,failed)");
+    expect("burst timeout", &m, RX, "txw,clear,end,notify(22,failed)");
     expect_counts("burst timeout counted", &m, 0, 1, 0);
 
     // another burst's late end: ignored

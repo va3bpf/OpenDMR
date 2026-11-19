@@ -215,6 +215,7 @@ static void handle(rfsm_t *m, rfsm_event_t event, uint16_t id)
                 case RFSM_BEACON_REQ: enqueue(m, RFSM_TX_KIND_BEACON, id); break;
                 case RFSM_DATA_REQ: enqueue(m, RFSM_TX_KIND_DATA, id); break;
                 case RFSM_TICK:
+                    ops->rx_work(); // listening is receiving: the squelch reads the carrier first
                     if (!ops->carrier()) {
                         if (ops->tx_allowed(RFSM_TX_KIND_BEACON, m->current)) {
                             ops->tx_begin(RFSM_TX_KIND_BEACON);
@@ -262,6 +263,7 @@ static void handle(rfsm_t *m, rfsm_event_t event, uint16_t id)
             }
             switch (event) {
                 case RFSM_TICK:
+                    ops->tx_work();
                     if (elapsed(m, RFSM_DATA_MS)) {
                         handle(m, RFSM_FAULT, 0);
                     }
