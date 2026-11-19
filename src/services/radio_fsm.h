@@ -70,7 +70,7 @@ typedef enum {
     RFSM_FAILED      // a fault while sending
 } rfsm_result_t;
 
-typedef enum { RFSM_TX_KIND_VOICE, RFSM_TX_KIND_BEACON, RFSM_TX_KIND_DATA } rfsm_tx_kind_t;
+typedef enum { RFSM_TX_KIND_VOICE, RFSM_TX_KIND_BEACON, RFSM_TX_KIND_DATA, RFSM_TX_KINDS } rfsm_tx_kind_t;
 
 #define RFSM_LISTEN_MS  2000 // the beacon gives up on a busy channel after this long
 #define RFSM_DATA_MS    2000 // a data burst taking longer is a fault

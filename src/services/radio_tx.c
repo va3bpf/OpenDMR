@@ -225,8 +225,8 @@ static void local_tone(uint8_t pattern)
 
 /* The transmissions' backends (radio_fsm.h: the transmit entry and exit in one place). A backend starts the
    transmission, is asked once to stop it (the PTT released), tells while it is still sending (a digital one sends its
-   last frames), then finishes. The PTT's is the channel's (rs.tx, set by apply_channel(), which waits while
-   transmitting); the beacon has its own. */
+   last frames), then finishes. The PTT's is the channel's (set by apply_channel(), which waits while
+   transmitting); the beacon has its own (rs.tx[] by kind). */
 
 static bool always(void)
 {

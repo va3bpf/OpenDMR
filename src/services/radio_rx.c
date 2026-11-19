@@ -236,7 +236,7 @@ void apply_channel(void)
     rs.has_channel = rs.requested_valid;
     rs.channel_pending = false;
     taskEXIT_CRITICAL();
-    rs.tx = tx_backend_of(&rs.channel, rs.has_channel);
+    rs.tx[RFSM_TX_KIND_VOICE] = tx_backend_of(&rs.channel, rs.has_channel);
 
     // The FM squelch of the channel left; in DMR the engine has the speaker and the LED, and the FD6818 audio register
     // its DMR setting (the FM value there stops the baseband to the HR_C7000: no DMR sync after a retune)

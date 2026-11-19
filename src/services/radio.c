@@ -63,18 +63,8 @@ radio_shared_t rs;
    first). */
 
 static rfsm_t fsm;
-static rfsm_tx_kind_t tx_kind; // of the transmission on
-static bool beacon_done;       // the frame sent: the machine told (RFSM_TX_DONE) after its call
-
-// The backend of a kind of transmission: the PTT's is the channel's; no data bursts yet
-static const tx_backend_t *tx_for(rfsm_tx_kind_t kind)
-{
-    switch (kind) {
-        case RFSM_TX_KIND_VOICE: return rs.tx;
-        case RFSM_TX_KIND_BEACON: return tx_backend_beacon();
-        default: return NULL;
-    }
-}
+static const tx_backend_t *tx_on; // the backend of the transmission on (fsm_tx_begin())
+static bool beacon_done;          // the frame sent: the machine told (RFSM_TX_DONE) after its call
 
 static bool fsm_tx_allowed(rfsm_tx_kind_t kind, uint16_t id)
 {
@@ -82,7 +72,7 @@ static bool fsm_tx_allowed(rfsm_tx_kind_t kind, uint16_t id)
     if (tx_check(&rs.channel, rs.has_channel) != RADIO_TX_OK) {
         return false;
     }
-    return (tx_for(kind) != NULL) && tx_for(kind)->can_start();
+    return (rs.tx[kind] != NULL) && rs.tx[kind]->can_start();
 }
 
 static bool fsm_dmr_channel(void)
@@ -97,18 +87,18 @@ static bool fsm_carrier(void)
 
 static void fsm_tx_begin(rfsm_tx_kind_t kind)
 {
-    tx_kind = kind;
-    tx_for(kind)->start();
+    tx_on = rs.tx[kind];
+    tx_on->start();
 }
 
 static void fsm_tx_ending(void)
 {
-    tx_for(tx_kind)->stop();
+    tx_on->stop();
 }
 
 static void fsm_tx_end(void)
 {
-    tx_for(tx_kind)->finished();
+    tx_on->finished();
 }
 
 static void fsm_apply_channel(void)
@@ -177,7 +167,7 @@ static void fsm_pass(void)
         beacon_done = false;
         rfsm_event(&fsm, RFSM_TX_DONE, 0);
     }
-    if ((fsm.state == RFSM_TX_ENDING) && !tx_for(tx_kind)->sending()) {
+    if ((fsm.state == RFSM_TX_ENDING) && !tx_on->sending()) {
         rfsm_event(&fsm, RFSM_TX_DONE, 0);
     }
 }
@@ -228,7 +218,8 @@ void radio_wake(void)
 
 void radio_init(void)
 {
-    rs.tx = tx_backend_of(NULL, false);
+    rs.tx[RFSM_TX_KIND_VOICE] = tx_backend_of(NULL, false);
+    rs.tx[RFSM_TX_KIND_BEACON] = tx_backend_beacon();
     gpio_output(PIN_AUDIO_SW, false);
     gpio_output(PIN_AUDIO_AMP, false);
     gpio_output(PIN_PA_VHF, false);

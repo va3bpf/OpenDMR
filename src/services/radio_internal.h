@@ -41,6 +41,7 @@
 #include <stdint.h>
 #include "codeplug.h"
 #include "radio.h"
+#include "radio_fsm.h"
 
 #define SAMPLE_MS 25 // the task's pass
 
@@ -82,7 +83,9 @@ typedef struct {
     bool p25_on;  // the P25 receiver runs (p25_radio.c)
     bool nxdn_on; // the NXDN receiver runs (nxdn_radio.c)
     volatile bool transmitting;
-    const tx_backend_t *tx; // the channel's transmit backend (apply_channel(); never changes while transmitting)
+    // The backend of each kind of transmission: the PTT's the channel's (apply_channel(), never while transmitting),
+    // the beacon's set once (radio_init()), none for data bursts yet
+    const tx_backend_t *tx[RFSM_TX_KINDS];
     // Receive
     volatile bool carrier;  // the noise under the squelch level
     volatile bool speaker;  // the audio on (the carrier, and the tone if one is set)
