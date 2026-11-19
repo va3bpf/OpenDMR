@@ -555,6 +555,15 @@ Read only: the factory calibration table (oscillator tune, receive level, power 
 - "Transmit QSY" (in the APRS configuration, in the CPS): the beacon's comment begins with the channel's voice
   frequency, its Tx tone and offset, e.g. "146.520MHz T100 +000" (Toff: no tone; lower case on a narrow channel),
   which aprs.fi and APRS radios read as the frequency to call you on.
+- Send via: **AFSK** (the default: the FM beacon above) / **DMR** / **Both**. DMR: on a DMR channel the position goes
+  to an APRS gateway as an LRRP data report, without retuning, on the channel's own timeslot and colour code; it waits
+  for a free channel first (2 s at most), and a PTT pressed while it is sent waits for it, then the voice goes out. The
+  radio needs its DMR ID. Both: each path the channel can take; on a DMR channel with a beacon frequency the AFSK
+  beacon goes first, then the LRRP report.
+- Gateway: the DMR ID of the gateway that receives the LRRP reports, 222999 by default (BrandMeister's APRS gateway);
+  the menu key opens the number entry.
+- Send via and the gateway are kept in the radio, not in the CPS's settings. Sending over DMR is still experimental: a
+  gateway decoding the report hasn't been confirmed yet.
 
 ---
 

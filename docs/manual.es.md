@@ -395,6 +395,11 @@ Menú informativo de solo lectura: muestra la tabla de calibración de fábrica 
 
 Modo de baliza (Desactivado / Manual con SK1 + 3 / Tras cada transmisión con PTT / Automático por intervalo con decaimiento / SmartBeaconing inteligente según velocidad y ángulo de giro), fuente de coordenadas (fija del canal o GPS en vivo), compresión de datos y función **Transmitir QSY** (inserta en el comentario de la baliza tu frecuencia de voz, subtono y desplazamiento actual para que otros colegas sintonizados puedan llamarte directamente).
 
+- **Frecuencia de baliza** ("Beacon Tx frequency" de la configuración APRS, en el CPS): la baliza se envía en esa frecuencia en todos los modos salvo PTT (en PTT sale en el canal tras cada transmisión). Un canal solo emite balizas si tiene una configuración APRS asignada, y nunca si es de solo recepción. Sin frecuencia de baliza, un canal FM la envía en su propia frecuencia y un canal DMR, P25, NXDN, AM o USB no envía ninguna. El modo PTT solo emite balizas en canales FM. Durante la baliza la radio sintoniza FM en esa frecuencia y vuelve al canal: el canal elegido no cambia, y una llamada en curso aplaza la baliza a la siguiente ronda.
+- **Enviar por**: **AFSK** (por defecto, la baliza FM) / **DMR** / **Ambos**. DMR: en un canal DMR la posición se envía a una pasarela APRS como informe de datos LRRP, sin cambiar de frecuencia, en el timeslot y el código de color del canal; antes espera a que el canal esté libre (2 s como máximo), y un PTT pulsado durante el envío espera a que termine. La radio necesita su ID de DMR. Ambos: cada vía que el canal permita; en un canal DMR con frecuencia de baliza primero sale la baliza AFSK y luego el informe LRRP.
+- **Pasarela**: el ID de DMR de la pasarela que recibe los informes LRRP, 222999 por defecto (la pasarela APRS de BrandMeister); la tecla de menú abre la entrada numérica.
+- "Enviar por" y la pasarela se guardan en la radio, no en los ajustes del CPS. El envío por DMR aún es experimental: no se ha confirmado que la pasarela decodifique el informe.
+
 ---
 
 ## 12. Bloqueo, teclas rápidas y configuración de teclas
