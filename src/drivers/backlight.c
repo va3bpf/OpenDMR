@@ -38,6 +38,7 @@
 #define PWM0_CFG REG(0x140C0000 + 0x00)
 #define PWM0_PER REG(0x140C0000 + 0x08)
 #define PWM0_FP  REG(0x140C0000 + 0x0C)
+#define PWM0_PERIOD 0xC8 // 200 counts: the duty is FP / 200
 
 static int current_percent = -1;
 
@@ -60,8 +61,10 @@ void backlight_set_percent(int percent)
     } else {
         IO_DIPLEX0 &= BITCLR(17); // the pin to PWM0
         PWM0_CFG = 0x328;
-        PWM0_PER = 0xC8;
-        PWM0_FP = percent;
+        PWM0_PER = PWM0_PERIOD;
+        // The duty is the percentage: FP = percent made it half of it (10 % lit at 5 %: the backlight stayed dark
+        // under 20 %, issue #82)
+        PWM0_FP = (uint32_t)((percent * PWM0_PERIOD) / 100);
         PWM0_CFG = 0x32C;
         PWM0_CFG = 0x32D;
         gpio_output(PIN_KEY_BKLIGHT, true);

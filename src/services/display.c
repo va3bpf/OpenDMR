@@ -34,6 +34,9 @@
  * Squelch: the same, the time does not run while a signal is heard. Buttons: only the keys and the knob light it.
  * Manual: SK1 alone toggles it. Dim is display_backlight_percentage_off; a timeout of 0 keeps it lit. Only the input
  * task calls these, but the menu (display_apply_brightness()).
+ *
+ * Lit, it is the day brightness, or the night one when "Auto night" is on and it is night by the clock (the hours of
+ * the auto theme's dark one; no clock: day).
  */
 
 #include "backlight.h"
@@ -45,13 +48,28 @@
 #include "theme.h"
 
 #define DEFAULT_PERCENT 100
+#define NIGHT_CHECK_MS  1000 // day or night looked at again while lit
+
+#define AUTO_LIGHT_FROM 7  // local hours of the day: the light theme in auto, the day brightness
+#define AUTO_LIGHT_TO   19
 
 static volatile bool lit = true;
 static volatile uint32_t light_left_ms; // 0: no timeout running
+static uint32_t night_check_ms;
+
+static int local_hour(void);
+
+static bool is_night(void)
+{
+    int hour = local_hour();
+
+    return (hour >= 0) && ((hour < AUTO_LIGHT_FROM) || (hour >= AUTO_LIGHT_TO));
+}
 
 static int lit_percent(void)
 {
-    int percent = settings.display_backlight_percentage[0];
+    bool night = ((settings.bitfield_options & SETTINGS_BIT_AUTO_NIGHT) != 0) && is_night();
+    int percent = settings.display_backlight_percentage[night ? 1 : 0];
 
     if (!settings_valid() || (percent < 1) || (percent > 100)) {
         percent = DEFAULT_PERCENT;
@@ -115,7 +133,15 @@ void display_light_tick(uint32_t elapsed_ms)
     uint8_t mode = settings.backlight_mode;
     bool heard;
 
-    if (!settings_valid() || (mode == SETTINGS_BACKLIGHT_MANUAL)) {
+    if (!settings_valid()) {
+        return;
+    }
+    night_check_ms += elapsed_ms;
+    if (lit && (night_check_ms >= NIGHT_CHECK_MS)) { // day to night or back while lit
+        night_check_ms = 0;
+        backlight_set_percent(lit_percent());
+    }
+    if (mode == SETTINGS_BACKLIGHT_MANUAL) {
         return;
     }
     heard = radio_audio_heard(); // FM or DMR audio
@@ -137,9 +163,6 @@ void display_light_tick(uint32_t elapsed_ms)
         light(false);
     }
 }
-
-#define AUTO_LIGHT_FROM 7  // local hours of the light theme in auto
-#define AUTO_LIGHT_TO   19
 
 // The choice is kept as a theme id (theme.h) or THEME_ID_AUTO. None yet (0xFF), a theme no longer in the menu (hidden
 // or deleted by the CPS) and 6 (auto before the user's themes, then the place after the 6 built-in ones): auto

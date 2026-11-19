@@ -32,8 +32,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// The backlight as the settings say (display_backlight_percentage, backlight_mode, backlight_timeout). Night comes
-// later. The input task drives it: the keys and the knob light it, the timeout dims it to the "off" brightness.
+// The backlight as the settings say (display_backlight_percentage: the day one, or the night one with "Auto night" at
+// night; backlight_mode, backlight_timeout). The input task drives it: the keys and the knob light it, the timeout
+// dims it to the "off" brightness.
 void display_apply_brightness(void); // the brightness or the mode changed (the menu): lit, the timeout from now
 void display_light_start(void);      // at power on, after the settings
 // A key change or the knob (input task); sk1_alone: SK1 just pressed with no other key (manual mode toggles)

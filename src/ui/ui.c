@@ -271,17 +271,16 @@ static void ui_task(void *arg)
             redraw = true;
         }
         ui_tune();
-        // The key beep after the screen handled the key (keyBeepHandler()): on a release (a short press) or a long
-        // press, not for the PTT. A screen may have set another one (ui_key_beep()), on the press or now; it plays
-        // once, then the key beep is back. NULL: none for this key.
-        if ((((ev.type == UI_EVENT_KEY_RELEASE) && !ev.long_press) || (ev.type == UI_EVENT_KEY_LONG)) &&
+        // The key beep after the screen handled the key (keyBeepHandler()): on a release (a short press), a long
+        // press or a step of the knob, not for the PTT. A screen may have set another one (ui_key_beep()), on the
+        // press or now; it plays once, then the key beep is back. NULL: none for this key.
+        if ((((ev.type == UI_EVENT_KEY_RELEASE) && !ev.long_press) || (ev.type == UI_EVENT_KEY_LONG) ||
+             (ev.type == UI_EVENT_ROTARY)) &&
             (ev.key != UI_KEY_PTT)) {
             if (key_beep) {
                 sound_play(((ev.type == UI_EVENT_KEY_LONG) && (key_beep == SOUND_KEY)) ? SOUND_KEY_LONG : key_beep);
             }
             key_beep = SOUND_KEY;
-        } else if (ev.type == UI_EVENT_ROTARY) {
-            key_beep = SOUND_KEY; // the rotary has no beep: one set for it is gone
         }
     }
 }
