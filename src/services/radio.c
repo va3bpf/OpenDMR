@@ -58,14 +58,23 @@ static TaskHandle_t task;
 
 radio_shared_t rs;
 
-/* The state machine (radio_fsm.h, the OpenDM32 notes' radio_task.html): it runs the PTT, the channel changes and the
-   beacon; what it asks and does, here. The checks are on the channel tuned (applied before a PTT, a deferred one
-   first). */
+/* The state machine (radio_fsm.c; the OpenDM32 notes' radio_task.html).
+
+   The machine decides; this file acts. Each pass of radio_task hands the machine what was asked, and the machine
+   calls back the functions below (the table FSM_OPS) to start or stop a transmission, change the channel, send the
+   beacon. All of it runs in radio_task only, so nothing here needs a lock. */
 
 static rfsm_t fsm;
-static const tx_backend_t *tx_on; // the backend of the transmission on (fsm_tx_begin())
-static bool beacon_done;          // the frame sent: the machine told (RFSM_TX_DONE) after its call
 
+// The backend of the transmission on: chosen when it starts (fsm_tx_begin()), used to stop and end it
+static const tx_backend_t *tx_on;
+
+// Set when the beacon frame has gone out (fsm_beacon_send()); fsm_pass() then tells the machine RFSM_TX_DONE
+static bool beacon_done;
+
+/* The machine's questions */
+
+// May this kind of transmission start? The checks on the channel tuned (receive only, mode, band), then its backend's
 static bool fsm_tx_allowed(rfsm_tx_kind_t kind, uint16_t id)
 {
     (void)id;
@@ -80,11 +89,15 @@ static bool fsm_dmr_channel(void)
     return rs.dmr_on;
 }
 
+// Someone on the channel: the beacon waits for it to be free
 static bool fsm_carrier(void)
 {
     return rs.carrier || rs.speaker;
 }
 
+/* The machine's actions */
+
+// A transmission starts, ends (the PTT released: the backend finishes sending), is over
 static void fsm_tx_begin(rfsm_tx_kind_t kind)
 {
     tx_on = rs.tx[kind];
@@ -106,6 +119,7 @@ static void fsm_apply_channel(void)
     apply_channel();
 }
 
+// The beacon frame, sent at once (its timing is strict); the transmitter is already on
 static void fsm_beacon_send(uint16_t id)
 {
     (void)id;
@@ -113,56 +127,82 @@ static void fsm_beacon_send(uint16_t id)
     beacon_done = true;
 }
 
-static void fsm_id_nothing(uint16_t id)
-{
-    (void)id; // the beacon on the channel itself (its own frequency: #35); no data bursts yet
-}
-
-static void fsm_nothing(void)
-{
-    // the PTT refused: the transmit screen shows why (radio_tx_check()); nothing to restore; the ticks' work still
-    // in the loop
-}
-
+// The result of a beacon request (sent, busy, refused, ...) for radio_aprs_sent()
 static void fsm_notify(uint16_t id, rfsm_result_t result)
 {
     aprs_finished(id, result == RFSM_SENT);
 }
 
+// The PTT refused: nothing to do, the transmit screen shows why (radio_tx_check())
+static void fsm_ptt_refused(void)
+{
+}
+
+// Not done yet: the beacon on its own frequency and back (step 4, #35), data bursts (step 5)
+static void not_yet_id(uint16_t id)
+{
+    (void)id;
+}
+
+static void not_yet(void)
+{
+}
+
+// The work of each tick by state: none here yet, the squelch, VOX and power saving still run in radio_task's loop
+static void tick_work_in_loop(void)
+{
+}
+
 static const rfsm_ops_t FSM_OPS = {
+    // questions
     .tx_allowed = fsm_tx_allowed,
     .dmr_channel = fsm_dmr_channel,
     .carrier = fsm_carrier,
     .now_ms = systime_get_ms,
+    // a transmission
     .tx_begin = fsm_tx_begin,
     .tx_ending = fsm_tx_ending,
     .tx_end = fsm_tx_end,
-    .ptt_refused = fsm_nothing,
+    .ptt_refused = fsm_ptt_refused,
+    // the channel
     .apply_channel = fsm_apply_channel,
-    .beacon_tune = fsm_id_nothing,
+    // the beacon
+    .beacon_tune = not_yet_id,
     .beacon_send = fsm_beacon_send,
-    .restore = fsm_nothing,
-    .data_send = fsm_id_nothing,
-    .data_clear = fsm_nothing,
-    .rx_work = fsm_nothing,
-    .scan_work = fsm_nothing,
-    .tx_work = fsm_nothing,
-    .ending_work = fsm_nothing,
+    .restore = not_yet,
+    // data bursts
+    .data_send = not_yet_id,
+    .data_clear = not_yet,
+    // each tick
+    .rx_work = tick_work_in_loop,
+    .scan_work = tick_work_in_loop,
+    .tx_work = tick_work_in_loop,
+    .ending_work = tick_work_in_loop,
+    // a request's result
     .notify = fsm_notify,
 };
 
-// A pass of the machine: the scan's level (the UI's), the requests recorded, the PTT's level, the tick, then what
-// came of them
+/* One pass of the machine, in three parts, in this order:
+   1. what was asked: the scan's level, a beacon request, the PTT's level;
+   2. the tick: the state's timed work (the beacon listening for a free channel, the data timeout);
+   3. what came of it: a transmission over.
+   The PTT before the tick: a PTT pressed while the beacon listens wins, the beacon is given up before the tick could
+   start sending it. The results after the tick: the tick sends the beacon frame, the same pass ends it. */
 static void fsm_pass(void)
 {
     uint16_t id;
 
+    // 1. what was asked
     rfsm_scan(&fsm, rs.scanning);
     if (aprs_take_request(&id)) {
         rfsm_event(&fsm, RFSM_BEACON_REQ, id);
     }
     rfsm_ptt(&fsm, rs.tx_wanted);
+
+    // 2. the tick
     rfsm_event(&fsm, RFSM_TICK, 0);
+
+    // 3. a transmission over: the beacon frame sent, or the PTT's backend done sending its last frames
     if (beacon_done) {
         beacon_done = false;
         rfsm_event(&fsm, RFSM_TX_DONE, 0);
@@ -172,37 +212,62 @@ static void fsm_pass(void)
     }
 }
 
+/* The task. It sleeps until radio_wake() or SAMPLE_MS (25 ms), then makes a pass, in this order:
+   1. a new channel to the machine (applied now, or after a transmission);
+   2. scanning a digital channel: a signal reading (see below);
+   3. the machine's pass (fsm_pass(), above);
+   4. the tones asked during a transmission (radio_tx_signal(): DTMF and the like);
+   5. the VOX;
+   6. the signal: the squelch in FM / AM / SSB, the S meter in DMR / P25 / NXDN;
+   7. the receive end beep;
+   8. the power saving.
+   Scanning a digital channel it wakes every SCAN_SAMPLE_MS (5 ms) to read the signal, a DMR burst being on the air
+   only 27.5 ms of every 60; steps 3 - 8 still run every 25 ms only. */
 static void RAM_CODE radio_task(void *arg)
 {
-    TickType_t full_pass = 0;
+    TickType_t last_full_pass = 0;
 
     (void)arg;
 
     for (;;) {
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(scan_sampling() ? SCAN_SAMPLE_MS : SAMPLE_MS));
 
+        // 1. a new channel
         if (rs.channel_pending) {
-            rfsm_event(&fsm, RFSM_CHANNEL, 0); // now, or after a transmission (the machine)
+            rfsm_event(&fsm, RFSM_CHANNEL, 0);
         }
+
+        // 2. scanning a digital channel: a reading at every wake, the rest only once SAMPLE_MS has gone by
         if (scan_sampling()) {
             scan_sample();
-            // the rest every SAMPLE_MS as when not scanning (the S meter takes the peak of its last readings)
-            if ((xTaskGetTickCount() - full_pass) < pdMS_TO_TICKS(SAMPLE_MS)) {
+            if ((xTaskGetTickCount() - last_full_pass) < pdMS_TO_TICKS(SAMPLE_MS)) {
                 continue;
             }
         }
-        full_pass = xTaskGetTickCount();
+        last_full_pass = xTaskGetTickCount();
+
+        // 3. the state machine
         fsm_pass();
+
+        // 4. the transmit tones
         tx_signal_update();
+
+        // 5. the VOX
         vox_pass();
+
+        // 6. the signal
         if (eco_rx_off()) {
-            // the receiver off (power saving): nothing to read
+            // the receiver is off (power saving): nothing to read
         } else if (is_analog() && !rs.transmitting) {
             squelch_check();
         } else if (rs.dmr_on) {
             dmr_signal();
         }
+
+        // 7. the receive end beep
         rx_beep_end_check();
+
+        // 8. the power saving
         eco_tick();
     }
 }
