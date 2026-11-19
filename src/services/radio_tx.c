@@ -223,10 +223,10 @@ static void local_tone(uint8_t pattern)
     }
 }
 
-/* The PTT's transmission, on the channel's backend (step 2 of the radio task's state machine, radio_fsm.h: the transmit
-   entry and exit in one place). A backend starts it, is asked once to stop it when the PTT is released, tells while it
-   is still sending (a digital one sends its last frames), then finishes. The backend is the channel's, which doesn't
-   change while transmitting (apply_channel() waits). */
+/* The transmissions' backends (radio_fsm.h: the transmit entry and exit in one place). A backend starts the
+   transmission, is asked once to stop it (the PTT released), tells while it is still sending (a digital one sends its
+   last frames), then finishes. The PTT's is the channel's (rs.tx, set by apply_channel(), which waits while
+   transmitting); the beacon has its own. */
 
 static bool always(void)
 {
@@ -329,14 +329,35 @@ static void tx_digital_finished(void)
     post_signal();
 }
 
+// The APRS beacon: the FM carrier, the frame sent in it (radio_aprs.c, the machine's beacon_send()); on an FM channel
+static bool beacon_can_start(void)
+{
+    return is_fm() && !rs.dmr_on;
+}
+
 static const tx_backend_t TX_FM = {is_fm, tx_fm_start, tx_fm_stop, never, nothing};
 static const tx_backend_t TX_DMR = {always, tx_dmr_start, tx_dmr_stop, dmr_is_transmitting, tx_dmr_finished};
 static const tx_backend_t TX_P25 = {always, tx_p25_start, tx_p25_stop, p25_radio_transmitting, tx_digital_finished};
 static const tx_backend_t TX_NXDN = {always, tx_nxdn_start, tx_nxdn_stop, nxdn_radio_transmitting, tx_digital_finished};
+static const tx_backend_t TX_BEACON = {beacon_can_start, transmit_on, nothing, never, transmit_off};
 
-const tx_backend_t *tx_backend(void)
+const tx_backend_t *tx_backend_beacon(void)
 {
-    return rs.nxdn_on ? &TX_NXDN : (rs.p25_on ? &TX_P25 : (rs.dmr_on ? &TX_DMR : &TX_FM));
+    return &TX_BEACON;
+}
+
+// The backend of a channel (FM's for none: its checks refuse)
+const tx_backend_t *tx_backend_of(const codeplug_channel_t *c, bool valid)
+{
+    if (!valid) {
+        return &TX_FM;
+    }
+    switch (c->mode) {
+        case CODEPLUG_MODE_DMR: return &TX_DMR;
+        case CODEPLUG_MODE_P25: return &TX_P25;
+        case CODEPLUG_MODE_NXDN: return &TX_NXDN;
+        default: return &TX_FM; // FM; AM and SSB too, its can_start() refuses them
+    }
 }
 
 // trxCheckFrequencyInAmateurBand(): off, the legacy default bands (also 220 MHz), the CPS bands (VHF, UHF)

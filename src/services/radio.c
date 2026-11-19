@@ -66,16 +66,23 @@ static rfsm_t fsm;
 static rfsm_tx_kind_t tx_kind; // of the transmission on
 static bool beacon_done;       // the frame sent: the machine told (RFSM_TX_DONE) after its call
 
+// The backend of a kind of transmission: the PTT's is the channel's; no data bursts yet
+static const tx_backend_t *tx_for(rfsm_tx_kind_t kind)
+{
+    switch (kind) {
+        case RFSM_TX_KIND_VOICE: return rs.tx;
+        case RFSM_TX_KIND_BEACON: return tx_backend_beacon();
+        default: return NULL;
+    }
+}
+
 static bool fsm_tx_allowed(rfsm_tx_kind_t kind, uint16_t id)
 {
     (void)id;
     if (tx_check(&rs.channel, rs.has_channel) != RADIO_TX_OK) {
         return false;
     }
-    if (kind == RFSM_TX_KIND_VOICE) {
-        return tx_backend()->can_start();
-    }
-    return (kind == RFSM_TX_KIND_BEACON) && is_fm() && !rs.dmr_on; // AFSK on an FM channel; no data bursts yet
+    return (tx_for(kind) != NULL) && tx_for(kind)->can_start();
 }
 
 static bool fsm_dmr_channel(void)
@@ -91,25 +98,17 @@ static bool fsm_carrier(void)
 static void fsm_tx_begin(rfsm_tx_kind_t kind)
 {
     tx_kind = kind;
-    if (kind == RFSM_TX_KIND_VOICE) {
-        tx_backend()->start();
-    } else if (kind == RFSM_TX_KIND_BEACON) {
-        transmit_on();
-    }
+    tx_for(kind)->start();
 }
 
 static void fsm_tx_ending(void)
 {
-    tx_backend()->stop();
+    tx_for(tx_kind)->stop();
 }
 
 static void fsm_tx_end(void)
 {
-    if (tx_kind == RFSM_TX_KIND_VOICE) {
-        tx_backend()->finished();
-    } else if (tx_kind == RFSM_TX_KIND_BEACON) {
-        transmit_off();
-    }
+    tx_for(tx_kind)->finished();
 }
 
 static void fsm_apply_channel(void)
@@ -178,7 +177,7 @@ static void fsm_pass(void)
         beacon_done = false;
         rfsm_event(&fsm, RFSM_TX_DONE, 0);
     }
-    if ((fsm.state == RFSM_TX_ENDING) && !tx_backend()->sending()) {
+    if ((fsm.state == RFSM_TX_ENDING) && !tx_for(tx_kind)->sending()) {
         rfsm_event(&fsm, RFSM_TX_DONE, 0);
     }
 }
@@ -229,6 +228,7 @@ void radio_wake(void)
 
 void radio_init(void)
 {
+    rs.tx = tx_backend_of(NULL, false);
     gpio_output(PIN_AUDIO_SW, false);
     gpio_output(PIN_AUDIO_AMP, false);
     gpio_output(PIN_PA_VHF, false);

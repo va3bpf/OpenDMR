@@ -58,6 +58,15 @@
 #define FLAG4_RX_ONLY 0x04
 #define FLAG4_WIDE    0x02
 
+// A transmission's backend (radio_tx.c: the channel's, the beacon's; radio_fsm.h: the transmit entry and exit)
+typedef struct {
+    bool (*can_start)(void);
+    void (*start)(void);    // transmitting from here, the UI told
+    void (*stop)(void);     // the PTT released
+    bool (*sending)(void);  // still sending after stop()
+    void (*finished)(void); // not transmitting any more, the UI told
+} tx_backend_t;
+
 // The state the parts share (the rest is each part's own)
 typedef struct {
     // What the UI asks (radio.c's API), read by the task
@@ -73,6 +82,7 @@ typedef struct {
     bool p25_on;  // the P25 receiver runs (p25_radio.c)
     bool nxdn_on; // the NXDN receiver runs (nxdn_radio.c)
     volatile bool transmitting;
+    const tx_backend_t *tx; // the channel's transmit backend (apply_channel(); never changes while transmitting)
     // Receive
     volatile bool carrier;  // the noise under the squelch level
     volatile bool speaker;  // the audio on (the carrier, and the tone if one is set)
@@ -106,16 +116,9 @@ void dmr_signal(void);
 bool scan_sampling(void);
 void scan_sample(void);
 
-// radio_tx.c: the transmission on the channel's backend (radio_fsm.h: the transmit entry and exit in one place)
-typedef struct {
-    bool (*can_start)(void);
-    void (*start)(void);    // transmitting from here, the UI told
-    void (*stop)(void);     // the PTT released
-    bool (*sending)(void);  // still sending after stop()
-    void (*finished)(void); // not transmitting any more, the UI told
-} tx_backend_t;
-
-const tx_backend_t *tx_backend(void);
+// radio_tx.c
+const tx_backend_t *tx_backend_of(const codeplug_channel_t *c, bool valid);
+const tx_backend_t *tx_backend_beacon(void);
 uint16_t level_drive(uint32_t frequency, int level);
 uint16_t pa_drive(uint32_t frequency);
 void transmit_on(void);
