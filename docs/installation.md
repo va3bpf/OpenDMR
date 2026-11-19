@@ -1,6 +1,6 @@
 # OpenDMR 安装手册
 
-把 **Baofeng DM-32 / DM-32UV** 从原厂固件换成 OpenDMR，以及以后的升级和恢复原厂。English: [installation.en.md](installation.en.md)。
+把 **Baofeng DM-32 / DM-32UV** 从原厂固件换成 OpenDMR，以及以后的升级和恢复原厂。English: [installation.en.md](installation.en.md) · Español: [installation.es.md](installation.es.md)。
 装好以后怎么用见 [使用说明书](manual.md)。
 
 > ⚠️ **刷机有变砖风险，后果自负。**

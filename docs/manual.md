@@ -1,6 +1,6 @@
 # OpenDMR 使用说明书
 
-适用于装了 OpenDMR 固件的 **Baofeng DM-32 / DM-32UV**。English: [manual.en.md](manual.en.md)。
+适用于装了 OpenDMR 固件的 **Baofeng DM-32 / DM-32UV**。English: [manual.en.md](manual.en.md) · Español: [manual.es.md](manual.es.md)。
 
 图中都是电台上的真实截屏（`tools/debug/fshot.py`，240×320）。GPS 和电台信息里的位置做了模糊处理。
 

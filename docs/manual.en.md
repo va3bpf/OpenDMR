@@ -1,6 +1,6 @@
 # OpenDMR user manual
 
-For the **Baofeng DM-32 / DM-32UV** running the OpenDMR firmware. 中文版：[manual.md](manual.md).
+For the **Baofeng DM-32 / DM-32UV** running the OpenDMR firmware. Español: [manual.es.md](manual.es.md) · 中文版：[manual.md](manual.md).
 
 Every picture is a real screenshot from the radio (`tools/debug/fshot.py`, 240×320). The location on the GPS and
 radio info screens is blurred.

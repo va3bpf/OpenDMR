@@ -1,7 +1,7 @@
 # OpenDMR installation guide
 
 Replacing the stock firmware of the **Baofeng DM-32 / DM-32UV** with OpenDMR, updating it later, and going back to
-the stock firmware. 中文：[installation.md](installation.md). Using the radio afterwards: the
+the stock firmware. Español: [installation.es.md](installation.es.md) · 中文：[installation.md](installation.md). Using the radio afterwards: the
 [user manual](manual.en.md).
 
 > ⚠️ **Flashing can brick the radio. You do it at your own risk.**
