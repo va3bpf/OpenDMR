@@ -30,14 +30,16 @@
  * OpenDMR, service: the radio task's state machine (radio_fsm.h). Every state handles every event (the transition
  * table of radio_task.html 6.2): run it, defer it, refuse it (the requester told why), ignore it (counted when it
  * came late), or a fault (back to receiving, safe). Deferred work waits for RX: the channel, then the PTT, then the
- * requests in their order, then the scan; handle() never drains (no recursion), rfsm_ptt() / rfsm_event() do after.
+ * requests in their order; handle() never drains (no recursion), rfsm_ptt() / rfsm_scan() / rfsm_event() do after.
+ * The scan is the UI's (scan.c stops it on the PTT, the dual watch goes on after its transmission): its level makes
+ * receiving SCAN or RX, as the PTT's makes a press, and a transmission goes back to whichever it says then.
  */
 
 #include <stddef.h>
 #include "radio_fsm.h"
 
-static const char *const NAMES[RFSM_STATES] = {"rx", "scan", "tx_voice", "tx_ending", "beacon_listen", "beacon_send",
-                                               "data_send"};
+static const char *const NAMES[RFSM_STATES] = {"rx", "scan", "tx_voice", "tx_ending", "beacon_listen",
+                                               "beacon_send", "data_send"};
 
 const char *rfsm_state_name(rfsm_state_t state)
 {
@@ -62,14 +64,24 @@ static void enqueue(rfsm_t *m, rfsm_tx_kind_t kind, uint16_t id)
     m->queued++;
 }
 
+// Receiving: SCAN while the UI scans, else RX
+static rfsm_state_t receiving(const rfsm_t *m)
+{
+    return m->scan_wanted ? RFSM_SCAN : RFSM_RX;
+}
+
 static bool elapsed(const rfsm_t *m, uint32_t ms)
 {
     return (uint32_t)(m->ops->now_ms() - m->since_ms) >= ms;
 }
 
-// RX: a beacon starts by listening on its frequency; a burst only on a DMR channel
+// RX: a beacon starts by listening on its frequency; a burst only on a DMR channel; neither while scanning
 static void start_beacon(rfsm_t *m, uint16_t id)
 {
+    if (m->state == RFSM_SCAN) {
+        m->ops->notify(id, RFSM_SCANNING);
+        return;
+    }
     if (!m->ops->tx_allowed(RFSM_TX_KIND_BEACON, id)) {
         m->ops->notify(id, RFSM_REFUSED);
         return;
@@ -82,6 +94,10 @@ static void start_beacon(rfsm_t *m, uint16_t id)
 
 static void start_data(rfsm_t *m, uint16_t id)
 {
+    if (m->state == RFSM_SCAN) {
+        m->ops->notify(id, RFSM_SCANNING);
+        return;
+    }
     if (!m->ops->dmr_channel() || !m->ops->tx_allowed(RFSM_TX_KIND_DATA, id)) {
         m->ops->notify(id, RFSM_REFUSED);
         return;
@@ -104,15 +120,15 @@ static void ptt_press(rfsm_t *m)
     }
 }
 
-// The beacon given up while listening (the PTT, another channel, the scan, its result)
+// The beacon given up while listening (the PTT, another channel, its result)
 static void beacon_off(rfsm_t *m, rfsm_result_t result)
 {
     m->ops->notify(m->current, result);
     m->ops->restore();
-    m->state = RFSM_RX;
+    m->state = receiving(m);
 }
 
-// Waiting in the transmitting states: the requests queued, the channel and the scan kept for later
+// Waiting in the transmitting states: the requests queued, the channel kept for later
 static bool deferred(rfsm_t *m, rfsm_event_t event, uint16_t id)
 {
     switch (event) {
@@ -134,51 +150,25 @@ static void handle(rfsm_t *m, rfsm_event_t event, uint16_t id)
 {
     const rfsm_ops_t *ops = m->ops;
 
-    if (event == RFSM_SCAN_OFF) {
-        m->scan_deferred = false; // a scan asked for and given up before it began
-    }
     switch (m->state) {
         case RFSM_RX:
+        case RFSM_SCAN:
             switch (event) {
                 case RFSM_PTT_DOWN: ptt_press(m); break;
                 case RFSM_CHANNEL: ops->apply_channel(); break;
-                case RFSM_SCAN_ON:
-                    ops->scan(true);
-                    m->state = RFSM_SCAN;
-                    break;
                 case RFSM_BEACON_REQ: start_beacon(m, id); break;
                 case RFSM_DATA_REQ: start_data(m, id); break;
-                case RFSM_TICK: ops->rx_work(); break;
+                case RFSM_TICK:
+                    if (m->state == RFSM_SCAN) {
+                        ops->scan_work();
+                    } else {
+                        ops->rx_work();
+                    }
+                    break;
                 case RFSM_TX_DONE:
                 case RFSM_DATA_DONE: m->ignored_late++; break;
                 case RFSM_FAULT: m->faults++; break;
-                default: break; // PTT_UP, SCAN_OFF
-            }
-            break;
-
-        case RFSM_SCAN:
-            switch (event) {
-                case RFSM_PTT_DOWN:
-                    ops->scan(false);
-                    m->state = RFSM_RX;
-                    ptt_press(m);
-                    break;
-                case RFSM_CHANNEL: ops->apply_channel(); break;
-                case RFSM_SCAN_OFF:
-                    ops->scan(false);
-                    m->state = RFSM_RX;
-                    break;
-                case RFSM_BEACON_REQ:
-                case RFSM_DATA_REQ: ops->notify(id, RFSM_SCANNING); break;
-                case RFSM_TICK: ops->scan_work(); break;
-                case RFSM_TX_DONE:
-                case RFSM_DATA_DONE: m->ignored_late++; break;
-                case RFSM_FAULT:
-                    m->faults++;
-                    ops->scan(false);
-                    m->state = RFSM_RX;
-                    break;
-                default: break; // PTT_UP, SCAN_ON
+                default: break; // PTT_UP
             }
             break;
 
@@ -194,7 +184,6 @@ static void handle(rfsm_t *m, rfsm_event_t event, uint16_t id)
                         m->state = RFSM_TX_ENDING;
                     }
                     break;
-                case RFSM_SCAN_ON: ops->scan(false); break; // refused: the scan told it is off
                 case RFSM_TICK:
                     if (m->state == RFSM_TX_VOICE) {
                         ops->tx_work();
@@ -204,15 +193,15 @@ static void handle(rfsm_t *m, rfsm_event_t event, uint16_t id)
                     break;
                 case RFSM_TX_DONE: // the tail over, or the backend ended by itself (a repeater that didn't answer)
                     ops->tx_end();
-                    m->state = RFSM_RX;
+                    m->state = receiving(m);
                     break;
                 case RFSM_DATA_DONE: m->ignored_late++; break;
                 case RFSM_FAULT:
                     m->faults++;
                     ops->tx_end();
-                    m->state = RFSM_RX;
+                    m->state = receiving(m);
                     break;
-                default: break; // PTT_DOWN (TX_VOICE: sending already; TX_ENDING: its level waits), SCAN_OFF
+                default: break; // PTT_DOWN (TX_VOICE: sending already; TX_ENDING: its level waits)
             }
             break;
 
@@ -221,10 +210,6 @@ static void handle(rfsm_t *m, rfsm_event_t event, uint16_t id)
                 case RFSM_PTT_DOWN: beacon_off(m, RFSM_ABANDONED); break; // the PTT then, from RX
                 case RFSM_CHANNEL:
                     m->channel_deferred = true;
-                    beacon_off(m, RFSM_ABANDONED);
-                    break;
-                case RFSM_SCAN_ON:
-                    m->scan_deferred = true;
                     beacon_off(m, RFSM_ABANDONED);
                     break;
                 case RFSM_BEACON_REQ: enqueue(m, RFSM_TX_KIND_BEACON, id); break;
@@ -248,7 +233,7 @@ static void handle(rfsm_t *m, rfsm_event_t event, uint16_t id)
                     m->faults++;
                     beacon_off(m, RFSM_FAILED);
                     break;
-                default: break; // PTT_UP, SCAN_OFF
+                default: break; // PTT_UP
             }
             break;
 
@@ -257,7 +242,6 @@ static void handle(rfsm_t *m, rfsm_event_t event, uint16_t id)
                 break;
             }
             switch (event) {
-                case RFSM_SCAN_ON: m->scan_deferred = true; break;
                 case RFSM_TX_DONE:
                     ops->tx_end();
                     beacon_off(m, RFSM_SENT);
@@ -268,7 +252,7 @@ static void handle(rfsm_t *m, rfsm_event_t event, uint16_t id)
                     ops->tx_end();
                     beacon_off(m, RFSM_FAILED);
                     break;
-                default: break; // PTT_DOWN (its level waits), PTT_UP, SCAN_OFF, TICK (none while sending)
+                default: break; // PTT_DOWN (its level waits), PTT_UP, TICK (none while sending)
             }
             break;
 
@@ -277,7 +261,6 @@ static void handle(rfsm_t *m, rfsm_event_t event, uint16_t id)
                 break;
             }
             switch (event) {
-                case RFSM_SCAN_ON: m->scan_deferred = true; break;
                 case RFSM_TICK:
                     if (elapsed(m, RFSM_DATA_MS)) {
                         handle(m, RFSM_FAULT, 0);
@@ -291,30 +274,30 @@ static void handle(rfsm_t *m, rfsm_event_t event, uint16_t id)
                     }
                     ops->tx_end();
                     ops->notify(m->current, RFSM_SENT);
-                    m->state = RFSM_RX;
+                    m->state = receiving(m);
                     break;
                 case RFSM_FAULT:
                     m->faults++;
                     ops->data_clear();
                     ops->tx_end();
                     ops->notify(m->current, RFSM_FAILED);
-                    m->state = RFSM_RX;
+                    m->state = receiving(m);
                     break;
-                default: break; // PTT_DOWN (its level waits), PTT_UP, SCAN_OFF
+                default: break; // PTT_DOWN (its level waits), PTT_UP
             }
             break;
 
         default:
             m->faults++;
-            m->state = RFSM_RX;
+            m->state = receiving(m);
             break;
     }
 }
 
-// Back in RX: what waited, in this order, until something leaves RX again
+// Back to receiving: what waited, in this order, until something leaves it again
 static void drain(rfsm_t *m)
 {
-    while (m->state == RFSM_RX) {
+    while ((m->state == RFSM_RX) || (m->state == RFSM_SCAN)) {
         if (m->channel_deferred) {
             m->channel_deferred = false;
             m->ops->apply_channel();
@@ -328,9 +311,6 @@ static void drain(rfsm_t *m)
             }
             m->queued--;
             handle(m, (r.kind == RFSM_TX_KIND_BEACON) ? RFSM_BEACON_REQ : RFSM_DATA_REQ, r.id);
-        } else if (m->scan_deferred) {
-            m->scan_deferred = false;
-            handle(m, RFSM_SCAN_ON, 0);
         } else {
             break;
         }
@@ -345,6 +325,15 @@ void rfsm_ptt(rfsm_t *m, bool down)
     } else if (!down && m->ptt_handled) {
         m->ptt_handled = false;
         handle(m, RFSM_PTT_UP, 0);
+    }
+    drain(m);
+}
+
+void rfsm_scan(rfsm_t *m, bool on)
+{
+    m->scan_wanted = on;
+    if ((m->state == RFSM_RX) || (m->state == RFSM_SCAN)) {
+        m->state = receiving(m);
     }
     drain(m);
 }

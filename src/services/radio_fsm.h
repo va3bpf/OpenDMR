@@ -37,7 +37,7 @@
 
 typedef enum {
     RFSM_RX,            // receiving (the backends and the squelch, VOX, power saving in the ticks)
-    RFSM_SCAN,          // scanning
+    RFSM_SCAN,          // receiving while the UI scans (scan.c, the dual watch: its level, rfsm_scan()); no beacons
     RFSM_TX_VOICE,      // the PTT: transmitting
     RFSM_TX_ENDING,     // the PTT released: end tones, tail, the digital backend finishing
     RFSM_BEACON_LISTEN, // on the beacon's frequency, listening for a free channel
@@ -50,8 +50,6 @@ typedef enum {
     RFSM_PTT_DOWN, // made by rfsm_ptt() from the PTT's level
     RFSM_PTT_UP,
     RFSM_CHANNEL,  // another channel wanted (the radio task keeps which: the latest)
-    RFSM_SCAN_ON,
-    RFSM_SCAN_OFF,
     RFSM_BEACON_REQ, // with the request's id
     RFSM_DATA_REQ,   // with the request's id
     RFSM_TICK,       // the heartbeat
@@ -67,7 +65,7 @@ typedef enum {
     RFSM_REFUSED,    // the transmit check failed (Rx only, mode, band), or not a DMR channel for data
     RFSM_SCANNING,   // refused while scanning
     RFSM_QUEUE_FULL, // refused: too many waiting
-    RFSM_ABANDONED,  // given up for the PTT, another channel or the scan
+    RFSM_ABANDONED,  // given up for the PTT or another channel
     RFSM_BUSY,       // the channel stayed busy
     RFSM_FAILED      // a fault while sending
 } rfsm_result_t;
@@ -83,7 +81,7 @@ typedef enum { RFSM_TX_KIND_VOICE, RFSM_TX_KIND_BEACON, RFSM_TX_KIND_DATA } rfsm
 typedef struct {
     bool (*tx_allowed)(rfsm_tx_kind_t kind, uint16_t id); // the check on the channel tuned (a beacon: its frequency)
     bool (*dmr_channel)(void);
-    bool (*carrier)(void); // a signal on the frequency tuned
+    bool (*carrier)(void);  // a signal on the frequency tuned
     uint32_t (*now_ms)(void);
 
     void (*tx_begin)(rfsm_tx_kind_t kind); // the transmit entry: the drive, the LED, transmitting, the UI told
@@ -91,7 +89,6 @@ typedef struct {
     void (*tx_end)(void);                  // the transmit exit: off, the LED, the UI told
     void (*ptt_refused)(void);             // the PTT pressed on a channel that can't transmit
     void (*apply_channel)(void);           // the channel wanted now
-    void (*scan)(bool on);
     void (*beacon_tune)(uint16_t id); // the user's channel kept, the beacon's frequency tuned
     void (*beacon_send)(uint16_t id); // the frame (its end: RFSM_TX_DONE)
     void (*restore)(void);            // back on the user's channel
@@ -114,8 +111,8 @@ typedef struct {
     rfsm_state_t state;
     bool ptt_wanted;       // the PTT's level
     bool ptt_handled;      // its press acted on (sent, refused): no event again until it is released
+    bool scan_wanted;      // the UI scans: receiving is SCAN, not RX
     bool channel_deferred; // a channel wanted while transmitting
-    bool scan_deferred;    // the scan asked for while sending
     rfsm_request_t queue[RFSM_QUEUE];
     uint8_t queued;
     uint16_t current; // the id of the beacon or burst in progress
@@ -126,6 +123,9 @@ typedef struct {
 
 void rfsm_init(rfsm_t *m, const rfsm_ops_t *ops);
 void rfsm_ptt(rfsm_t *m, bool down);                     // the PTT's level: its press or release when it changes
+// The UI's scan level (scan.c, the dual watch): receiving is SCAN while it is on. The machine never starts or stops
+// a scan (scan.c stops it on the PTT, the dual watch goes on after its transmission)
+void rfsm_scan(rfsm_t *m, bool on);
 void rfsm_event(rfsm_t *m, rfsm_event_t event, uint16_t id); // id: of a request, a DATA_DONE; else 0
 const char *rfsm_state_name(rfsm_state_t state);
 

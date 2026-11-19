@@ -998,40 +998,24 @@ static const tx_backend_t *tx_backend(void)
     return nxdn_on ? &TX_NXDN : (p25_on ? &TX_P25 : (dmr_on ? &TX_DMR : &TX_FM));
 }
 
-// The PTT's level to the transmission: started, asked to stop, finished
-static void transmit_step(void)
-{
-    const tx_backend_t *b = tx_backend();
-
-    if (tx_wanted && !transmitting) {
-        if (b->can_start()) {
-            b->start();
-        }
-    } else if (!tx_wanted && transmitting && !tx_stopping) {
-        tx_stopping = true;
-        b->stop();
-    }
-    if (tx_stopping && !b->sending()) {
-        tx_stopping = false;
-        b->finished();
-    }
-}
-
 /* APRS (aprs.c): the AX.25 frame as AFSK on the FM channel, as aprs.c aprsSendPacket() / aprsBitStreamSender() of
    the main firmware: the FD6818 Tone1 switched between 1200 and 2200 Hz (300 baud: 1600 / 1800 Hz) at each bit,
-   timed here on the microsecond clock; aprsBeaconingSendBeacon(): a busy channel is waited for up to 2 s, then
-   50 ms of carrier before the frame */
+   timed here on the microsecond clock; aprsBeaconingSendBeacon(): a busy channel is waited for up to 2 s (the state
+   machine's RFSM_LISTEN_MS, listening without holding the task), then 50 ms of carrier before the frame */
 
-#define APRS_COLLISION_MS 2000
 #define APRS_TX_DELAY_MS  50
 #define APRS_TONE_GAIN    66 // the UV-K5 firmware's tone level
 
-static const uint8_t *volatile aprs_bits = NULL; // asked, the radio task sends it
+static const uint8_t *volatile aprs_bits = NULL; // the frame asked for (radio_aprs_send())
 static volatile uint16_t aprs_bit_count;
 static volatile bool aprs_baud300;
+static volatile bool aprs_active = false; // asked, not done yet
+static volatile bool aprs_asked = false;  // for the machine (RFSM_BEACON_REQ)
 static volatile bool aprs_sent;
+static volatile uint16_t aprs_id;
 
-static void aprs_transmit(void)
+// The frame, the carrier on already (the machine's transmit entry): 50 ms of carrier, then the bits
+static void aprs_frame(void)
 {
     uint32_t baud = aprs_baud300 ? 300 : 1200;
     uint16_t mark = aprs_baud300 ? 1600 : 1200;
@@ -1039,16 +1023,6 @@ static void aprs_transmit(void)
     uint16_t last = 0;
     uint32_t start;
 
-    for (uint32_t waited = 0; (carrier || speaker) && (waited < APRS_COLLISION_MS); waited += SAMPLE_MS) {
-        vTaskDelay(pdMS_TO_TICKS(SAMPLE_MS));
-        squelch_check();
-    }
-    if (carrier || speaker || tx_wanted || (radio_tx_check() != RADIO_TX_OK)) {
-        aprs_sent = false;
-        aprs_bits = NULL;
-        return;
-    }
-    transmit_on();
     vTaskDelay(pdMS_TO_TICKS(APRS_TX_DELAY_MS));
     fd6818_tx_tone(mark, 0, APRS_TONE_GAIN);
     last = mark;
@@ -1064,20 +1038,21 @@ static void aprs_transmit(void)
         }
     }
     fd6818_tx_tone_end();
-    transmit_off();
-    aprs_sent = true;
-    aprs_bits = NULL;
 }
 
+// Recorded only: the radio task's machine decides (an FM channel that can transmit, not scanning, the channel free;
+// the PTT first), radio_aprs_busy() until then, radio_aprs_sent() its outcome
 bool radio_aprs_send(const uint8_t *bits, uint16_t bit_count, bool baud300)
 {
-    if (aprs_bits || !requested_valid || (requested.mode != CODEPLUG_MODE_FM) || transmitting || tx_wanted ||
-        (radio_tx_check() != RADIO_TX_OK)) {
+    if (aprs_active) {
         return false;
     }
     aprs_bit_count = bit_count;
     aprs_baud300 = baud300;
     aprs_bits = bits;
+    aprs_id++;
+    aprs_active = true;
+    aprs_asked = true;
     if (task) {
         xTaskNotifyGive(task);
     }
@@ -1086,12 +1061,143 @@ bool radio_aprs_send(const uint8_t *bits, uint16_t bit_count, bool baud300)
 
 bool radio_aprs_busy(void)
 {
-    return aprs_bits != NULL;
+    return aprs_active;
 }
 
 bool radio_aprs_sent(void)
 {
     return aprs_sent;
+}
+
+/* The state machine (radio_fsm.h, the OpenDM32 notes' radio_task.html): it runs the PTT, the channel changes and the
+   beacon; what it asks and does, here. The checks are on the channel tuned (applied before a PTT, a deferred one
+   first). */
+
+static rfsm_t fsm;
+static rfsm_tx_kind_t tx_kind; // of the transmission on
+static bool beacon_done;       // the frame sent: the machine told (RFSM_TX_DONE) after its call
+
+static radio_tx_check_t tx_check(const codeplug_channel_t *c, bool valid);
+
+static bool fsm_tx_allowed(rfsm_tx_kind_t kind, uint16_t id)
+{
+    (void)id;
+    if (tx_check(&channel, has_channel) != RADIO_TX_OK) {
+        return false;
+    }
+    if (kind == RFSM_TX_KIND_VOICE) {
+        return tx_backend()->can_start();
+    }
+    return (kind == RFSM_TX_KIND_BEACON) && is_fm() && !dmr_on; // AFSK on an FM channel; no data bursts yet
+}
+
+static bool fsm_dmr_channel(void)
+{
+    return dmr_on;
+}
+
+static bool fsm_carrier(void)
+{
+    return carrier || speaker;
+}
+
+static void fsm_tx_begin(rfsm_tx_kind_t kind)
+{
+    tx_kind = kind;
+    if (kind == RFSM_TX_KIND_VOICE) {
+        tx_backend()->start();
+    } else if (kind == RFSM_TX_KIND_BEACON) {
+        transmit_on();
+    }
+}
+
+static void fsm_tx_ending(void)
+{
+    tx_stopping = true;
+    tx_backend()->stop();
+}
+
+static void fsm_tx_end(void)
+{
+    if (tx_kind == RFSM_TX_KIND_VOICE) {
+        tx_stopping = false;
+        tx_backend()->finished();
+    } else if (tx_kind == RFSM_TX_KIND_BEACON) {
+        transmit_off();
+    }
+}
+
+static void fsm_apply_channel(void)
+{
+    apply_channel();
+}
+
+static void fsm_beacon_send(uint16_t id)
+{
+    (void)id;
+    aprs_frame();
+    beacon_done = true;
+}
+
+static void fsm_id_nothing(uint16_t id)
+{
+    (void)id; // the beacon on the channel itself (its own frequency: #35); no data bursts yet
+}
+
+static void fsm_nothing(void)
+{
+    // the PTT refused: the transmit screen shows why (radio_tx_check()); nothing to restore; the ticks' work still
+    // in the loop
+}
+
+static void fsm_notify(uint16_t id, rfsm_result_t result)
+{
+    if (id == aprs_id) {
+        aprs_sent = (result == RFSM_SENT);
+        aprs_active = false;
+    }
+}
+
+static const rfsm_ops_t FSM_OPS = {
+    .tx_allowed = fsm_tx_allowed,
+    .dmr_channel = fsm_dmr_channel,
+    .carrier = fsm_carrier,
+    .now_ms = systime_get_ms,
+    .tx_begin = fsm_tx_begin,
+    .tx_ending = fsm_tx_ending,
+    .tx_end = fsm_tx_end,
+    .ptt_refused = fsm_nothing,
+    .apply_channel = fsm_apply_channel,
+    .beacon_tune = fsm_id_nothing,
+    .beacon_send = fsm_beacon_send,
+    .restore = fsm_nothing,
+    .data_send = fsm_id_nothing,
+    .data_clear = fsm_nothing,
+    .rx_work = fsm_nothing,
+    .scan_work = fsm_nothing,
+    .tx_work = fsm_nothing,
+    .ending_work = fsm_nothing,
+    .notify = fsm_notify,
+};
+
+// A pass of the machine: the scan's level (the UI's), the requests recorded, the PTT's level, the tick, then what
+// came of them
+static void fsm_pass(void)
+{
+    rfsm_scan(&fsm, scanning);
+    if (aprs_asked) {
+        aprs_asked = false;
+        rfsm_event(&fsm, RFSM_BEACON_REQ, aprs_id);
+    }
+    rfsm_ptt(&fsm, tx_wanted);
+    rfsm_event(&fsm, RFSM_TICK, 0);
+    if (beacon_done) {
+        beacon_done = false;
+        rfsm_event(&fsm, RFSM_TX_DONE, 0);
+    }
+    if ((fsm.state == RFSM_TX_ENDING) && !tx_backend()->sending()) {
+        rfsm_event(&fsm, RFSM_TX_DONE, 0);
+    }
 }
 
 /* VOX */
@@ -1265,7 +1371,7 @@ static void eco_tick(void)
 
     eco_activity = false;
     if (!has_channel || (level == 0) || (channel.libre_dmr_flag1 & ECO_FLAG1_NO_ECO) || transmitting || tx_wanted ||
-        carrier || speaker || amp_for_audio || amp_for_beep || amp_for_broadcast || scanning || vox_on || aprs_bits ||
+        carrier || speaker || amp_for_audio || amp_for_beep || amp_for_broadcast || scanning || vox_on || aprs_active ||
         hotspot_active() ||
         (dmr_on && dmr_has_sync()) || nxdn_on || active) { // NXDN: the recording needs the receiver on (for now)
         eco_stop();
@@ -1340,8 +1446,8 @@ static void RAM_CODE radio_task(void *arg)
     for (;;) {
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(scan_sampling() ? SCAN_SAMPLE_MS : SAMPLE_MS));
 
-        if (channel_pending && !transmitting) {
-            apply_channel();
+        if (channel_pending) {
+            rfsm_event(&fsm, RFSM_CHANNEL, 0); // now, or after a transmission (the machine)
         }
         if (scan_sampling()) {
             scan_sample();
@@ -1351,10 +1457,7 @@ static void RAM_CODE radio_task(void *arg)
             }
         }
         full_pass = xTaskGetTickCount();
-        if (aprs_bits && !dmr_on && !transmitting) {
-            aprs_transmit();
-        }
-        transmit_step();
+        fsm_pass();
         tx_signal_update();
         if (!transmitting && (speaker || amp_for_audio)) {
             vox_heard = vox_on; // flash code waits: the quiet wait while heard (vox_check() starts it again)
@@ -1400,6 +1503,7 @@ void radio_init(void)
 
 void radio_start(void)
 {
+    rfsm_init(&fsm, &FSM_OPS);
     task = xTaskCreateStatic(radio_task, "radio", sizeof(task_stack) / sizeof(task_stack[0]), NULL, RADIO_TASK_PRIORITY,
                              task_stack, &task_tcb);
     rf_task = xTaskCreateStatic(rf_task_main, "rf", sizeof(rf_task_stack) / sizeof(rf_task_stack[0]), NULL,
@@ -1444,11 +1548,9 @@ static bool in_band_limits(uint32_t frequency)
     return false;
 }
 
-radio_tx_check_t radio_tx_check(void)
+static radio_tx_check_t tx_check(const codeplug_channel_t *c, bool valid)
 {
-    const codeplug_channel_t *c = &requested;
-
-    if (!requested_valid) {
+    if (!valid) {
         return RADIO_TX_NO_CHANNEL;
     }
     if (c->flag4 & FLAG4_RX_ONLY) {
@@ -1463,12 +1565,19 @@ radio_tx_check_t radio_tx_check(void)
     return RADIO_TX_OK;
 }
 
+// For the UI: the channel asked for (the radio task checks the one it tunes when the PTT comes)
+radio_tx_check_t radio_tx_check(void)
+{
+    return tx_check(&requested, requested_valid);
+}
+
+// The PTT's level, recorded: the machine decides
 void radio_transmit(bool on)
 {
     if (on) {
         tx_plain = false;
     }
-    tx_wanted = on && (radio_tx_check() == RADIO_TX_OK);
+    tx_wanted = on;
     if (task) {
         xTaskNotifyGive(task);
     }
@@ -1477,7 +1586,7 @@ void radio_transmit(bool on)
 void radio_transmit_plain(void)
 {
     tx_plain = true;
-    tx_wanted = (radio_tx_check() == RADIO_TX_OK);
+    tx_wanted = true;
     if (task) {
         xTaskNotifyGive(task);
     }
@@ -1492,20 +1601,10 @@ void radio_tx_signal(uint16_t hz1, uint16_t hz2)
     }
 }
 
-// The state machine's state (radio_fsm.h), worked out from the flags until the task runs it (step 1 of the
-// refactor in the OpenDM32 notes' radio_task.html): shown by the test interface
+// The state machine's state (radio_fsm.h): shown by the test interface
 const char *radio_state_name(void)
 {
-    rfsm_state_t state = RFSM_RX;
-
-    if (aprs_bits) {
-        state = transmitting ? RFSM_BEACON_SEND : RFSM_BEACON_LISTEN;
-    } else if (transmitting) {
-        state = tx_stopping ? RFSM_TX_ENDING : RFSM_TX_VOICE;
-    } else if (scanning) {
-        state = RFSM_SCAN;
-    }
-    return rfsm_state_name(state);
+    return rfsm_state_name(fsm.state);
 }
 
 bool radio_is_transmitting(void)

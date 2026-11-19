@@ -1,6 +1,6 @@
 /*
  * The radio task's state machine (src/services/radio_fsm.c) on the PC: every state against every event, as the
- * transition table of the OpenDM32 notes' radio_task.html (6.2), then sequences.
+ * transition table of the OpenDM32 notes' radio_task.html (6.2; SCAN set by the UI's level), then sequences.
  *
  *   python tools/radio_fsm/run.py
  */
@@ -43,7 +43,6 @@ static void a_tx_ending(void) { put("ending"); }
 static void a_tx_end(void) { put("end"); }
 static void a_refused(void) { put("ptt_refused"); }
 static void a_apply(void) { put("apply"); }
-static void a_scan(bool on) { put(on ? "scan(1)" : "scan(0)"); }
 static void a_tune(uint16_t id) { char b[16]; sprintf(b, "tune(%u)", id); put(b); }
 static void a_send(uint16_t id) { char b[16]; sprintf(b, "send(%u)", id); put(b); }
 static void a_restore(void) { put("restore"); }
@@ -56,8 +55,8 @@ static void a_endw(void) { put("endw"); }
 static void a_notify(uint16_t id, rfsm_result_t r) { char b[32]; sprintf(b, "notify(%u,%s)", id, result_name(r)); put(b); }
 
 static const rfsm_ops_t OPS = {q_allowed, q_dmr, q_carrier, q_now, a_tx_begin, a_tx_ending, a_tx_end, a_refused,
-                               a_apply, a_scan, a_tune, a_send, a_restore, a_data, a_clear, a_rx, a_scanw, a_txw,
-                               a_endw, a_notify};
+                               a_apply, a_tune, a_send, a_restore, a_data, a_clear, a_rx, a_scanw, a_txw, a_endw,
+                               a_notify};
 
 static int failures, checks;
 
@@ -83,9 +82,8 @@ static void expect_counts(const char *what, const rfsm_t *m, uint32_t late, uint
 
 /* ---- the table ---- */
 
-static const char *const EVENT_NAMES[RFSM_EVENTS] = {"PTT_DOWN", "PTT_UP", "CHANNEL", "SCAN_ON", "SCAN_OFF",
-                                                     "BEACON_REQ", "DATA_REQ", "TICK", "TX_DONE", "DATA_DONE",
-                                                     "FAULT"};
+static const char *const EVENT_NAMES[RFSM_EVENTS] = {"PTT_DOWN", "PTT_UP", "CHANNEL", "BEACON_REQ", "DATA_REQ",
+                                                     "TICK", "TX_DONE", "DATA_DONE", "FAULT"};
 
 typedef struct {
     rfsm_state_t next;
@@ -105,22 +103,22 @@ typedef struct {
 // [state][event]; requests carry id 5; in BEACON_LISTEN / BEACON_SEND the beacon is 7, in DATA_SEND the burst 9
 // (DATA_DONE carries 9)
 static const cell_t TABLE[RFSM_STATES][RFSM_EVENTS] = {
-    [RX] = {{TV, "tx_begin(voice)"}, {RX, ""}, {RX, "apply"}, {SC, "scan(1)"}, {RX, ""}, {BL, "tune(5)"},
-            {DS, "tx_begin(data),data(5)"}, {RX, "rx"}, {RX, "", 1}, {RX, "", 1}, {RX, "", 0, 1}},
-    [SC] = {{TV, "scan(0),tx_begin(voice)"}, {SC, ""}, {SC, "apply"}, {SC, ""}, {RX, "scan(0)"},
-            {SC, "notify(5,scanning)"}, {SC, "notify(5,scanning)"}, {SC, "scanw"}, {SC, "", 1}, {SC, "", 1},
-            {RX, "scan(0)", 0, 1}},
-    [TV] = {{TV, ""}, {TE, "ending"}, {TV, ""}, {TV, "scan(0)"}, {TV, ""}, {TV, "", 0, 0, 1}, {TV, "", 0, 0, 1},
-            {TV, "txw"}, {RX, "end"}, {TV, "", 1}, {RX, "end", 0, 1}},
-    [TE] = {{TE, ""}, {TE, ""}, {TE, ""}, {TE, "scan(0)"}, {TE, ""}, {TE, "", 0, 0, 1}, {TE, "", 0, 0, 1},
-            {TE, "endw"}, {RX, "end"}, {TE, "", 1}, {RX, "end", 0, 1}},
+    //         PTT_DOWN, PTT_UP, CHANNEL, BEACON_REQ, DATA_REQ, TICK, TX_DONE, DATA_DONE, FAULT
+    [RX] = {{TV, "tx_begin(voice)"}, {RX, ""}, {RX, "apply"}, {BL, "tune(5)"}, {DS, "tx_begin(data),data(5)"},
+            {RX, "rx"}, {RX, "", 1}, {RX, "", 1}, {RX, "", 0, 1}},
+    [SC] = {{TV, "tx_begin(voice)"}, {SC, ""}, {SC, "apply"}, {SC, "notify(5,scanning)"}, {SC, "notify(5,scanning)"},
+            {SC, "scanw"}, {SC, "", 1}, {SC, "", 1}, {SC, "", 0, 1}},
+    [TV] = {{TV, ""}, {TE, "ending"}, {TV, ""}, {TV, "", 0, 0, 1}, {TV, "", 0, 0, 1}, {TV, "txw"}, {RX, "end"},
+            {TV, "", 1}, {RX, "end", 0, 1}},
+    [TE] = {{TE, ""}, {TE, ""}, {TE, ""}, {TE, "", 0, 0, 1}, {TE, "", 0, 0, 1}, {TE, "endw"}, {RX, "end"},
+            {TE, "", 1}, {RX, "end", 0, 1}},
     [BL] = {{TV, "notify(7,abandoned),restore,tx_begin(voice)"}, {BL, ""}, {RX, "notify(7,abandoned),restore,apply"},
-            {SC, "notify(7,abandoned),restore,scan(1)"}, {BL, ""}, {BL, "", 0, 0, 1}, {BL, "", 0, 0, 1},
-            {BS, "tx_begin(beacon),send(7)"}, {BL, "", 1}, {BL, "", 1}, {RX, "notify(7,failed),restore", 0, 1}},
-    [BS] = {{BS, ""}, {BS, ""}, {BS, ""}, {BS, ""}, {BS, ""}, {BS, "", 0, 0, 1}, {BS, "", 0, 0, 1}, {BS, ""},
+            {BL, "", 0, 0, 1}, {BL, "", 0, 0, 1}, {BS, "tx_begin(beacon),send(7)"}, {BL, "", 1}, {BL, "", 1},
+            {RX, "notify(7,failed),restore", 0, 1}},
+    [BS] = {{BS, ""}, {BS, ""}, {BS, ""}, {BS, "", 0, 0, 1}, {BS, "", 0, 0, 1}, {BS, ""},
             {RX, "end,notify(7,sent),restore"}, {BS, "", 1}, {RX, "end,notify(7,failed),restore", 0, 1}},
-    [DS] = {{DS, ""}, {DS, ""}, {DS, ""}, {DS, ""}, {DS, ""}, {DS, "", 0, 0, 1}, {DS, "", 0, 0, 1}, {DS, ""},
-            {DS, "", 1}, {RX, "end,notify(9,sent)"}, {RX, "clear,end,notify(9,failed)", 0, 1}},
+    [DS] = {{DS, ""}, {DS, ""}, {DS, ""}, {DS, "", 0, 0, 1}, {DS, "", 0, 0, 1}, {DS, ""}, {DS, "", 1},
+            {RX, "end,notify(9,sent)"}, {RX, "clear,end,notify(9,failed)", 0, 1}},
 };
 
 // The machine in a state as the events would have left it
@@ -129,6 +127,7 @@ static void enter(rfsm_t *m, rfsm_state_t s)
     rfsm_init(m, &OPS);
     m->state = s;
     m->since_ms = now;
+    m->scan_wanted = (s == SC);
     if (s == TV) {
         m->ptt_wanted = m->ptt_handled = true;
     }
@@ -297,22 +296,45 @@ static void sequences(void)
     expect("pressed again: refused again", &m, RX, "ptt_refused");
     allowed = true;
 
-    // the scan asked for while the beacon was sent, then off before its end: no scan
+    // the UI scanning: beacons and bursts refused, the PTT as usual
     rfsm_init(&m, &OPS);
+    trace[0] = 0;
+    rfsm_scan(&m, true);
+    expect("scan on", &m, SC, "");
     step(&m, RFSM_BEACON_REQ, 24);
-    step(&m, RFSM_TICK, 0);
-    step(&m, RFSM_SCAN_ON, 0);
-    step(&m, RFSM_SCAN_OFF, 0);
-    step(&m, RFSM_TX_DONE, 0);
-    expect("scan given up before it began", &m, RX, "end,notify(24,sent),restore");
+    expect("beacon while scanning", &m, SC, "notify(24,scanning)");
+    step(&m, RFSM_DATA_REQ, 25);
+    expect("burst while scanning", &m, SC, "notify(25,scanning)");
 
-    // the scan asked for while the beacon was sent: started after it
-    rfsm_init(&m, &OPS);
-    step(&m, RFSM_BEACON_REQ, 25);
-    step(&m, RFSM_TICK, 0);
-    step(&m, RFSM_SCAN_ON, 0);
+    // the dual watch: the PTT while scanning, the scan on through the transmission: back to SCAN after it
+    ptt(&m, true);
+    expect("ptt while scanning", &m, TV, "tx_begin(voice)");
+    ptt(&m, false);
     step(&m, RFSM_TX_DONE, 0);
-    expect("scan after the beacon", &m, SC, "end,notify(25,sent),restore,scan(1)");
+    expect("dual watch: back to scanning", &m, SC, "end");
+
+    // scan.c: the PTT stops the scan (its level off) before the transmission: back to RX after it
+    trace[0] = 0;
+    rfsm_scan(&m, false);
+    expect("scan off", &m, RX, "");
+    trace[0] = 0;
+    rfsm_scan(&m, true);
+    ptt(&m, true);
+    trace[0] = 0;
+    rfsm_scan(&m, false);
+    expect("scan stopped while transmitting: still transmitting", &m, TV, "");
+    ptt(&m, false);
+    step(&m, RFSM_TX_DONE, 0);
+    expect("scan stopped: back to RX", &m, RX, "end");
+
+    // a beacon queued while transmitting from a scan: refused once back to scanning
+    rfsm_init(&m, &OPS);
+    rfsm_scan(&m, true);
+    ptt(&m, true);
+    step(&m, RFSM_BEACON_REQ, 26);
+    ptt(&m, false);
+    step(&m, RFSM_TX_DONE, 0);
+    expect("queued beacon, back to scanning", &m, SC, "end,notify(26,scanning)");
 }
 
 int main(void)
