@@ -61,6 +61,7 @@ radio_tx_check_t radio_tx_check(void);
 void radio_transmit(bool on); // only after RADIO_TX_OK; the task switches over
 void radio_transmit_plain(void); // FM on without the start / end tones and MDC1200 (DTMF); radio_transmit(false) ends
 bool radio_is_transmitting(void);
+const char *radio_state_name(void); // the state machine's state (radio_fsm.h): rx, scan, tx_voice ...
 // APRS (aprs.c): the AX.25 frame as NRZI bits (bit 0 of byte 0 first), sent as AFSK on the FM channel by the radio
 // task after waiting up to 2 s for a busy channel. false: not now (busy, not FM, transmitting). The bits stay in use
 // until radio_aprs_busy() is false; radio_aprs_sent() then tells if it went out.

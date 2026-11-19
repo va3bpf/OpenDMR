@@ -63,6 +63,7 @@
 #include "security.h"
 #include "p25_radio.h"
 #include "nxdn_radio.h"
+#include "radio_fsm.h"
 
 #define RADIO_TASK_PRIORITY 4
 #define SAMPLE_MS           25
@@ -1434,6 +1435,22 @@ void radio_tx_signal(uint16_t hz1, uint16_t hz2)
     if (task) {
         xTaskNotifyGive(task);
     }
+}
+
+// The state machine's state (radio_fsm.h), worked out from the flags until the task runs it (step 1 of the
+// refactor in the OpenDM32 notes' radio_task.html): shown by the test interface
+const char *radio_state_name(void)
+{
+    rfsm_state_t state = RFSM_RX;
+
+    if (aprs_bits) {
+        state = transmitting ? RFSM_BEACON_SEND : RFSM_BEACON_LISTEN;
+    } else if (transmitting) {
+        state = tx_wanted ? RFSM_TX_VOICE : RFSM_TX_ENDING;
+    } else if (scanning) {
+        state = RFSM_SCAN;
+    }
+    return rfsm_state_name(state);
 }
 
 bool radio_is_transmitting(void)
