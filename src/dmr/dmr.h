@@ -49,7 +49,8 @@ void dmr_transmit(bool on);     // the PTT: the engine wakes the repeater if nee
 void dmr_set_tx_id(uint32_t id); // the TG, or TX_TARGET_PC_FLAG << 24 | the called ID (tx_target.c)
 void dmr_set_own_id(uint32_t id); // the DMR ID changed (number entry)
 bool dmr_is_transmitting(void); // asked or still ending
-bool dmr_has_sync(void);        // a DMR signal's timeslots found (scan)
+bool dmr_has_sync(void);        // a DMR signal's timeslots found (scan; kept after the signal)
+bool dmr_channel_busy(void);    // a DMR call on the channel now (its timeslots followed)
 bool dmr_repeater_failed(void); // the repeater didn't wake up
 
 typedef struct {

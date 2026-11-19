@@ -102,6 +102,11 @@ extern radio_shared_t rs;
 // radio.c
 void radio_wake(void); // a request recorded: the task looks at once
 
+// Request ids (the machine's results go back by id): the high bits tell whose
+#define RADIO_ID_MASK 0x3FFF
+#define RADIO_ID_APRS 0x4000
+#define RADIO_ID_DATA 0x8000
+
 // radio_rx.c
 bool is_fm(void);
 bool is_analog(void);
@@ -111,6 +116,8 @@ void lna(bool on, uint32_t frequency);
 void squelch_close(void);
 void receive_on(void);
 void apply_channel(void);
+void tune_channel(const codeplug_channel_t *next, bool valid);
+bool rx_noise_carrier(void);
 void rx_settle(uint32_t ms);
 void rx_beep_cancel(void);
 void rx_beep_end_check(void);
@@ -122,6 +129,8 @@ void scan_sample(void);
 // radio_tx.c
 const tx_backend_t *tx_backend_of(const codeplug_channel_t *c, bool valid);
 const tx_backend_t *tx_backend_beacon(void);
+const tx_backend_t *tx_backend_data(void);
+bool tx_frequency_ok(uint32_t frequency);
 uint16_t level_drive(uint32_t frequency, int level);
 uint16_t pa_drive(uint32_t frequency);
 void transmit_on(void);
@@ -147,5 +156,20 @@ bool eco_rx_off(void);
 void aprs_frame(void);
 bool aprs_take_request(uint16_t *id);
 void aprs_finished(uint16_t id, bool sent);
+bool aprs_can_start(void);
+void aprs_tune(void);
+void aprs_restore(void);
+bool aprs_tuned_away(void);
+bool aprs_carrier(void);
+uint32_t aprs_listen_ms(void);
+
+// radio_data.c
+bool data_take_request(uint16_t *id);
+void data_finished(uint16_t id, bool sent);
+void data_start(void);
+bool data_ended(void);
+bool data_failed(void);
+void data_cancel(void);
+uint32_t data_listen_ms(void);
 
 #endif

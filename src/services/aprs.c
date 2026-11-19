@@ -593,7 +593,7 @@ static bool send_beacon(bool forced)
 
     uint16_t bits = build_frame(&aprs.previous, &aprs.current);
 
-    if (!radio_aprs_send(ax25.buffer, bits, (aprs.config.flags & 0x01) != 0)) {
+    if (!radio_aprs_send(ax25.buffer, bits, (aprs.config.flags & 0x01) != 0, 0, &channel)) {
         return false;
     }
     aprs.waiting = true;

@@ -89,10 +89,23 @@ static bool fsm_dmr_channel(void)
     return rs.dmr_on;
 }
 
-// Someone on the channel: the beacon waits for it to be free
+// Someone on the channel: a beacon or a burst waits for it to be free. On the beacon's own frequency the noise only
+// (radio_aprs.c); on a DMR channel a call heard or followed by the engine; else the squelch
 static bool fsm_carrier(void)
 {
+    if (aprs_tuned_away()) {
+        return aprs_carrier();
+    }
+    if (rs.dmr_on) {
+        return rs.amp_for_audio || dmr_channel_busy();
+    }
     return rs.carrier || rs.speaker;
+}
+
+// How long a beacon or a burst waits for a free channel
+static uint32_t fsm_listen_ms(rfsm_tx_kind_t kind)
+{
+    return (kind == RFSM_TX_KIND_DATA) ? data_listen_ms() : aprs_listen_ms();
 }
 
 /* The machine's actions */
@@ -127,10 +140,38 @@ static void fsm_beacon_send(uint16_t id)
     beacon_done = true;
 }
 
-// The result of a beacon request (sent, busy, refused, ...) for radio_aprs_sent()
+// The beacon's own frequency tuned while it listens, and back after
+static void fsm_beacon_tune(uint16_t id)
+{
+    (void)id;
+    aprs_tune();
+}
+
+static void fsm_restore(void)
+{
+    aprs_restore();
+}
+
+// The data burst handed to the engine (the transmit entry done); its end or fault seen in fsm_pass()
+static void fsm_data_send(uint16_t id)
+{
+    (void)id;
+    data_start();
+}
+
+static void fsm_data_clear(void)
+{
+    data_cancel();
+}
+
+// The result of a request (sent, busy, refused, ...): radio_aprs_sent(), radio_data_sent(); the id tells whose
 static void fsm_notify(uint16_t id, rfsm_result_t result)
 {
-    aprs_finished(id, result == RFSM_SENT);
+    if (id & RADIO_ID_DATA) {
+        data_finished(id, result == RFSM_SENT);
+    } else {
+        aprs_finished(id, result == RFSM_SENT);
+    }
 }
 
 // The PTT refused: nothing to do, the transmit screen shows why (radio_tx_check())
@@ -138,24 +179,15 @@ static void fsm_ptt_refused(void)
 {
 }
 
-// Not done yet: the beacon on its own frequency and back (step 4, #35), data bursts (step 5)
-static void not_yet_id(uint16_t id)
-{
-    (void)id;
-}
-
-static void not_yet(void)
-{
-}
-
 /* The work of each tick (25 ms), by state: the machine calls receive_work() in RX, SCAN and BEACON_LISTEN,
    transmit_work() in TX_VOICE, TX_ENDING and DATA_SEND (none in BEACON_SEND: the frame goes out in one call) */
 
 // The signal: the squelch in FM / AM / SSB (not while transmitting), the S meter in DMR / P25 / NXDN; nothing while
-// the power saving has the receiver off
+// the power saving has the receiver off, nor on the beacon's own frequency (its busy check reads the noise only: the
+// squelch would open the speaker there)
 static void read_signal(void)
 {
-    if (eco_rx_off()) {
+    if (eco_rx_off() || aprs_tuned_away()) {
         return;
     }
     if (is_analog() && !rs.transmitting) {
@@ -188,6 +220,7 @@ static const rfsm_ops_t FSM_OPS = {
     .dmr_channel = fsm_dmr_channel,
     .carrier = fsm_carrier,
     .now_ms = systime_get_ms,
+    .listen_ms = fsm_listen_ms,
     // a transmission
     .tx_begin = fsm_tx_begin,
     .tx_ending = fsm_tx_ending,
@@ -196,12 +229,12 @@ static const rfsm_ops_t FSM_OPS = {
     // the channel
     .apply_channel = fsm_apply_channel,
     // the beacon
-    .beacon_tune = not_yet_id,
+    .beacon_tune = fsm_beacon_tune,
     .beacon_send = fsm_beacon_send,
-    .restore = not_yet,
+    .restore = fsm_restore,
     // data bursts
-    .data_send = not_yet_id,
-    .data_clear = not_yet,
+    .data_send = fsm_data_send,
+    .data_clear = fsm_data_clear,
     // each tick
     .rx_work = receive_work,
     .scan_work = receive_work,
@@ -212,10 +245,10 @@ static const rfsm_ops_t FSM_OPS = {
 };
 
 /* One pass of the machine, in three parts, in this order:
-   1. what was asked: the scan's level, a beacon request, the PTT's level;
-   2. the tick: the state's work (receive_work() / transmit_work(), the beacon listening for a free channel, the data
-      timeout);
-   3. what came of it: a transmission over.
+   1. what was asked: the scan's level, a beacon request, a data burst, the PTT's level;
+   2. the tick: the state's work (receive_work() / transmit_work(), a beacon or burst listening for a free channel,
+      the data timeout);
+   3. what came of it: a transmission over, a data burst ended or failed.
    The PTT before the tick: a PTT pressed while the beacon listens wins, the beacon is given up before the tick could
    start sending it. The results after the tick: the tick sends the beacon frame, the same pass ends it. */
 static void fsm_pass(void)
@@ -227,18 +260,28 @@ static void fsm_pass(void)
     if (aprs_take_request(&id)) {
         rfsm_event(&fsm, RFSM_BEACON_REQ, id);
     }
+    if (data_take_request(&id)) {
+        rfsm_event(&fsm, RFSM_DATA_REQ, id);
+    }
     rfsm_ptt(&fsm, rs.tx_wanted);
 
     // 2. the tick
     rfsm_event(&fsm, RFSM_TICK, 0);
 
-    // 3. a transmission over: the beacon frame sent, or the PTT's backend done sending its last frames
+    // 3. a transmission over: the beacon frame sent, the PTT's backend done sending its last frames, the burst's end
     if (beacon_done) {
         beacon_done = false;
         rfsm_event(&fsm, RFSM_TX_DONE, 0);
     }
     if ((fsm.state == RFSM_TX_ENDING) && !tx_on->sending()) {
         rfsm_event(&fsm, RFSM_TX_DONE, 0);
+    }
+    if (fsm.state == RFSM_DATA_SEND) {
+        if (data_failed()) {
+            rfsm_event(&fsm, RFSM_FAULT, 0);
+        } else if (data_ended()) {
+            rfsm_event(&fsm, RFSM_DATA_DONE, fsm.current);
+        }
     }
 }
 
@@ -290,6 +333,7 @@ void radio_init(void)
 {
     rs.tx[RFSM_TX_KIND_VOICE] = tx_backend_of(NULL, false);
     rs.tx[RFSM_TX_KIND_BEACON] = tx_backend_beacon();
+    rs.tx[RFSM_TX_KIND_DATA] = tx_backend_data();
     gpio_output(PIN_AUDIO_SW, false);
     gpio_output(PIN_AUDIO_AMP, false);
     gpio_output(PIN_PA_VHF, false);

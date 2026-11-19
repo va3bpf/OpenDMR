@@ -128,6 +128,18 @@ static int squelch_level(void)
     return SQUELCH_MAX - ((level - 1) * SQUELCH_STEP);
 }
 
+// A carrier by the noise against the squelch level, without the squelch's side effects (the speaker, the LED, the
+// beeps): the beacon's busy check on its own frequency. A fully open squelch (level 1) can't tell: free
+bool rx_noise_carrier(void)
+{
+    uint8_t signal;
+    uint8_t noise;
+    int level = squelch_level();
+
+    fd6818_read_signal(&signal, &noise);
+    return (level < SQUELCH_OPEN) && (noise < level);
+}
+
 // AM and SSB: the FM noise reading means nothing there, the squelch is on the signal (raw RSSI, 1 dB a step): level 1
 // (0 %) always open, then from -128 dBm up by 3 dB a level (-71 dBm at 100 %). 0: open.
 static int RAM_CODE rssi_squelch_level(void)
@@ -214,7 +226,22 @@ void receive_on(void)
     fd6818_set_rx_tone(is_fm() ? rs.channel.rx_tone : CODEPLUG_CSS_NONE);
 }
 
+// The channel asked for (radio_set_channel())
 void apply_channel(void)
+{
+    static codeplug_channel_t next; // not on the radio task's stack
+    bool valid;
+
+    taskENTER_CRITICAL();
+    memcpy(&next, &rs.requested, sizeof(next));
+    valid = rs.requested_valid;
+    rs.channel_pending = false;
+    taskEXIT_CRITICAL();
+    tune_channel(&next, valid);
+}
+
+// The radio set up on a channel: the one asked for, or the beacon's frequency for a frame (radio_aprs.c)
+void tune_channel(const codeplug_channel_t *next, bool valid)
 {
     const factory_cal_t *cal = factory_cal_get();
     bool was_analog = is_analog();
@@ -231,11 +258,10 @@ void apply_channel(void)
         rs.nxdn_on = false;
     }
 
-    taskENTER_CRITICAL();
-    memcpy(&rs.channel, &rs.requested, sizeof(rs.channel));
-    rs.has_channel = rs.requested_valid;
-    rs.channel_pending = false;
-    taskEXIT_CRITICAL();
+    if (valid) {
+        memcpy(&rs.channel, next, sizeof(rs.channel));
+    }
+    rs.has_channel = valid;
     rs.tx[RFSM_TX_KIND_VOICE] = tx_backend_of(&rs.channel, rs.has_channel);
 
     // The FM squelch of the channel left; in DMR the engine has the speaker and the LED, and the FD6818 audio register

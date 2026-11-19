@@ -232,6 +232,13 @@ bool dmr_has_sync(void)
     return HRC7000HasGotSync();
 }
 
+// The engine follows a call's timeslots (slotState): idle again some 0.7 s after it ends (measured). Not
+// HRC7000HasGotSync(): the timing found stays after the signal. A call of another colour code, filtered out, isn't seen
+bool dmr_channel_busy(void)
+{
+    return slotState != DMR_STATE_IDLE;
+}
+
 bool dmr_is_transmitting(void)
 {
     return trxTransmissionEnabled || trxIsTransmitting;

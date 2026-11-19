@@ -329,21 +329,44 @@ static void tx_digital_finished(void)
     post_signal();
 }
 
-// The APRS beacon: the FM carrier, the frame sent in it (radio_aprs.c, the machine's beacon_send()); on an FM channel
-static bool beacon_can_start(void)
+// A data burst (radio_data.c): the DMR engine sends it (the caller's start(), the machine's data_send()); here the PA
+// drive, the LED and the transmitting state around it
+static bool data_can_start(void)
 {
-    return is_fm() && !rs.dmr_on;
+    return rs.dmr_on && (rs.channel.mode == CODEPLUG_MODE_DMR) && !hotspot_active();
+}
+
+static void tx_data_start(void)
+{
+    rf_set_drive(pa_drive(rs.channel.tx_freq));
+    rs.transmitting = true;
+    leds_red(true);
+    post_signal();
+}
+
+static void tx_data_finished(void)
+{
+    rs.transmitting = false;
+    leds_red(false);
+    post_signal();
 }
 
 static const tx_backend_t TX_FM = {is_fm, tx_fm_start, tx_fm_stop, never, nothing};
 static const tx_backend_t TX_DMR = {always, tx_dmr_start, tx_dmr_stop, dmr_is_transmitting, tx_dmr_finished};
 static const tx_backend_t TX_P25 = {always, tx_p25_start, tx_p25_stop, p25_radio_transmitting, tx_digital_finished};
 static const tx_backend_t TX_NXDN = {always, tx_nxdn_start, tx_nxdn_stop, nxdn_radio_transmitting, tx_digital_finished};
-static const tx_backend_t TX_BEACON = {beacon_can_start, transmit_on, nothing, never, transmit_off};
+// The APRS beacon: the FM carrier, the frame sent in it (radio_aprs.c: on the channel or its own frequency)
+static const tx_backend_t TX_BEACON = {aprs_can_start, transmit_on, nothing, never, transmit_off};
+static const tx_backend_t TX_DATA = {data_can_start, tx_data_start, nothing, never, tx_data_finished};
 
 const tx_backend_t *tx_backend_beacon(void)
 {
     return &TX_BEACON;
+}
+
+const tx_backend_t *tx_backend_data(void)
+{
+    return &TX_DATA;
 }
 
 // The backend of a channel (FM's for none: its checks refuse)
@@ -377,6 +400,12 @@ static bool in_band_limits(uint32_t frequency)
         }
     }
     return false;
+}
+
+// A frequency the radio may transmit on (the hardware's bands and the band limits of the settings)
+bool tx_frequency_ok(uint32_t frequency)
+{
+    return codeplug_frequency_can_transmit(frequency) && in_band_limits(frequency);
 }
 
 radio_tx_check_t tx_check(const codeplug_channel_t *c, bool valid)

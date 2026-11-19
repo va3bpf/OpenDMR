@@ -159,8 +159,15 @@ static uint32_t expected_length(uint32_t received)
     if ((request[0] == 'D') && (received >= 2) && (request[1] == 'F')) {
         return 9 + 1024; // font upload: a gap in the UART must not end it early
     }
-    if ((request[0] == 'D') && (received >= 2) && ((request[1] == 'k') || (request[1] == 'q'))) {
-        return (request[1] == 'k') ? 5 : 2; // the test interface (app/test_link.c): no wait for the line to go quiet
+    if ((request[0] == 'D') && (received >= 2)) {
+        // the test interface (app/test_link.c): its length known, no wait for the line to go quiet
+        switch (request[1]) {
+            case 'k': return 5; // a key
+            case 'q': return 2; // the state
+            case 'a': return 6; // a test APRS beacon
+            case 'd': return 5; // a test data burst
+            default: break;
+        }
     }
     if ((request[0] == 'D') && (received >= 2) && (request[1] == 'Z')) {
         return 8; // a packed read (debug.c)

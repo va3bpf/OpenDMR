@@ -64,6 +64,17 @@ class Radio:
     def ptt(self, on):
         self.event('ptt', PRESS if on else RELEASE)
 
+    def beacon(self, frequency=0):
+        """A test APRS beacon (400 bits of flags) through the radio task, on the channel (0) or on frequency (10 Hz
+        units); True: accepted"""
+        self._request(b'Da' + frequency.to_bytes(4, 'big'), b'Da')
+        return self.port.read(1) == b''
+
+    def data(self, ms, fail=False):
+        """A test data burst through the radio task (no DMR engine, no RF): sent for ms, or failing; True: accepted"""
+        self._request(b'Dd' + bytes([(ms >> 8) & 0xFF, ms & 0xFF, 1 if fail else 0]), b'Dd')
+        return self.port.read(1) == b''
+
     # ---- the state
 
     def state(self):

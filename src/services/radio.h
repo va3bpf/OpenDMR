@@ -62,12 +62,33 @@ void radio_transmit(bool on); // only after RADIO_TX_OK; the task switches over
 void radio_transmit_plain(void); // FM on without the start / end tones and MDC1200 (DTMF); radio_transmit(false) ends
 bool radio_is_transmitting(void);
 const char *radio_state_name(void); // the state machine's state (radio_fsm.h): rx, scan, tx_voice ...
-// APRS (aprs.c): the AX.25 frame as NRZI bits (bit 0 of byte 0 first), sent as AFSK on the FM channel by the radio
-// task after waiting up to 2 s for a busy channel. false: not now (busy, not FM, transmitting). The bits stay in use
-// until radio_aprs_busy() is false; radio_aprs_sent() then tells if it went out.
-bool radio_aprs_send(const uint8_t *bits, uint16_t bit_count, bool baud300);
+// APRS (aprs.c): the AX.25 frame as NRZI bits (bit 0 of byte 0 first), sent as AFSK by the radio task.
+// frequency 0: on the channel (FM channels only); else on that frequency (10 Hz units), from a channel in any mode: the
+// task tunes FM there for the frame and comes back, the channel shown by the UI unchanged. channel: the channel the
+// caller checked (radio_get_channel()); the frame goes only while it is still the channel asked for. The task waits for
+// a free channel (up to 2 s; 0.4 s when it tuned away from a DMR / P25 / NXDN channel), the PTT and a channel change
+// win over it. false: not now (transmitting, scanning, hotspot, another channel, receive only, a frequency the radio
+// can't transmit on, a frame still in progress). The bits stay in use until radio_aprs_busy() is false;
+// radio_aprs_sent() then tells if it went out.
+bool radio_aprs_send(const uint8_t *bits, uint16_t bit_count, bool baud300, uint32_t frequency,
+                     const codeplug_channel_t *channel);
 bool radio_aprs_busy(void);
 bool radio_aprs_sent(void);
+// A data burst on the current DMR channel (APRS over DMR: an LRRP report). The caller's functions drive the DMR engine;
+// the radio task calls them, in its own task, only after checking the channel and waiting for it to be free (up to
+// 2 s), with the PA drive, the red LED and the transmitting state set:
+typedef struct {
+    bool (*start)(void);   // hand the burst to the engine; false: it couldn't (the burst fails)
+    bool (*sending)(void); // still being sent
+    bool (*failed)(void);  // the engine gave up (a repeater that didn't wake, an engine reset)
+    void (*cancel)(void);  // abort it and clear the engine's data state (after a failure, or 5 s without the end)
+} radio_data_t;
+// false: not now (not a DMR channel, receive only, out of band, transmitting, scanning, hotspot, a burst still in
+// progress). The PTT pressed meanwhile waits for the burst; pressed while it waits for a free channel, it wins.
+// radio_data_busy() until it is done, radio_data_sent() then tells if it went out. burst stays in use until then.
+bool radio_data_send(const radio_data_t *burst);
+bool radio_data_busy(void);
+bool radio_data_sent(void);
 // The VOX (an FM channel with VOX, settings.vox_threshold set) posts PTT presses and releases; a key (from the input
 // task) stops it and starts it again later
 void radio_vox_key(bool ptt_held);

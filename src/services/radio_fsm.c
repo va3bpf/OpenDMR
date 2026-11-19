@@ -38,8 +38,8 @@
 #include <stddef.h>
 #include "radio_fsm.h"
 
-static const char *const NAMES[RFSM_STATES] = {"rx", "scan", "tx_voice", "tx_ending", "beacon_listen",
-                                               "beacon_send", "data_send"};
+static const char *const NAMES[RFSM_STATES] = {"rx", "scan", "tx_voice", "tx_ending", "listen", "beacon_send",
+                                               "data_send"};
 
 const char *rfsm_state_name(rfsm_state_t state)
 {
@@ -86,10 +86,11 @@ static void start_beacon(rfsm_t *m, uint16_t id)
         m->ops->notify(id, RFSM_REFUSED);
         return;
     }
+    m->kind = RFSM_TX_KIND_BEACON;
     m->current = id;
     m->ops->beacon_tune(id);
     m->since_ms = m->ops->now_ms();
-    m->state = RFSM_BEACON_LISTEN;
+    m->state = RFSM_LISTEN;
 }
 
 static void start_data(rfsm_t *m, uint16_t id)
@@ -102,11 +103,10 @@ static void start_data(rfsm_t *m, uint16_t id)
         m->ops->notify(id, RFSM_REFUSED);
         return;
     }
+    m->kind = RFSM_TX_KIND_DATA;
     m->current = id;
-    m->ops->tx_begin(RFSM_TX_KIND_DATA);
-    m->ops->data_send(id);
     m->since_ms = m->ops->now_ms();
-    m->state = RFSM_DATA_SEND;
+    m->state = RFSM_LISTEN;
 }
 
 static void ptt_press(rfsm_t *m)
@@ -121,7 +121,7 @@ static void ptt_press(rfsm_t *m)
 }
 
 // The beacon given up while listening (the PTT, another channel, its result)
-static void beacon_off(rfsm_t *m, rfsm_result_t result)
+static void listen_off(rfsm_t *m, rfsm_result_t result)
 {
     m->ops->notify(m->current, result);
     m->ops->restore();
@@ -205,34 +205,39 @@ static void handle(rfsm_t *m, rfsm_event_t event, uint16_t id)
             }
             break;
 
-        case RFSM_BEACON_LISTEN:
+        case RFSM_LISTEN:
             switch (event) {
-                case RFSM_PTT_DOWN: beacon_off(m, RFSM_ABANDONED); break; // the PTT then, from RX
+                case RFSM_PTT_DOWN: listen_off(m, RFSM_ABANDONED); break; // the PTT then, from RX
                 case RFSM_CHANNEL:
                     m->channel_deferred = true;
-                    beacon_off(m, RFSM_ABANDONED);
+                    listen_off(m, RFSM_ABANDONED);
                     break;
                 case RFSM_BEACON_REQ: enqueue(m, RFSM_TX_KIND_BEACON, id); break;
                 case RFSM_DATA_REQ: enqueue(m, RFSM_TX_KIND_DATA, id); break;
                 case RFSM_TICK:
                     ops->rx_work(); // listening is receiving: the squelch reads the carrier first
                     if (!ops->carrier()) {
-                        if (ops->tx_allowed(RFSM_TX_KIND_BEACON, m->current)) {
+                        if (!ops->tx_allowed(m->kind, m->current)) {
+                            listen_off(m, RFSM_REFUSED);
+                        } else if (m->kind == RFSM_TX_KIND_BEACON) {
                             ops->tx_begin(RFSM_TX_KIND_BEACON);
                             ops->beacon_send(m->current);
                             m->state = RFSM_BEACON_SEND;
                         } else {
-                            beacon_off(m, RFSM_REFUSED);
+                            ops->tx_begin(RFSM_TX_KIND_DATA);
+                            ops->data_send(m->current);
+                            m->since_ms = ops->now_ms();
+                            m->state = RFSM_DATA_SEND;
                         }
-                    } else if (elapsed(m, RFSM_LISTEN_MS)) {
-                        beacon_off(m, RFSM_BUSY);
+                    } else if (elapsed(m, ops->listen_ms(m->kind))) {
+                        listen_off(m, RFSM_BUSY);
                     }
                     break;
                 case RFSM_TX_DONE:
                 case RFSM_DATA_DONE: m->ignored_late++; break;
                 case RFSM_FAULT:
                     m->faults++;
-                    beacon_off(m, RFSM_FAILED);
+                    listen_off(m, RFSM_FAILED);
                     break;
                 default: break; // PTT_UP
             }
@@ -245,13 +250,13 @@ static void handle(rfsm_t *m, rfsm_event_t event, uint16_t id)
             switch (event) {
                 case RFSM_TX_DONE:
                     ops->tx_end();
-                    beacon_off(m, RFSM_SENT);
+                    listen_off(m, RFSM_SENT);
                     break;
                 case RFSM_DATA_DONE: m->ignored_late++; break;
                 case RFSM_FAULT:
                     m->faults++;
                     ops->tx_end();
-                    beacon_off(m, RFSM_FAILED);
+                    listen_off(m, RFSM_FAILED);
                     break;
                 default: break; // PTT_DOWN (its level waits), PTT_UP, TICK (none while sending)
             }

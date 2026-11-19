@@ -38,6 +38,7 @@ static bool q_allowed(rfsm_tx_kind_t kind, uint16_t id) { (void)kind; (void)id; 
 static bool q_dmr(void) { return dmr; }
 static bool q_carrier(void) { return carrier_on; }
 static uint32_t q_now(void) { return now; }
+static uint32_t q_listen(rfsm_tx_kind_t k) { (void)k; return 2000; }
 static void a_tx_begin(rfsm_tx_kind_t k) { char b[32]; sprintf(b, "tx_begin(%s)", kind_name(k)); put(b); }
 static void a_tx_ending(void) { put("ending"); }
 static void a_tx_end(void) { put("end"); }
@@ -54,7 +55,7 @@ static void a_txw(void) { put("txw"); }
 static void a_endw(void) { put("endw"); }
 static void a_notify(uint16_t id, rfsm_result_t r) { char b[32]; sprintf(b, "notify(%u,%s)", id, result_name(r)); put(b); }
 
-static const rfsm_ops_t OPS = {q_allowed, q_dmr, q_carrier, q_now, a_tx_begin, a_tx_ending, a_tx_end, a_refused,
+static const rfsm_ops_t OPS = {q_allowed, q_dmr, q_carrier, q_now, q_listen, a_tx_begin, a_tx_ending, a_tx_end, a_refused,
                                a_apply, a_tune, a_send, a_restore, a_data, a_clear, a_rx, a_scanw, a_txw, a_endw,
                                a_notify};
 
@@ -96,15 +97,15 @@ typedef struct {
 #define SC RFSM_SCAN
 #define TV RFSM_TX_VOICE
 #define TE RFSM_TX_ENDING
-#define BL RFSM_BEACON_LISTEN
+#define BL RFSM_LISTEN
 #define BS RFSM_BEACON_SEND
 #define DS RFSM_DATA_SEND
 
-// [state][event]; requests carry id 5; in BEACON_LISTEN / BEACON_SEND the beacon is 7, in DATA_SEND the burst 9
+// [state][event]; requests carry id 5; in LISTEN (a beacon) / BEACON_SEND the beacon is 7, in DATA_SEND the burst 9
 // (DATA_DONE carries 9)
 static const cell_t TABLE[RFSM_STATES][RFSM_EVENTS] = {
     //         PTT_DOWN, PTT_UP, CHANNEL, BEACON_REQ, DATA_REQ, TICK, TX_DONE, DATA_DONE, FAULT
-    [RX] = {{TV, "tx_begin(voice)"}, {RX, ""}, {RX, "apply"}, {BL, "tune(5)"}, {DS, "tx_begin(data),data(5)"},
+    [RX] = {{TV, "tx_begin(voice)"}, {RX, ""}, {RX, "apply"}, {BL, "tune(5)"}, {BL, ""},
             {RX, "rx"}, {RX, "", 1}, {RX, "", 1}, {RX, "", 0, 1}},
     [SC] = {{TV, "tx_begin(voice)"}, {SC, ""}, {SC, "apply"}, {SC, "notify(5,scanning)"}, {SC, "notify(5,scanning)"},
             {SC, "scanw"}, {SC, "", 1}, {SC, "", 1}, {SC, "", 0, 1}},
@@ -132,9 +133,11 @@ static void enter(rfsm_t *m, rfsm_state_t s)
         m->ptt_wanted = m->ptt_handled = true;
     }
     if ((s == BL) || (s == BS)) {
+        m->kind = RFSM_TX_KIND_BEACON;
         m->current = 7;
     }
     if (s == DS) {
+        m->kind = RFSM_TX_KIND_DATA;
         m->current = 9;
     }
 }
@@ -182,7 +185,7 @@ static void sequences(void)
     dmr = true;
     carrier_on = false;
 
-    // a busy beacon channel: given up after RFSM_LISTEN_MS
+    // a busy beacon channel: given up after listen_ms()
     rfsm_init(&m, &OPS);
     now = 1000;
     step(&m, RFSM_BEACON_REQ, 1);
@@ -268,11 +271,17 @@ static void sequences(void)
     expect("data not on DMR", &m, RX, "notify(21,refused)");
     dmr = true;
 
-    // a burst that never ends: a fault after RFSM_DATA_MS
+    // a burst: it listens first, then sends on a free channel; one that never ends: a fault after RFSM_DATA_MS
     rfsm_init(&m, &OPS);
     now = 10000;
     step(&m, RFSM_DATA_REQ, 22);
-    now = 12000;
+    expect("burst listening", &m, BL, "");
+    step(&m, RFSM_TICK, 0);
+    expect("burst started", &m, DS, "rx,tx_begin(data),data(22)");
+    now = 10000 + RFSM_DATA_MS - 1;
+    step(&m, RFSM_TICK, 0);
+    expect("burst still on", &m, DS, "txw");
+    now = 10000 + RFSM_DATA_MS;
     step(&m, RFSM_TICK, 0);
     expect("burst timeout", &m, RX, "txw,clear,end,notify(22,failed)");
     expect_counts("burst timeout counted", &m, 0, 1, 0);
@@ -280,9 +289,28 @@ static void sequences(void)
     // another burst's late end: ignored
     rfsm_init(&m, &OPS);
     step(&m, RFSM_DATA_REQ, 23);
+    step(&m, RFSM_TICK, 0);
     step(&m, RFSM_DATA_DONE, 99);
     expect("late end of another burst", &m, DS, "");
     expect_counts("late end counted", &m, 1, 0, 0);
+
+    // a burst ends: sent, back to RX
+    step(&m, RFSM_DATA_DONE, 23);
+    expect("burst sent", &m, RX, "end,notify(23,sent)");
+
+    // a busy channel for a burst: given up (busy); the PTT while a burst listens: given up, the voice at once
+    rfsm_init(&m, &OPS);
+    now = 20000;
+    carrier_on = true;
+    step(&m, RFSM_DATA_REQ, 24);
+    now = 22000;
+    step(&m, RFSM_TICK, 0);
+    expect("burst busy", &m, RX, "rx,notify(24,busy),restore");
+    carrier_on = false;
+    step(&m, RFSM_DATA_REQ, 25);
+    ptt(&m, true);
+    expect("ptt while a burst listens", &m, TV, "notify(25,abandoned),restore,tx_begin(voice)");
+    ptt(&m, false);
 
     // the PTT on a channel that can't transmit: refused once while held, again on the next press
     rfsm_init(&m, &OPS);
