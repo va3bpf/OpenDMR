@@ -7,29 +7,30 @@ English: [roadmap.en.md](roadmap.en.md)
 
 ## 近期
 
-**APRS**
+**APRS**（信标频率、APRS 走 DMR、卫星 APRS 已在 0.6.0 完成）
 
-- 信标在 APRS 配置的发射频率上发（OpenGD77 的 "Transmit frequency"，CPS 里的「Frec TX」），DMR 信道选了 APRS
-  配置也能发信标，发完回到原来的信道（[#35](https://github.com/va3bpf/OpenDMR/pull/35)）
-- 卫星模式发 APRS 信标：用卫星的 APRS 频率（自动修正多普勒）和卫星的路径（如 ISS 的 `RS0ISS`、SONATE-2 的
-  `DP0SNX`）（[#55](https://github.com/va3bpf/OpenDMR/issues/55)）
-- 在空中实测：信标用 APRS 解码器 / aprs.fi 接收，QSY 信息，卫星转发
+- 在空中实测：信标用 APRS 解码器 / aprs.fi 接收，QSY 信息，经卫星转发
+- APRS 走 DMR：确认网关（BrandMeister）能解出 LRRP 报告（[#72](https://github.com/va3bpf/OpenDMR/pull/72)）
+
+**收音机**
+
+- 切换频率后偶尔没有声音（[#65](https://github.com/va3bpf/OpenDMR/issues/65)）
 
 **写频软件（OpenDMR CPS）**
 
-- 编辑 APRS 配置（最多 8 套：路径、注释、图标、信标频率、QSY 等）；现在只是把电台里的配置原样写回
+- 卫星 APRS：按卫星一键建同名的 APRS 配置（路径如 ISS 的 `RS0ISS`、SONATE-2 的 `DP0SNX`）
+- APRS 图标从列表里选，不用手输字符（[CPS #8](https://github.com/va3bpf/opendmr-cps/pull/8)）
 - 编辑 DTMF 等其他现在原样写回的部分
 
 **说明书**
 
-- 按新的配色重拍截图
+- 其余截图按新的 S 表和主题重拍
 
 ## 以后
 
 - 语音提示
 - 写校准（现在只读）
 - 「安全开机」「星（手动 / 自动）」这两项设置真正起作用
-- 西班牙语界面的重音字母（现在字体只有 ASCII）
 - 在空中实测：热点的 CW ID、卫星过境、脱网、按距离排序、AM / SSB 静噪延时
 
 **P25**（详见 [p25.md](p25.md) 第 6 节）

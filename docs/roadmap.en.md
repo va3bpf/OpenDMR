@@ -7,31 +7,33 @@ Suggestions are welcome in the [issues](https://github.com/va3bpf/OpenDMR/issues
 
 ## Next
 
-**APRS**
+**APRS** (the beacon frequency, APRS over DMR and satellite APRS are done in 0.6.0)
 
-- Beacons on the APRS configuration's Tx frequency (OpenGD77's "Transmit frequency", "Frec TX" in the CPS), also from
-  a DMR channel with an APRS configuration, back to the channel afterwards
-  ([#35](https://github.com/va3bpf/OpenDMR/pull/35))
-- APRS beacons in the satellite screen: on the satellite's APRS frequency (Doppler corrected) with the satellite's
-  path (e.g. `RS0ISS` for the ISS, `DP0SNX` for SONATE-2) ([#55](https://github.com/va3bpf/OpenDMR/issues/55))
 - On-air tests: beacons received by an APRS decoder / aprs.fi, the QSY information, satellite digipeating
+- APRS over DMR: confirm that a gateway (BrandMeister) decodes the LRRP report
+  ([#72](https://github.com/va3bpf/OpenDMR/pull/72))
+
+**FM radio**
+
+- The audio sometimes lost after a frequency change ([#65](https://github.com/va3bpf/OpenDMR/issues/65))
 
 **Codeplug software (OpenDMR CPS)**
 
-- Edit the APRS configurations (up to 8: path, comment, icon, beacon frequency, QSY ...); today they are written back
-  as the radio has them
+- Satellite APRS: make the APRS configuration named as a satellite in one click (the path, e.g. `RS0ISS` for the ISS,
+  `DP0SNX` for SONATE-2)
+- Choose the APRS symbol from a list instead of typing its character
+  ([CPS #8](https://github.com/va3bpf/opendmr-cps/pull/8))
 - Edit DTMF and the other parts that are written back unchanged today
 
 **Manual**
 
-- New screenshots in the new colours
+- The other screenshots taken again with the new S meter and themes
 
 ## Later
 
 - Voice prompts
 - Writing the calibration (read only today)
 - "Safe Pwr-On" and "Sat (Manual / Auto)" taking effect
-- Accented letters for the Spanish interface (the fonts are ASCII today)
 - On-air tests: the hotspot's CW ID, satellite passes, talkaround, distance sort, the AM / SSB squelch hold
 
 **P25** (see [p25.md](p25.md), section 6)
