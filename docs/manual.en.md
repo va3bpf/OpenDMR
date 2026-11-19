@@ -405,7 +405,11 @@ E / W). The battery graph has a point every 40 s (6.4 – 8.2 V).
 Needs **the time and your location** (Radio info, or the GPS) and **the satellite keps written by the CPS**. Then:
 the coming passes of all the satellites; open one for the pass (polar track, azimuth / elevation) and the Doppler
 corrected frequencies (the menu key switches voice / APRS / other). The pass screen tunes the radio with the Doppler
-correction, and the PTT transmits on the corrected frequency of that moment. Without keps: "List empty — Load keps
+correction, and the PTT transmits on the corrected frequency of that moment. On the **APRS** frequencies the PTT sends
+an APRS beacon through the satellite's digipeater instead of voice (as OpenGD77): it uses the APRS configuration
+**named as the satellite** (one named ISS with the path RS0ISS, SONATE-2 with DP0SNX ...), made on the CPS's APRS page,
+and the position of the APRS options (the GPS or the fixed one). No configuration of that name, or no position: an
+error tone. Without keps: "List empty — Load keps
 with CPS".
 
 ### GPS

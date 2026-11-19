@@ -67,6 +67,7 @@
 #define DECAY_RESET_M      15.0
 #define BEARING_INVALID    UINT16_MAX
 #define LOCATION_UNSET     0x7F000000UL // settings.location_lat never set
+#define APRS_NAME_LENGTH   8             // codeplug_aprs_config_t.name
 #define FLAG4_RX_ONLY      0x04          // codeplug.h: the channel receives only
 
 #define DEG_TO_RAD   0.017453292519943295
@@ -135,6 +136,8 @@ static struct {
 static volatile bool toggle_asked = false;
 static volatile bool send_asked = false;
 static volatile bool ptt_asked = false;
+static volatile bool satellite_asked = false;    // aprs_send_satellite()
+static char satellite_asked_name[APRS_NAME_LENGTH + 1]; // ... its satellite
 
 /* AX.25 (enqueue...() of aprs.c) */
 
@@ -737,6 +740,115 @@ static bool send_beacon(bool forced)
     return true;
 }
 
+/* The satellite screen (#55), as OpenGD77: a beacon through the satellite's digipeater, with the APRS configuration
+   named as the satellite (its path: RS0ISS for the ISS, DP0SNX for SONATE-2 ...), on the channel the screen tuned (the
+   satellite's APRS uplink, Doppler corrected) */
+
+// A configuration's name (8 characters, 0 or 0xFF after the last) is name: case blind, trailing spaces left out
+static bool named(const char config_name[APRS_NAME_LENGTH], const char *name)
+{
+    int a_len = 0;
+    int b_len = (int)strlen(name);
+
+    while ((a_len < APRS_NAME_LENGTH) && (config_name[a_len] != 0) && ((uint8_t)config_name[a_len] != 0xFF)) {
+        a_len++;
+    }
+    while ((a_len > 0) && (config_name[a_len - 1] == ' ')) {
+        a_len--;
+    }
+    while ((b_len > 0) && (name[b_len - 1] == ' ')) {
+        b_len--;
+    }
+    if ((a_len == 0) || (a_len != b_len)) {
+        return false;
+    }
+    for (int i = 0; i < a_len; i++) {
+        char a = config_name[i];
+        char b = name[i];
+
+        a = ((a >= 'a') && (a <= 'z')) ? (char)(a - 'a' + 'A') : a;
+        b = ((b >= 'a') && (b <= 'z')) ? (char)(b - 'a' + 'A') : b;
+        if (a != b) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// The position now, for a beacon outside the beaconing: the GPS's when the APRS options say so and it is on, else
+// the fixed one (the configuration's, or the settings' location)
+static bool position_now(location_t *here)
+{
+    double lat;
+    double lon;
+
+    if ((aprs.s.state & STATE_LOCATION_FROM_GPS) && gps_on()) {
+        gps_data_t g;
+
+        gps_read(&g);
+        if (!(g.fix && g.has_position)) {
+            return false;
+        }
+        lat = g.latitude / 10000.0;
+        lon = g.longitude / 10000.0;
+    } else {
+        fixed_position(&lat, &lon);
+        if (isnan(lat)) {
+            return false;
+        }
+    }
+    here->time = systime_get_ms();
+    here->latitude = lat;
+    here->longitude = lon;
+    here->bearing = 0;
+    here->speed = 0;
+    return true;
+}
+
+// false: no configuration of that name, no position, or the radio refused (no transmit frequency, busy ...)
+static bool send_satellite_beacon(void)
+{
+    static codeplug_aprs_config_t channel_config; // the channel's, kept meanwhile (not on the input task's stack)
+    bool channel_has_config = aprs.has_config;
+    location_t here;
+    bool ok = false;
+    int index = 0;
+
+    if (aprs.waiting || aprs.dmr_waiting) {
+        return false;
+    }
+    for (int i = 1; (i <= CODEPLUG_APRS_CONFIGS_MAX) && (index == 0); i++) {
+        if (codeplug_get_aprs_config(i, &channel_config) && named(channel_config.name, satellite_asked_name)) {
+            index = i;
+        }
+    }
+    if (index == 0) {
+        return false;
+    }
+    // The satellite's configuration for this frame (its path, comment, symbol, fixed position), then the channel's
+    // again
+    memcpy(&channel_config, &aprs.config, sizeof(channel_config));
+    aprs.has_config = codeplug_get_aprs_config(index, &aprs.config);
+    aprs.fixed_lat = NAN;
+    aprs.fixed_lon = NAN;
+    if (aprs.has_config && position_now(&here)) {
+        uint16_t bits = build_frame(&here, &here);
+
+        aprs.request = radio_aprs_send(ax25.buffer, bits, (aprs.config.flags & 0x01) != 0, 0);
+        ok = (aprs.request != 0);
+    }
+    memcpy(&aprs.config, &channel_config, sizeof(aprs.config));
+    aprs.has_config = channel_has_config;
+    aprs.fixed_lat = NAN;
+    aprs.fixed_lon = NAN;
+    if (ok) {
+        aprs.waiting = true;
+        aprs.waiting_auto = false; // as a manual beacon: an error tone if it doesn't go out
+        aprs.sending = here;
+    }
+    return ok;
+}
+
 static bool corner_pegging(double *speed_mps, uint32_t *time_diff)
 {
     *speed_mps = (aprs.current.speed * 1E-2) * MPS_PER_KNOT;
@@ -949,6 +1061,12 @@ void aprs_tick(void)
             sound_play(SOUND_ERROR);
         }
     }
+    if (satellite_asked) {
+        satellite_asked = false;
+        if (!send_satellite_beacon()) {
+            sound_play(SOUND_ERROR);
+        }
+    }
     if (ptt_asked && !radio_is_transmitting()) {
         ptt_asked = false;
         if (aprs.s.mode == MODE_PTT) {
@@ -983,6 +1101,21 @@ void aprs_send(void)
 void aprs_after_ptt(void)
 {
     ptt_asked = true;
+}
+
+void aprs_send_satellite(const char *name)
+{
+    if (satellite_asked) {
+        return;
+    }
+    strncpy(satellite_asked_name, name, APRS_NAME_LENGTH);
+    satellite_asked_name[APRS_NAME_LENGTH] = 0;
+    satellite_asked = true;
+}
+
+bool aprs_is_sending(void)
+{
+    return aprs.waiting || satellite_asked;
 }
 
 void aprs_debug_status(uint32_t *flags, int32_t *lat_e7, int32_t *lon_e7)

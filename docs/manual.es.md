@@ -307,7 +307,7 @@ Tensión de batería, hora, fecha, localizador Maidenhead (Grid locator), gráfi
 <img src="manual/en/satellite.png" alt="Satélites de radioaficionado">
 
 Requiere **hora exacta y tu ubicación geográfica** (ingresadas en Info radio o por GPS) junto con los **elementos orbitales keplerianos (keps)** cargados previamente mediante el CPS.  
-Calcula y predice los pases orbitales de satélites de radioaficionados: diagrama de trayectoria polar, acimut, elevación y cálculo de corrección por efecto Doppler en tiempo real. La pantalla de pase sintoniza automáticamente las frecuencias corregidas y el PTT transmite con la compensación de Doppler al instante.
+Calcula y predice los pases orbitales de satélites de radioaficionados: diagrama de trayectoria polar, acimut, elevación y cálculo de corrección por efecto Doppler en tiempo real. La pantalla de pase sintoniza automáticamente las frecuencias corregidas y el PTT transmite con la compensación de Doppler al instante. En las frecuencias **APRS**, el PTT envía una baliza APRS a través del digirrepetidor del satélite en lugar de voz (como OpenGD77): usa la configuración APRS **con el mismo nombre que el satélite** (una llamada ISS con la ruta RS0ISS, SONATE-2 con DP0SNX...), creada en la página APRS del CPS, y la posición de las opciones APRS (GPS o fija). Sin una configuración con ese nombre, o sin posición: tono de error.
 
 ### GPS
 

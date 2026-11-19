@@ -42,6 +42,12 @@ bool aprs_is_active(void); // beaconing on (SK1 + 1), not suspended
 void aprs_toggle(void); // SK1 + 1: beaconing on / off (aprsBeaconingToggles())
 void aprs_send(void);   // SK1 + 3 or the menu's "send now": a beacon now, in any mode but OFF
 void aprs_after_ptt(void); // a transmission of the PTT ended (the PTT mode)
+// The satellite screen (#55), as OpenGD77: a beacon now through the satellite's digipeater, with the APRS
+// configuration named as the satellite (its path: RS0ISS for the ISS ...), on the channel the screen tuned (the
+// satellite's APRS uplink, Doppler corrected); in any beaconing mode. An error tone when there is no configuration of
+// that name, no position, or the radio refused it
+void aprs_send_satellite(const char *name);
+bool aprs_is_sending(void); // a beacon asked or with the radio task (the satellite screen doesn't retune meanwhile)
 
 // The cable test interface (test_link.c) reports why a manual beacon was or was not sent. Bits of flags: 0 enabled,
 // 1 the channel has an APRS configuration, 2 a usable position, 3 an LRRP is with the DMR engine, 4 it was queued,

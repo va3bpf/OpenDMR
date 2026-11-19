@@ -40,8 +40,9 @@
  * Before: the clock and the location must be set (TODO: the main firmware opens the radio information on its location
  * or date page; here a message says what is missing), and the keps loaded by the CPS.
  * The pass screen tunes the radio (calculateActiveSatelliteData()): FM 25 kHz on the corrected frequencies of the kind
- * shown, the satellite's CTCSS, the receive frequency set again when it is 500 Hz off; the PTT transmits on the
- * transmit frequency of that moment. The knob and LEFT / RIGHT change the squelch, shown a moment. Leaving the screen,
+ * shown, the satellite's CTCSS, the receive frequency set again when it is 500 Hz off (not while an APRS beacon is on
+ * its way); the PTT transmits on the transmit frequency of that moment; on the APRS frequencies it sends a beacon
+ * instead, with the APRS configuration named as the satellite (#55, as OpenGD77). The knob and LEFT / RIGHT change the squelch, shown a moment. Leaving the screen,
  * the home screen tunes its channel again. Left: the pass alarm (SK2 + left key) and its beeps.
  */
 
@@ -59,6 +60,7 @@
 #include "satellite_screen.h"
 #include "radio.h"
 #include "tx_screen.h"
+#include "aprs.h"
 #include "systime.h"
 
 #define PREDICT_MS     10   // a prediction step each, while predicting
@@ -239,6 +241,10 @@ static void tune(bool force)
         ((int32_t)(channel.rx_freq - rx) <= RETUNE_10HZ)) {
         return;
     }
+    // An APRS beacon on its way: a new channel would make the radio give it up (a few seconds, some 100 Hz off)
+    if (tuned && !force && aprs_is_sending()) {
+        return;
+    }
     memset(&channel, 0, sizeof(channel));
     memset(channel.name, 0xFF, sizeof(channel.name));
     channel.mode = CODEPLUG_MODE_FM;
@@ -339,6 +345,11 @@ static bool handle(const ui_event_t *ev)
         if (press && (ev->key == UI_KEY_GREEN)) {
             next_freq_kind();
             return true;
+        }
+        // On the APRS frequencies the PTT sends a beacon through the satellite's digipeater (#55), no voice there
+        if (press && (ev->key == UI_KEY_PTT) && tuned && (freq_kind == SATELLITE_FREQ_APRS)) {
+            aprs_send_satellite(satellite_name(sat));
+            return false;
         }
         if (press && (ev->key == UI_KEY_PTT) && tuned) {
             tune(true); // the transmit frequency of this moment
