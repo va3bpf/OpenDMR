@@ -27,14 +27,12 @@
  */
 
 /*
- * OpenDMR, service: the radio, FM. After OpenDM32 functions/trx.c (trxSetModeAndBandwidth(),
- * trxSetFrequency(), trxActivateRx() / trxActivateTx(), trxCheckAnalogSquelch(), trxUpdate_PA_DAC_Drive(),
- * trxCheckFrequencyInAmateurBand()), hardware/radioHardwareInterface.c (radioSetRx(), radioSetTx(), radioAudioAmp(),
- * radioReadRSSIAndNoiseFromRam()) and user_interface/uiTxScreen.c (tones around a transmission), DM32 branches.
+ * OpenDMR, service: the radio. The task and the API here; its parts in radio_rx.c, radio_tx.c, radio_rf.c,
+ * radio_vox.c, radio_eco.c and radio_aprs.c (radio_internal.h).
  *
- * The task waits for a request (a channel, the PTT) or 25 ms; in FM receive it reads the signal and noise and runs the
- * squelch, and touches the UI only when what is shown changes. That path still runs from RAM, from when the FM audio
- * went through the baseband (audio switch low) and bus activity was heard in it; probably not needed since.
+ * The API records what is asked (a channel, the PTT, a beacon) and wakes the task. The task waits for that or 25 ms;
+ * each pass hands the requests to the state machine (radio_fsm.h: it decides, the calls here act), then the receive
+ * work: the squelch or the DMR signal, the VOX, the receive beeps, the power saving.
  */
 
 #include <string.h>
@@ -42,1032 +40,23 @@
 #include "task.h"
 #include "hw.h"
 #include "hal.h"
-#include "util.h"
-#include "leds.h"
 #include "fd6818.h"
 #include "systime.h"
 #include "modem.h"
-#include "settings.h"
 #include "factory_cal.h"
-#include "ui.h"
-#include "sound.h"
-#include "tones.h"
-#include "mdc1200.h"
 #include "codeplug.h"
 #include "dmr.h"
-#include "hr_c7000.h"
-#include "vox.h"
-#include "hotspot.h"
-#include "adc.h"
-#include "radio.h"
-#include "security.h"
-#include "p25_radio.h"
-#include "nxdn_radio.h"
 #include "radio_fsm.h"
+#include "radio_internal.h"
 
 #define RADIO_TASK_PRIORITY 4
-#define SAMPLE_MS           25
-#define TUNE_SETTLE_MS      20 // after a channel change the FD6818 noise reading is low a moment: no squelch opening
-#define SCAN_SAMPLE_MS      5  // scanning a digital channel: the signal read this often (radio_scan_peak())
-#define SCAN_SETTLE_MS      10 // and only from this long after the retune
-
-#define PIN_LNA_VHF   0x22 // R5_V_SW
-#define PIN_LNA_UHF   0x24 // R5_U_SW
-#define PIN_PA_VHF    0x37
-#define PIN_PA_UHF    0x23
-#define PIN_AUDIO_SW  0x2F // the audio switch ("PWM/FD6818"): high in FM, the speaker straight from the FD6818 (stock)
-#define PIN_AUDIO_AMP 0x35
-
-#define UHF_FROM  28000000 // 10 Hz: the UHF band of the radio (RADIO_HARDWARE_FREQUENCY_BANDS)
-#define B220_FROM 20000000
-
-#define SQUELCH_MAX        70
-#define SQUELCH_STEP       3
-#define SQUELCH_HYSTERESIS 3
-#define SQUELCH_OPEN       256 // over any noise reading: always open
-#define RSSI_SQUELCH_MIN_DBM (-128)
-#define RSSI_SQUELCH_STEP    3
-#define CSS_HOLD           6 // checks a receive tone may be missing before the speaker closes
-// AM and SSB: how long the signal stays under the closing level before the squelch closes. The RSSI follows the
-// modulation: AM's envelope dips on deep modulation and fades, SSB has no carrier and drops to the noise between words
-#define SQUELCH_HOLD_AM_MS  200
-#define SQUELCH_HOLD_SSB_MS 500
-#define SIGNAL_SAMPLES     10
-#define SIGNAL_MOVE        2 // the shown signal follows the average when it moved this much
-#define RX_END_BEEP_MS     150 // the carrier end beep waits this long, a new carrier in it cancels both
-#define BEEP_RX_CARRIER    0x04 // settings.beep_options
-#define BEEP_DMR_TX_STOP   0x02
-
-#define FLAG4_VOX     0x40
-#define FLAG4_RX_ONLY 0x04
-#define FLAG4_WIDE    0x02
-
-#define TX_TONE_GAIN_STEP 12  // the air level 1 .. 10 to the Tone1 gain (the UV-K5 firmware sends its tones at 66)
-#define TAIL_MS           300 // the stock firmware sends the tail this long (0x300DD44)
-
-#define POWER_LEVELS 10 // 50 mW ... 10 W, then the user power
-#define POWER_USER   9
-#define PA_DRIVE_MAX 4095
+#define SCAN_SAMPLE_MS      5 // scanning a digital channel: the signal read this often (radio_scan_peak())
 
 static StaticTask_t task_tcb;
 static StackType_t task_stack[256];
 static TaskHandle_t task;
 
-// What the UI asks (read by the task)
-static codeplug_channel_t requested;
-static volatile bool requested_valid = false;
-static volatile bool channel_pending = false;
-static volatile bool tx_wanted = false;
-static volatile bool tx_plain = false; // no start / end tones nor MDC1200 (a DTMF sequence)
-
-// What the task uses
-static codeplug_channel_t channel;
-static bool has_channel = false;
-static bool dmr_on = false; // the modem and the FD6818 are in DMR
-static uint16_t dmr_drive;        // the PA drive of the DMR transmission (pa_drive() of its frequency)
-static volatile bool transmitting = false;
-
-// Receive
-static volatile bool carrier = false; // the noise under the squelch level
-static bool p25_on = false;          // the P25 receiver runs (p25_radio.c)
-static bool nxdn_on = false;         // the NXDN receiver runs (nxdn_radio.c)
-static volatile bool speaker = false; // the audio on (the carrier, and the tone if one is set)
-static volatile bool scanning = false; // radio_set_scanning(): no receive beeps
-// Scanning a digital channel: the strongest reading since the retune (SCAN_SETTLE_MS on), and how many were taken
-static volatile uint8_t scan_peak;
-static volatile uint16_t scan_samples;
-static TickType_t scan_settled_at;
-static TickType_t settled_at;           // after a channel change, the squelch may open from then on
-static uint8_t css_missing = 0;
-static uint8_t signal_low = 0; // AM, SSB: checks in a row the signal was under the closing level
-static bool rx_end_beep = false; // the carrier end beep is waiting
-static TickType_t rx_end_beep_at;
-static volatile uint8_t signal_raw = 0;
-static volatile uint8_t noise_raw = 255;
-static uint8_t samples[SIGNAL_SAMPLES];
-static uint8_t sample_index = 0;
-static volatile uint8_t signal_shown = 0;
-
-/* Channel facts */
-
-// FM: transmits, has the noise squelch and the tones
-static bool is_fm(void)
-{
-    return has_channel && (channel.mode == CODEPLUG_MODE_FM);
-}
-
-// FM, AM, USB, LSB: the FD6818 demodulates, the speaker from its audio output
-static inline bool is_analog(void)
-{
-    return has_channel && codeplug_mode_is_analog(channel.mode);
-}
-
-static fd6818_demod_t demod_of(uint8_t mode)
-{
-    return (mode == CODEPLUG_MODE_AM) ? FD6818_DEMOD_AM : (codeplug_mode_is_ssb(mode) ? FD6818_DEMOD_SSB : FD6818_DEMOD_FM);
-}
-
-static bool is_wide(void)
-{
-    return is_fm() && ((channel.flag4 & FLAG4_WIDE) != 0);
-}
-
-int radio_band_of(uint32_t frequency)
-{
-    return (frequency >= UHF_FROM) ? 2 : ((frequency >= B220_FROM) ? 1 : 0);
-}
-
-// The noise level the squelch opens under (trxCheckAnalogSquelch()); level 1 (0 %): open whatever the noise, as on
-// most radios (the noise reading is 8 bits, so it never reaches the level and the hysteresis over it)
-static int squelch_level(void)
-{
-    int level = (channel.sql != 0) ? channel.sql : settings.squelch_defaults[radio_band_of(channel.rx_freq)];
-
-    if (level <= 1) {
-        return SQUELCH_OPEN;
-    }
-    return SQUELCH_MAX - ((level - 1) * SQUELCH_STEP);
-}
-
-// AM and SSB: the FM noise reading means nothing there, the squelch is on the signal (raw RSSI, 1 dB a step): level 1
-// (0 %) always open, then from -128 dBm up by 3 dB a level (-71 dBm at 100 %). 0: open.
-static int RAM_CODE rssi_squelch_level(void)
-{
-    int level = (channel.sql != 0) ? channel.sql : settings.squelch_defaults[radio_band_of(channel.rx_freq)];
-
-    if (level <= 1) {
-        return 0;
-    }
-    return RSSI_SQUELCH_MIN_DBM + ((level - 2) * RSSI_SQUELCH_STEP) + ((channel.rx_freq >= UHF_FROM) ? 167 : 177);
-}
-
-/* Pins */
-
-static void lna(bool on, uint32_t frequency)
-{
-    gpio_output(PIN_LNA_VHF, on && (frequency < UHF_FROM));
-    gpio_output(PIN_LNA_UHF, on && (frequency >= UHF_FROM));
-}
-
-// The speaker amplifier: on for the received audio or for a beep (sound.c), off when neither needs it. The audio
-// switch: high in FM (the speaker from the FD6818), low during a beep (the beeps come from the baseband's DAC; with the
-// switch high they don't reach the speaker)
-static volatile bool amp_for_audio = false;
-
-// The VOX (vox.h): on for a channel with VOX and a VOX level set, on the stock firmware's VOX ADC channel. As the
-// stock firmware, 10 samples (1 s) are left out after the channel is set and after a received signal ends; also
-// after a key (the main firmware) or a beep (the speaker into the mic). Not after its own transmission: it keys
-// again at once when the speech goes on.
-#define VOX_SETTLE_MS 1000
-static bool vox_on = false;
-static bool vox_keyed = false;         // the VOX posted a PTT press, its release is due
-static volatile bool vox_key = false;  // the input task saw a key (radio_vox_key())
-static volatile bool vox_ptt = false;  // ... and the PTT was held
-static uint32_t vox_next_ms;
-static void vox_setup(void);
-static volatile bool vox_heard = false; // a received signal was heard: start again
-static uint16_t vox_window_max = 0;    // the loudest ADC reading of this VOX_SAMPLE_MS window
-static volatile bool amp_for_beep = false;
-static volatile bool beep_path = false; // the audio switch to the baseband for a beep
-static volatile bool amp_for_broadcast = false; // the FM broadcast receiver plays (its audio goes straight to the amplifier)
-static volatile bool audio_sw_fm = false;
-
-static void audio_switch(void)
-{
-    gpio_output(PIN_AUDIO_SW, audio_sw_fm && !beep_path);
-}
-
-static void RAM_CODE audio_amp(bool on)
-{
-    taskENTER_CRITICAL();
-    amp_for_audio = on;
-    gpio_output(PIN_AUDIO_AMP, amp_for_audio || amp_for_beep || amp_for_broadcast);
-    taskEXIT_CRITICAL();
-}
-
-/* The transmit power. The factory table has the stock Low, Middle and High (rated 1 W, 4 W, 10 W): the stock firmware
- * (v1.01.048, 0x0301A7C4) takes the drive of the level straight from it. The levels between go by the square root of
- * the power (the RF amplitude follows the drive), 50 and 500 mW below 1 W on the slope from 1 W to 4 W: estimates,
- * unmeasured. Levels 2, 5 and 8 are the factory points (before, 1, 4 and 8, named 250 mW, 1 W and 5 W: wrongly). */
-
-typedef struct {
-    uint8_t from;      // factory point: 0 Low (1 W), 1 Middle (4 W), 2 High (10 W)
-    int16_t per_mille; // of the way to the next point, (sqrt(P) - sqrt(P from)) / (sqrt(P next) - sqrt(P from))
-} power_step_t;
-
-static const power_step_t power_steps[POWER_USER] = { // finer at the low end, coarser up high
-    {0, -776}, // 50 mW
-    {0, -293}, // 500 mW
-    {0, 0},    // 1 W
-    {0, 414},  // 2 W
-    {0, 732},  // 3 W
-    {1, 0},    // 4 W
-    {1, 203},  // 5 W
-    {1, 556},  // 7 W
-    {2, 0},    // 10 W
-};
-
-static uint16_t level_drive(uint32_t frequency, int level)
-{
-    uint16_t points[FACTORY_CAL_LEVELS];
-    int32_t drive;
-
-    level = CLAMP(level, 0, POWER_LEVELS - 1);
-    if (level == POWER_USER) {
-        drive = settings.user_power;
-    } else {
-        const power_step_t *step = &power_steps[level];
-        int32_t from;
-        int32_t next;
-
-        factory_cal_pa_drive(frequency, points);
-        from = points[step->from];
-        next = (step->from < (FACTORY_CAL_LEVELS - 1)) ? points[step->from + 1] : from;
-        drive = from + (((next - from) * step->per_mille) / 1000);
-    }
-    return (uint16_t)CLAMP(drive, 0, PA_DRIVE_MAX);
-}
-
-static uint16_t pa_drive(uint32_t frequency)
-{
-    return level_drive(frequency,
-                       (channel.libre_dmr_power != 0) ? (channel.libre_dmr_power - 1) : settings.tx_power_level);
-}
-
-/* Receive */
-
-static void RAM_CODE post_signal(void)
-{
-    ui_event_t ev = {.type = UI_EVENT_DATA, .what = UI_DATA_SIGNAL};
-
-    ui_post(&ev);
-}
-
-static void squelch_close(void)
-{
-    audio_amp(false);
-    fd6818_af_out(false);
-    leds_green(false);
-    if (carrier || speaker) {
-        carrier = false;
-        speaker = false;
-        post_signal();
-    }
-    css_missing = 0;
-    signal_low = 0;
-}
-
-// Receive on the channel: radioSetRx(), radioSetFrequency(), radioSetIF()
-static void receive_on(void)
-{
-    bool wide = is_wide();
-
-    modem_pa_drive(0);
-    gpio_output(PIN_PA_VHF, false);
-    gpio_output(PIN_PA_UHF, false);
-    lna(true, channel.rx_freq);
-    fd6818_receive(wide);
-    if (is_analog()) {
-        modem_fm_receive(wide, factory_cal_rx_dac_gain());
-    }
-    fd6818_set_frequency(channel.rx_freq, wide);
-    fd6818_receive(wide);
-    fd6818_set_rx_tone(is_fm() ? channel.rx_tone : CODEPLUG_CSS_NONE);
-}
-
-static void eco_reset(void);
-
-static void apply_channel(void)
-{
-    const factory_cal_t *cal = factory_cal_get();
-    bool was_analog = is_analog();
-
-    eco_reset(); // the channel is set up receiving: the power saving starts over
-
-    // P25: the modem back to DMR while the channel changes (p25_radio.c), started again below on a P25 channel
-    if (p25_on) {
-        p25_radio_stop();
-        p25_on = false;
-    }
-    if (nxdn_on) {
-        nxdn_radio_stop();
-        nxdn_on = false;
-    }
-
-    taskENTER_CRITICAL();
-    memcpy(&channel, &requested, sizeof(channel));
-    has_channel = requested_valid;
-    channel_pending = false;
-    taskEXIT_CRITICAL();
-
-    // The FM squelch of the channel left; in DMR the engine has the speaker and the LED, and the FD6818 audio register
-    // its DMR setting (the FM value there stops the baseband to the HR_C7000: no DMR sync after a retune)
-    if (was_analog) {
-        squelch_close();
-    }
-    settled_at = xTaskGetTickCount() + pdMS_TO_TICKS(TUNE_SETTLE_MS);
-    scan_settled_at = xTaskGetTickCount() + pdMS_TO_TICKS(SCAN_SETTLE_MS);
-    scan_peak = 0;
-    scan_samples = 0;
-    // FM as the stock firmware: the speaker from the FD6818's audio output; through the baseband (switch low, as the
-    // DMR receive needs it) the CPU, flash and display activity was heard in the FM audio
-    taskENTER_CRITICAL();
-    audio_sw_fm = is_analog();
-    audio_switch();
-    taskEXIT_CRITICAL();
-    // The mic to the FD6818 for FM (high), to the modem's codec for DMR (low), set with the mode as the stock firmware
-    // does: switched at each DMR transmission, it put a DC step and a click (to -32000) into the first 100 ms of the
-    // capture, sent as a pop at the start of every transmission
-    gpio_output(PIN_MIC_MUT, is_analog());
-    memset(samples, 0, sizeof(samples));
-    signal_shown = 0;
-    if (dmr_on && (!has_channel || is_analog())) {
-        dmr_leave();
-        dmr_on = false;
-    }
-    if (!has_channel) {
-        lna(false, 0);
-        fd6818_write(0x30, 0x0000); // idle
-        vox_setup();
-        post_signal();
-        return;
-    }
-
-    if (is_analog()) {
-        // FM set up (trxSetModeAndBandwidth()): the baseband, the FD6818 FM table and level, then the channel; AM and
-        // SSB the same, then their demodulator
-        modem_fm_receive(is_wide(), factory_cal_rx_dac_gain());
-        fd6818_set_fm(factory_cal_analog_rx_volume());
-        if (!is_fm()) {
-            fd6818_set_demod(demod_of(channel.mode));
-        }
-        modem_set_frequency_calibration(cal->valid, cal->osc_tune, cal->rx_adjust, factory_cal_mod_bias(channel.tx_freq));
-        receive_on();
-    } else {
-        // DMR (trxSetModeAndBandwidth(), trxSetFrequency()): the FD6818 DMR table the first time, the engine stopped
-        // while the frequency changes, then started on the channel
-        if (dmr_on) {
-            dmr_retune();
-        } else {
-            fd6818_set_dmr();
-        }
-        modem_set_frequency_calibration(cal->valid, cal->osc_tune, cal->rx_adjust, factory_cal_mod_bias(channel.tx_freq));
-        receive_on();
-        if (dmr_on) {
-            dmr_channel(&channel);
-        } else {
-            dmr_enter(&channel);
-            dmr_on = true;
-        }
-        // P25: the DMR engine set the modem up for 4FSK; the P25 receiver takes it over (physical layer receive)
-        if (channel.mode == CODEPLUG_MODE_P25) {
-            p25_radio_start();
-            p25_on = true;
-        }
-        // NXDN: the DMR engine stands aside too; the modem records the discriminator (FM) for the NXDN receiver
-        if (channel.mode == CODEPLUG_MODE_NXDN) {
-            nxdn_radio_start();
-            nxdn_on = true;
-        }
-    }
-    vox_setup();
-    post_signal();
-}
-
-// The shown signal: the average of the last readings, moved only by SIGNAL_MOVE or more (the stock firmware averages
-// too; the raw reading jumps a step or two all the time)
-static void RAM_CODE add_sample(uint8_t signal)
-{
-    uint32_t sum = 0;
-
-    samples[sample_index] = signal;
-    sample_index = (uint8_t)((sample_index + 1) % SIGNAL_SAMPLES);
-    for (int i = 0; i < SIGNAL_SAMPLES; i++) {
-        sum += samples[i];
-    }
-
-    int32_t average = (int32_t)(sum / SIGNAL_SAMPLES);
-    int32_t moved = average - signal_shown;
-
-    if ((moved >= SIGNAL_MOVE) || (moved <= -SIGNAL_MOVE)) {
-        signal_shown = (uint8_t)average;
-        post_signal();
-    }
-}
-
-/* The carrier beeps (applicationMain.c rxBeepsHandler()): the speaker on and off, the end beep a moment later; none
-   while scanning (as the main firmware: beeps aren't allowed while scanning) */
-
-
-void radio_set_scanning(bool on)
-{
-    scanning = on;
-}
-
-bool radio_is_scanning(void)
-{
-    return scanning;
-}
-
-static bool rx_beeps(void)
-{
-    return !scanning && (settings.beep_options & BEEP_RX_CARRIER) && (settings.audio_prompt_mode != SOUND_PROMPT_SILENT);
-}
-
-static void rx_beep_begin(void)
-{
-    if (rx_end_beep) {
-        rx_end_beep = false; // the same over, interrupted a moment: no beeps
-    } else if (rx_beeps()) {
-        sound_play(SOUND_RX_BEGIN);
-    }
-}
-
-static void rx_beep_end(void)
-{
-    if (rx_beeps()) {
-        rx_end_beep = true;
-        rx_end_beep_at = xTaskGetTickCount() + pdMS_TO_TICKS(RX_END_BEEP_MS);
-    }
-}
-
-static void rx_beep_end_check(void)
-{
-    if (rx_end_beep && ((int32_t)(xTaskGetTickCount() - rx_end_beep_at) >= 0)) {
-        rx_end_beep = false;
-        sound_play(SOUND_RX_END);
-    }
-}
-
-// DMR: the signal and the noise for the S meter and the engine's SNR check (trxGetSNRMargindBm()); the engine does
-// the rest (the green LED, the speaker). The receiver follows the timeslots: a reading in the other slot is the noise
-// floor, even under a steady carrier (measured: 120 and 85 in turn), so the S meter takes the highest of the last
-// DMR_PEAK_SAMPLES readings (100 ms at SAMPLE_MS: always one in the 30 ms slot of every 60 ms), not their average
-#define DMR_PEAK_SAMPLES 4
-
-static void dmr_signal(void)
-{
-    static uint8_t recent[DMR_PEAK_SAMPLES];
-    static uint8_t recent_index;
-    uint8_t signal;
-    uint8_t noise;
-    uint8_t peak = 0;
-
-    fd6818_read_signal(&signal, &noise);
-    signal_raw = signal;
-    noise_raw = noise;
-    recent[recent_index] = signal;
-    recent_index = (uint8_t)((recent_index + 1) % DMR_PEAK_SAMPLES);
-    for (int i = 0; i < DMR_PEAK_SAMPLES; i++) {
-        peak = (recent[i] > peak) ? recent[i] : peak;
-    }
-    add_sample(peak);
-}
-
-static void RAM_CODE squelch_check(void)
-{
-    uint8_t signal;
-    uint8_t noise;
-    bool fm = is_fm();
-    int level = fm ? squelch_level() : rssi_squelch_level();
-    // the receive tone of the channel, unless the analog filter of the quick menu is "none" (trxAnalogFilterLevel)
-    bool tone = fm && (channel.rx_tone != CODEPLUG_CSS_NONE) && (settings.analog_filter_level != 0);
-    bool open;
-    bool close;
-
-    fd6818_read_signal(&signal, &noise);
-    signal_raw = signal;
-    noise_raw = noise;
-    add_sample(signal);
-
-    if (fm) {
-        open = (noise < level);
-        close = (noise > (level + SQUELCH_HYSTERESIS));
-    } else {
-        // 3 dB under the opening level, and for the hold time in a row: a moment under it (a dip of the modulation, a
-        // pause between words) doesn't close it
-        int hold = (codeplug_mode_is_ssb(channel.mode) ? SQUELCH_HOLD_SSB_MS : SQUELCH_HOLD_AM_MS) / SAMPLE_MS;
-
-        open = (signal >= level);
-        if (signal >= (level - SQUELCH_HYSTERESIS)) {
-            signal_low = 0;
-        } else if (signal_low < hold) {
-            signal_low++;
-        }
-        close = (signal_low >= hold);
-    }
-    if (!carrier && open && ((int32_t)(xTaskGetTickCount() - settled_at) >= 0)) {
-        carrier = true;
-        css_missing = 0;
-        fd6818_af_out(true);
-        leds_green(true);
-        post_signal();
-    } else if (carrier && close) {
-        if (speaker) {
-            rx_beep_end();
-        }
-        squelch_close();
-        return;
-    }
-    if (!carrier) {
-        return;
-    }
-
-    bool tone_ok = !tone || fd6818_rx_tone_detected(channel.rx_tone);
-
-    if (!speaker && tone_ok) {
-        speaker = true;
-        css_missing = 0;
-        modem_fm_audio(true);
-        audio_amp(true);
-        rx_beep_begin();
-        post_signal();
-    } else if (speaker && !tone_ok) {
-        if (++css_missing >= CSS_HOLD) { // a tone is often lost a moment on a strong deviation
-            speaker = false;
-            css_missing = 0;
-            audio_amp(false);
-            rx_beep_end();
-            post_signal();
-        }
-    } else {
-        css_missing = 0;
-    }
-}
-
-/* Transmit (radioSetFrequency(tx), radioSetTx(); the tone first, as uiTxScreen.c) */
-
-static void transmit_on(void)
-{
-    bool wide = is_wide();
-    uint32_t tx = channel.tx_freq;
-
-    squelch_close();
-    rx_end_beep = false;
-    leds_red(true);
-    fd6818_set_tx_tone(channel.tx_tone);
-    fd6818_set_frequency(tx, wide);
-    lna(false, 0);
-    fd6818_transmit_prepare();
-    fd6818_set_mic_gain(settings.mic_gain_fm); // the FM mic goes to the FD6818 (the codec gain is the DMR one)
-    modem_fm_transmit(wide, settings.mic_gain_fm);
-    gpio_output(PIN_MIC_MUT, true); // the mic to the FD6818 (low: to the modem, DMR)
-    fd6818_transmit(wide);
-    gpio_output((tx >= UHF_FROM) ? PIN_PA_UHF : PIN_PA_VHF, true);
-    modem_pa_drive(pa_drive(tx));
-    transmitting = true;
-    post_signal();
-}
-
-static void transmit_off(void)
-{
-    modem_pa_drive(0);
-    gpio_output(PIN_PA_VHF, false);
-    gpio_output(PIN_PA_UHF, false);
-    leds_red(false);
-    transmitting = false;
-    receive_on();
-    post_signal();
-}
-
-/* The FM transmit tones (sound.h): on the air while transmitting, the radio task waits for them; on our speaker by the
-   sound service, at the start while the air one goes */
-
-static void air_tone(uint8_t pattern)
-{
-    const int16_t *melody = sound_tx_tone(pattern);
-
-    if (!melody) {
-        return;
-    }
-    for (int i = 0; melody[i] >= 0; i += 2) {
-        fd6818_tx_tone((uint16_t)melody[i], 0, (uint8_t)(sound_tx_tones.air_level * TX_TONE_GAIN_STEP));
-        vTaskDelay(pdMS_TO_TICKS(melody[i + 1]));
-    }
-    fd6818_tx_tone_end();
-}
-
-// What the UI asks (radio_tx_signal()), and what is sent
-static volatile uint16_t signal_wanted[2];
-static uint16_t signal_sent[2];
-
-static void tx_signal_update(void)
-{
-    uint16_t hz1 = signal_wanted[0];
-    uint16_t hz2 = signal_wanted[1];
-
-    if (!transmitting || ((hz1 == signal_sent[0]) && (hz2 == signal_sent[1]))) {
-        return;
-    }
-    if ((hz1 == 0) && (hz2 == 0)) {
-        fd6818_tx_tone_end();
-    } else {
-        fd6818_tx_tone((hz1 == RADIO_TX_SILENT) ? 0 : hz1, hz2, (uint8_t)(sound_tx_tones.air_level * TX_TONE_GAIN_STEP));
-    }
-    signal_sent[0] = hz1;
-    signal_sent[1] = hz2;
-}
-
-// The CTCSS / DCS tail before the carrier goes, so the receivers close their squelch without the noise burst
-static void tail(void)
-{
-    if ((sound_tx_tones.tail == SOUND_TAIL_OFF) || (sound_tx_tones.tail >= SOUND_TAILS) ||
-        (channel.tx_tone == CODEPLUG_CSS_NONE)) {
-        return;
-    }
-    fd6818_tx_tail(((channel.tx_tone & TONES_DCS) != 0), (sound_tx_tones.tail == SOUND_TAIL_PHASE));
-    vTaskDelay(pdMS_TO_TICKS(TAIL_MS));
-    fd6818_tx_tail_end();
-}
-
-// MDC1200 PTT ID: the unit ID the last 4 decimal digits of the DMR ID, as MDC IDs are shown (1234 is 0x1234)
-static void mdc1200(bool start)
-{
-    uint8_t mode = sound_tx_tones.mdc1200;
-    uint8_t packet[MDC1200_PACKET_SIZE];
-    uint32_t id = codeplug_get_dmr_id();
-    uint16_t unit = 0;
-
-    if ((mode != SOUND_MDC1200_BOTH) && (mode != (start ? SOUND_MDC1200_START : SOUND_MDC1200_END))) {
-        return;
-    }
-    for (int digit = 0; digit < 4; digit++) {
-        unit |= (uint16_t)((id % 10) << (4 * digit));
-        id /= 10;
-    }
-    mdc1200_encode(packet, MDC1200_OP_PTT_ID, (start ? MDC1200_ARG_PRE : MDC1200_ARG_POST), unit);
-    fd6818_tx_fsk(packet, sizeof(packet), is_wide());
-}
-
-static void local_tone(uint8_t pattern)
-{
-    const int16_t *melody = sound_tx_tone(pattern);
-
-    if (melody) {
-        sound_play_volume(melody, sound_tx_tones.local_volume);
-    }
-}
-
-/* DMR transmit: the engine switches the transmitter from its interrupts (trxActivateDMRTx(), trxFastDMRTx(),
-   trxActivateRx() of the main firmware: radioSetTx(), radioFastTx(), radioSetRx() of the DM-32 releases). As the stock
-   firmware (DM32.01.L01.048): the HR_C7000's RF transmit start (vector 64) and RF receive start (65) interrupts only
-   ask its RF task (0x300dc44), which switches each burst with waits and a PA ramp (RAM 0x2b440 on, 0x2b4a0 off,
-   0x2b364 ramp). Switched at once, without the ramp and back on the Rx frequency in between, the bursts spread over
-   the band: a radio next to ours didn't decode the repeater's downlink of our call (a DM1801 next to another did). */
-
-#define RF_TASK_PRIORITY (configMAX_PRIORITIES - 1) // the burst timing first
-#define RF_SETUP         0x01 // the first burst of a transmission: the transmitter set up first
-#define RF_ON            0x02
-#define RF_OFF           0x04
-#define RF_RX            0x08 // the end of the transmission
-
-static StaticTask_t rf_task_tcb;
-static StackType_t rf_task_stack[256];
-static TaskHandle_t rf_task;
-static bool rf_on_air = false; // the PA on (rf task)
-
-// The stock PA ramp (0x3074714): the drive is the target x ramp[i] / 248, up through all 40, down from ramp[20]
-static const uint8_t pa_ramp[40] = {1,   2,   2,   4,   8,   10,  12,  14,  16,  18,  20,  24,  28,  32,
-                                    36,  40,  46,  52,  58,  64,  70,  76,  82,  88,  94,  100, 106, 112,
-                                    118, 124, 133, 143, 158, 173, 188, 203, 218, 228, 238, 248};
-#define PA_RAMP_FULL 248
-#define PA_RAMP_DOWN 20
-
-// The stock busy wait (RAM 0x2df80): 164 nops a unit, about 1 us
-static void RAM_CODE rf_wait(uint32_t units)
-{
-    for (uint32_t i = 0; i < units; i++) {
-        __asm__ volatile(".rept 164\n"
-                         "nop\n"
-                         ".endr\n");
-    }
-}
-
-// A ramp step: the stock firmware's soft float maths between two writes, about 4 units (estimated)
-static void rf_ramp_step(uint8_t level)
-{
-    modem_pa_drive((uint16_t)(((uint32_t)dmr_drive * level) / PA_RAMP_FULL));
-    rf_wait(4);
-}
-
-// 0x2b440: the LNA off, a wait by band (stock: 1.6 / 1.0 / 1.2 ms picked from a channel field, not mapped yet; here VHF /
-// 220 MHz / UHF), the Tx frequency, the PA switch, the ramp up. The wait counts from the Tx interrupt, which comes
-// RF_CONTROL byte 1 bits ahead of the burst (modem.c RF_CONTROL_DIRECT, 0x1F: 3.2 ms): 1.6 ms puts the PA at full 0.87 ms
-// before the timeslot. With the old direct mode lead (0x0A) no wait was early enough (2026-11-10). Measured with a weak
-// signal (bit errors in the received bursts): VHF 1600 none; UHF 1600 left the first symbol of most bursts wrong, 1200
-// (the PA full 1.25 ms ahead) none. 220 MHz not measured.
-// Not const: tuned over the cable (dm32dbg.py mwb rf_on_waits ...)
-uint16_t rf_on_waits[3] = {1600, 1000, 1200};
-
-static void rf_on(void)
-{
-    lna(false, 0);
-    rf_wait(rf_on_waits[radio_band_of(channel.tx_freq)]);
-    fd6818_dmr_burst_tx(channel.tx_freq);
-    gpio_output((channel.tx_freq >= UHF_FROM) ? PIN_PA_UHF : PIN_PA_VHF, true);
-    for (int i = 0; i < (int)sizeof(pa_ramp); i++) {
-        rf_ramp_step(pa_ramp[i]);
-    }
-    modem_pa_drive(dmr_drive);
-    rf_on_air = true;
-    hrc7000TraceRf(5);
-}
-
-// 0x2b4a0: 1.6 ms more (the interrupt comes before the end of the burst), the ramp down, the PA switch off, the Rx
-// frequency, the LNA on
-static void rf_off(void)
-{
-    if (!rf_on_air) {
-        return;
-    }
-    rf_wait(1600);
-    for (int i = PA_RAMP_DOWN; i > 0; i--) {
-        rf_ramp_step(pa_ramp[i]);
-    }
-    modem_pa_drive(0);
-    rf_wait(300);
-    gpio_output(PIN_PA_UHF, false);
-    gpio_output(PIN_PA_VHF, false);
-    rf_on_air = false;
-    hrc7000TraceRf(6);
-    rf_wait(700);
-    fd6818_dmr_burst_rx(channel.rx_freq);
-    lna(true, channel.rx_freq);
-    rf_wait(50);
-}
-
-static void rf_task_main(void *arg)
-{
-    (void)arg;
-
-    for (;;) {
-        uint32_t asked = 0;
-
-        xTaskNotifyWait(0, UINT32_MAX, &asked, portMAX_DELAY);
-        if (asked & RF_OFF) {
-            rf_off();
-        }
-        if (asked & RF_RX) {
-            // radioSetRx(), radioSetFrequency(rx), trxUpdateC7000Calibration()
-            const factory_cal_t *cal = factory_cal_get();
-
-            rf_off();
-            modem_set_frequency_calibration(cal->valid, cal->osc_tune, cal->rx_adjust, factory_cal_mod_bias(channel.tx_freq));
-        }
-        if (asked & RF_SETUP) {
-            // radioSetTx(): the band of the Tx frequency, the modem's DMR calibration, the mic to the modem (vocoder)
-            fd6818_set_frequency(channel.tx_freq, false);
-            fd6818_transmit_prepare();
-            dmr_modem_calibration();
-            gpio_output(PIN_MIC_MUT, false);
-        }
-        if (asked & (RF_SETUP | RF_ON)) {
-            rf_on();
-        }
-    }
-}
-
-static void RAM_CODE rf_ask(uint32_t what)
-{
-    if (xPortIsInsideInterrupt()) {
-        BaseType_t woken = pdFALSE;
-
-        xTaskNotifyFromISR(rf_task, what, eSetBits, &woken);
-        portYIELD_FROM_ISR(woken);
-    } else {
-        xTaskNotify(rf_task, what, eSetBits);
-    }
-}
-
-// The transmitter set up on the Tx frequency, then the RF on
-void RAM_CODE radio_dmr_tx_on(void)
-{
-    rf_ask(RF_SETUP);
-}
-
-// Each burst: the RF on, or off with the FD6818 back on the Rx frequency meanwhile
-void RAM_CODE radio_dmr_burst(bool on)
-{
-    rf_ask(on ? RF_ON : RF_OFF);
-}
-
-// Back to receive at the end
-void RAM_CODE radio_dmr_rx_on(void)
-{
-    rf_ask(RF_RX);
-}
-
-// The physical layer transmit (p25_phy.c, a test for now): the transmitter on the channel's Tx frequency at the lowest
-// power (50 mW), the PA on and kept on; off: back to receive. The RF set up rewrites WORK_MODE (dmr_modem_calibration()):
-// the caller sets the modem up after it.
-void radio_phy_tx(bool on, bool low_power)
-{
-    if (on) {
-        dmr_drive = low_power ? level_drive(channel.tx_freq, 0) : pa_drive(channel.tx_freq);
-        leds_red(true);
-        rf_ask(RF_SETUP);
-    } else {
-        rf_ask(RF_RX);
-        leds_red(false);
-    }
-}
-
-/* The PTT's transmission, on the channel's backend (step 2 of the radio task's state machine, radio_fsm.h: the transmit
-   entry and exit in one place). A backend starts it, is asked once to stop it when the PTT is released, tells while it
-   is still sending (a digital one sends its last frames), then finishes. The backend is the channel's, which doesn't
-   change while transmitting (apply_channel() waits). */
-
-typedef struct {
-    bool (*can_start)(void);
-    void (*start)(void);    // transmitting from here, the UI told
-    void (*stop)(void);     // the PTT released
-    bool (*sending)(void);  // still sending after stop()
-    void (*finished)(void); // not transmitting any more, the UI told
-} tx_backend_t;
-
-static bool tx_stopping = false; // stop() asked, sending() not over yet
-
-static bool always(void)
-{
-    return true;
-}
-
-static bool never(void)
-{
-    return false;
-}
-
-static void nothing(void)
-{
-}
-
-// FM: the start and end tones and MDC1200 (not for a plain transmission: a DTMF sequence); the end, the tail and off
-// all within stop()
-static void tx_fm_start(void)
-{
-    transmit_on();
-    if (!tx_plain) {
-        local_tone(sound_tx_tones.local_start);
-        mdc1200(true);
-        air_tone(sound_tx_tones.air_start);
-    }
-}
-
-static void tx_fm_stop(void)
-{
-    signal_wanted[0] = 0;
-    signal_wanted[1] = 0;
-    tx_signal_update();
-    if (!tx_plain) {
-        air_tone(sound_tx_tones.air_end);
-        mdc1200(false);
-    }
-    tail();
-    transmit_off();
-    if (!tx_plain) {
-        local_tone(sound_tx_tones.local_end);
-    }
-}
-
-// DMR: the engine asked to transmit; released, it ends its transmission, then the radio is free again
-static void tx_dmr_start(void)
-{
-    p25_ev_log(21, 0); // the delay log (p25_radio.c)
-    dmr_drive = pa_drive(channel.tx_freq);
-    transmitting = true;
-    leds_red(true);
-    dmr_transmit(true);
-    post_signal();
-}
-
-static void tx_dmr_stop(void)
-{
-    dmr_transmit(false);
-}
-
-static void tx_dmr_finished(void)
-{
-    transmitting = false;
-    leds_red(false);
-    // the DMR Tx stop beep once the engine has finished (uiTxScreen.c), not after a repeater that didn't answer
-    if ((settings.beep_options & BEEP_DMR_TX_STOP) && (settings.audio_prompt_mode != SOUND_PROMPT_SILENT) &&
-        !hotspot_active() && !dmr_repeater_failed()) {
-        sound_play(SOUND_DMR_TX_STOP);
-    }
-    post_signal();
-}
-
-// P25 (p25_radio.c) and NXDN (nxdn_radio.c): transmitting until the last data unit / frame is sent
-static void tx_p25_start(void)
-{
-    transmitting = true;
-    p25_radio_transmit(true);
-    post_signal();
-}
-
-static void tx_p25_stop(void)
-{
-    p25_radio_transmit(false);
-}
-
-static void tx_nxdn_start(void)
-{
-    transmitting = true;
-    nxdn_radio_transmit(true);
-    post_signal();
-}
-
-static void tx_nxdn_stop(void)
-{
-    nxdn_radio_transmit(false);
-}
-
-static void tx_digital_finished(void)
-{
-    transmitting = false;
-    post_signal();
-}
-
-static const tx_backend_t TX_FM = {is_fm, tx_fm_start, tx_fm_stop, never, nothing};
-static const tx_backend_t TX_DMR = {always, tx_dmr_start, tx_dmr_stop, dmr_is_transmitting, tx_dmr_finished};
-static const tx_backend_t TX_P25 = {always, tx_p25_start, tx_p25_stop, p25_radio_transmitting, tx_digital_finished};
-static const tx_backend_t TX_NXDN = {always, tx_nxdn_start, tx_nxdn_stop, nxdn_radio_transmitting, tx_digital_finished};
-
-static const tx_backend_t *tx_backend(void)
-{
-    return nxdn_on ? &TX_NXDN : (p25_on ? &TX_P25 : (dmr_on ? &TX_DMR : &TX_FM));
-}
-
-/* APRS (aprs.c): the AX.25 frame as AFSK on the FM channel, as aprs.c aprsSendPacket() / aprsBitStreamSender() of
-   the main firmware: the FD6818 Tone1 switched between 1200 and 2200 Hz (300 baud: 1600 / 1800 Hz) at each bit,
-   timed here on the microsecond clock; aprsBeaconingSendBeacon(): a busy channel is waited for up to 2 s (the state
-   machine's RFSM_LISTEN_MS, listening without holding the task), then 50 ms of carrier before the frame */
-
-#define APRS_TX_DELAY_MS  50
-#define APRS_TONE_GAIN    66 // the UV-K5 firmware's tone level
-
-static const uint8_t *volatile aprs_bits = NULL; // the frame asked for (radio_aprs_send())
-static volatile uint16_t aprs_bit_count;
-static volatile bool aprs_baud300;
-static volatile bool aprs_active = false; // asked, not done yet
-static volatile bool aprs_asked = false;  // for the machine (RFSM_BEACON_REQ)
-static volatile bool aprs_sent;
-static volatile uint16_t aprs_id;
-
-// The frame, the carrier on already (the machine's transmit entry): 50 ms of carrier, then the bits
-static void aprs_frame(void)
-{
-    uint32_t baud = aprs_baud300 ? 300 : 1200;
-    uint16_t mark = aprs_baud300 ? 1600 : 1200;
-    uint16_t space = aprs_baud300 ? 1800 : 2200;
-    uint16_t last = 0;
-    uint32_t start;
-
-    vTaskDelay(pdMS_TO_TICKS(APRS_TX_DELAY_MS));
-    fd6818_tx_tone(mark, 0, APRS_TONE_GAIN);
-    last = mark;
-    start = systime_get_us();
-    for (uint32_t i = 0; i < aprs_bit_count; i++) {
-        uint16_t hz = ((aprs_bits[i / 8] >> (i % 8)) & 1) ? space : mark;
-
-        if (hz != last) {
-            fd6818_tx_tone_hz(hz);
-            last = hz;
-        }
-        while ((int32_t)(systime_get_us() - (start + (uint32_t)(((uint64_t)(i + 1) * 1000000U) / baud))) < 0) {
-        }
-    }
-    fd6818_tx_tone_end();
-}
-
-// Recorded only: the radio task's machine decides (an FM channel that can transmit, not scanning, the channel free;
-// the PTT first), radio_aprs_busy() until then, radio_aprs_sent() its outcome
-bool radio_aprs_send(const uint8_t *bits, uint16_t bit_count, bool baud300)
-{
-    if (aprs_active) {
-        return false;
-    }
-    aprs_bit_count = bit_count;
-    aprs_baud300 = baud300;
-    aprs_bits = bits;
-    aprs_id++;
-    aprs_active = true;
-    aprs_asked = true;
-    if (task) {
-        xTaskNotifyGive(task);
-    }
-    return true;
-}
-
-bool radio_aprs_busy(void)
-{
-    return aprs_active;
-}
-
-bool radio_aprs_sent(void)
-{
-    return aprs_sent;
-}
+radio_shared_t rs;
 
 /* The state machine (radio_fsm.h, the OpenDM32 notes' radio_task.html): it runs the PTT, the channel changes and the
    beacon; what it asks and does, here. The checks are on the channel tuned (applied before a PTT, a deferred one
@@ -1077,28 +66,26 @@ static rfsm_t fsm;
 static rfsm_tx_kind_t tx_kind; // of the transmission on
 static bool beacon_done;       // the frame sent: the machine told (RFSM_TX_DONE) after its call
 
-static radio_tx_check_t tx_check(const codeplug_channel_t *c, bool valid);
-
 static bool fsm_tx_allowed(rfsm_tx_kind_t kind, uint16_t id)
 {
     (void)id;
-    if (tx_check(&channel, has_channel) != RADIO_TX_OK) {
+    if (tx_check(&rs.channel, rs.has_channel) != RADIO_TX_OK) {
         return false;
     }
     if (kind == RFSM_TX_KIND_VOICE) {
         return tx_backend()->can_start();
     }
-    return (kind == RFSM_TX_KIND_BEACON) && is_fm() && !dmr_on; // AFSK on an FM channel; no data bursts yet
+    return (kind == RFSM_TX_KIND_BEACON) && is_fm() && !rs.dmr_on; // AFSK on an FM channel; no data bursts yet
 }
 
 static bool fsm_dmr_channel(void)
 {
-    return dmr_on;
+    return rs.dmr_on;
 }
 
 static bool fsm_carrier(void)
 {
-    return carrier || speaker;
+    return rs.carrier || rs.speaker;
 }
 
 static void fsm_tx_begin(rfsm_tx_kind_t kind)
@@ -1113,14 +100,12 @@ static void fsm_tx_begin(rfsm_tx_kind_t kind)
 
 static void fsm_tx_ending(void)
 {
-    tx_stopping = true;
     tx_backend()->stop();
 }
 
 static void fsm_tx_end(void)
 {
     if (tx_kind == RFSM_TX_KIND_VOICE) {
-        tx_stopping = false;
         tx_backend()->finished();
     } else if (tx_kind == RFSM_TX_KIND_BEACON) {
         transmit_off();
@@ -1152,10 +137,7 @@ static void fsm_nothing(void)
 
 static void fsm_notify(uint16_t id, rfsm_result_t result)
 {
-    if (id == aprs_id) {
-        aprs_sent = (result == RFSM_SENT);
-        aprs_active = false;
-    }
+    aprs_finished(id, result == RFSM_SENT);
 }
 
 static const rfsm_ops_t FSM_OPS = {
@@ -1184,12 +166,13 @@ static const rfsm_ops_t FSM_OPS = {
 // came of them
 static void fsm_pass(void)
 {
-    rfsm_scan(&fsm, scanning);
-    if (aprs_asked) {
-        aprs_asked = false;
-        rfsm_event(&fsm, RFSM_BEACON_REQ, aprs_id);
+    uint16_t id;
+
+    rfsm_scan(&fsm, rs.scanning);
+    if (aprs_take_request(&id)) {
+        rfsm_event(&fsm, RFSM_BEACON_REQ, id);
     }
-    rfsm_ptt(&fsm, tx_wanted);
+    rfsm_ptt(&fsm, rs.tx_wanted);
     rfsm_event(&fsm, RFSM_TICK, 0);
     if (beacon_done) {
         beacon_done = false;
@@ -1197,243 +180,6 @@ static void fsm_pass(void)
     }
     if ((fsm.state == RFSM_TX_ENDING) && !tx_backend()->sending()) {
         rfsm_event(&fsm, RFSM_TX_DONE, 0);
-    }
-}
-
-/* VOX */
-
-static bool vox_wanted(void)
-{
-    return has_channel && (channel.flag4 & FLAG4_VOX) && !(channel.flag4 & FLAG4_RX_ONLY) &&
-           codeplug_mode_can_transmit(channel.mode) && (settings.vox_threshold != 0);
-}
-
-static void vox_post(bool press)
-{
-    ui_event_t ev = {.type = press ? UI_EVENT_KEY_PRESS : UI_EVENT_KEY_RELEASE, .key = UI_KEY_PTT,
-                     .what = UI_KEY_FROM_VOX};
-
-    ui_post(&ev);
-}
-
-// After the channel is set, or the VOX level changed: on or off
-static void vox_setup(void)
-{
-    bool wanted = vox_wanted();
-
-    if (wanted && !vox_on) {
-        vox_reset(VOX_SETTLE_MS);
-    }
-    if (!wanted && vox_keyed) {
-        vox_post(false);
-        vox_keyed = false;
-    }
-    vox_on = wanted;
-}
-
-// Every VOX_SAMPLE_MS (voxTick() and the PTT of applicationMain.c): not while a sound plays (the speaker into the
-// mic), a key gives the transmitter back to the keys
-static void vox_check(void)
-{
-    uint32_t now = systime_get_ms();
-
-    if (vox_key) {
-        vox_key = false;
-        if (vox_keyed) {
-            if (!vox_ptt) {
-                vox_post(false);
-            }
-            vox_keyed = false; // the PTT held: its release ends it
-        }
-        vox_reset(VOX_SETTLE_MS);
-        return;
-    }
-    // the ADC each pass (25 ms), the loudest of the VOX_SAMPLE_MS window decides: one reading a window, as the stock
-    // firmware, often fell between the syllables and cut the speech
-    uint16_t level = adc_read_vox();
-
-    if (level > vox_window_max) {
-        vox_window_max = level;
-    }
-    if ((int32_t)(now - vox_next_ms) < 0) {
-        return;
-    }
-    vox_next_ms = now + VOX_SAMPLE_MS;
-    level = vox_window_max;
-    vox_window_max = 0;
-    // the power-on PIN not entered yet, or locked with the lock PIN (security.h): the VOX stays off
-    if (security_secured()) {
-        if (vox_keyed) {
-            vox_post(false);
-            vox_keyed = false;
-        }
-        vox_reset(VOX_SETTLE_MS);
-        return;
-    }
-    // a sound into the mic starts it again, but not once it keyed the transmitter (the DMR start beep plays before
-    // the transmission: that release cut every DMR VOX transmission at once)
-    if (!vox_keyed && (vox_heard || (!transmitting && amp_for_beep))) {
-        vox_heard = false;
-        vox_reset(VOX_SETTLE_MS);
-        return;
-    }
-    vox_heard = false;
-
-    bool held = vox_sample(level, settings.vox_threshold, settings.vox_tail_units);
-
-    if (held && !vox_keyed && !tx_wanted) {
-        vox_post(true);
-        vox_keyed = true;
-    } else if (!held && vox_keyed) {
-        vox_post(false);
-        vox_keyed = false;
-    }
-}
-
-void radio_vox_key(bool ptt_held)
-{
-    vox_ptt = ptt_held;
-    vox_key = true;
-}
-
-/* Receive power saving (rxPowerSaving.c rxPowerSavingTick(), trxPowerUpDownRxAndC7000()): no signal, key, beep or
-   transmission for 12 - 2 x level seconds (at least 4 s), then the receiver (the FD6818 and the LNA) goes off and on
-   in turns: on for 130 - 10 x level ms, off for that x 2^(level - 1) (level 1: 120 ms / 120 ms ... level 5: 80 ms /
-   1.28 s); on a P25 channel on for 210 ms at least (ECO_P25_RX_MS). A signal found while on, a key (radio_eco_activity()), a P25 sync (the same, p25_radio.c) or anything
-   going on ends it. Not on a channel with
-   "no eco", nor while scanning, with the VOX, in hotspot mode or while the FM broadcast radio plays (switching the
-   receiver cut its audio). The main firmware's slower CPU clock (level 2 and
-   over) isn't done here. */
-
-#define ECO_FLAG1_NO_ECO  0x20 // libre_dmr_flag1
-#define ECO_SETTLE_MS     25   // after the receiver comes on, before the squelch reads the noise
-// P25: on at least this long, an LDU (180 ms: a frame sync each) and the sync and the settling, so that the modem sees
-// a sync every time it is on (DMR has one every 60 ms). Measured 2026-11-12 at level 1 (120 ms on): calls found from
-// the HDU 3 times in 6, the others 260 ms or more late
-#define ECO_P25_RX_MS     210
-
-typedef enum {
-    ECO_INACTIVE,
-    ECO_WAIT_START,
-    ECO_RX_ON,
-    ECO_RX_OFF,
-} eco_state_t;
-
-static eco_state_t eco = ECO_INACTIVE;
-static TickType_t eco_due;
-static volatile bool eco_activity = false;
-static bool rx_off = false; // the receiver is off for power saving
-
-static void eco_wait(void)
-{
-    int level = MIN(settings.eco_level, 4);
-
-    eco_due = xTaskGetTickCount() + pdMS_TO_TICKS((12 - (level * 2)) * 1000);
-}
-
-static void rx_power(bool on)
-{
-    if (on == !rx_off) {
-        return;
-    }
-    rx_off = !on;
-    if (on) {
-        receive_on();
-        settled_at = xTaskGetTickCount() + pdMS_TO_TICKS(ECO_SETTLE_MS);
-    } else {
-        lna(false, 0);
-        fd6818_write(0x30, 0x0000); // radioPowerOff(): the FD6818 idle
-    }
-}
-
-// The channel is set up again (apply_channel()): receiving, the wait starts over
-static void eco_reset(void)
-{
-    rx_off = false;
-    eco = ECO_INACTIVE;
-    eco_wait();
-}
-
-// Back to receiving all the time (a channel set, something going on)
-static void eco_stop(void)
-{
-    if (eco != ECO_INACTIVE) {
-        rx_power(true);
-        eco = ECO_INACTIVE;
-    }
-    eco_wait();
-}
-
-static void eco_tick(void)
-{
-    int level = settings.eco_level;
-    bool active = eco_activity;
-
-    eco_activity = false;
-    if (!has_channel || (level == 0) || (channel.libre_dmr_flag1 & ECO_FLAG1_NO_ECO) || transmitting || tx_wanted ||
-        carrier || speaker || amp_for_audio || amp_for_beep || amp_for_broadcast || scanning || vox_on || aprs_active ||
-        hotspot_active() ||
-        (dmr_on && dmr_has_sync()) || nxdn_on || active) { // NXDN: the recording needs the receiver on (for now)
-        eco_stop();
-        return;
-    }
-    if ((int32_t)(xTaskGetTickCount() - eco_due) < 0) {
-        return;
-    }
-
-    uint32_t rx_ms = (uint32_t)(130 - (10 * level));
-    uint32_t on_ms = (p25_on && (rx_ms < ECO_P25_RX_MS)) ? ECO_P25_RX_MS : rx_ms;
-
-    switch (eco) {
-        case ECO_INACTIVE: // wait before shutting down
-            eco_wait();
-            eco = ECO_WAIT_START;
-            break;
-        case ECO_WAIT_START:
-        case ECO_RX_ON:
-            rx_power(false);
-            eco_due = xTaskGetTickCount() + pdMS_TO_TICKS(rx_ms * (1U << (level - 1)));
-            eco = ECO_RX_OFF;
-            break;
-        case ECO_RX_OFF:
-            rx_power(true);
-            eco_due = xTaskGetTickCount() + pdMS_TO_TICKS(on_ms);
-            eco = ECO_RX_ON;
-            break;
-    }
-}
-
-void radio_eco_activity(void)
-{
-    eco_activity = true;
-    if (rx_off && task) {
-        xTaskNotifyGive(task);
-    }
-}
-
-/* The task */
-
-// Scanning a digital channel: a DMR transmission without a repeater is on the air 27.5 ms of every 60, so a step of
-// 50 ms sees it only with readings every few ms (SAMPLE_MS would give one or two, maybe in the gap)
-static bool scan_sampling(void)
-{
-    return scanning && dmr_on && !transmitting && !rx_off;
-}
-
-static void scan_sample(void)
-{
-    uint8_t signal;
-    uint8_t noise;
-
-    if ((int32_t)(xTaskGetTickCount() - scan_settled_at) < 0) {
-        return;
-    }
-    fd6818_read_signal(&signal, &noise);
-    if (signal > scan_peak) {
-        scan_peak = signal;
-    }
-    if (scan_samples < UINT16_MAX) {
-        scan_samples++;
     }
 }
 
@@ -1446,7 +192,7 @@ static void RAM_CODE radio_task(void *arg)
     for (;;) {
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(scan_sampling() ? SCAN_SAMPLE_MS : SAMPLE_MS));
 
-        if (channel_pending) {
+        if (rs.channel_pending) {
             rfsm_event(&fsm, RFSM_CHANNEL, 0); // now, or after a transmission (the machine)
         }
         if (scan_sampling()) {
@@ -1459,31 +205,27 @@ static void RAM_CODE radio_task(void *arg)
         full_pass = xTaskGetTickCount();
         fsm_pass();
         tx_signal_update();
-        if (!transmitting && (speaker || amp_for_audio)) {
-            vox_heard = vox_on; // flash code waits: the quiet wait while heard (vox_check() starts it again)
-        } else {
-            if (!transmitting && (vox_wanted() != vox_on)) {
-                vox_setup(); // the VOX threshold set or cleared in the menu
-            }
-            if (vox_on) {
-                vox_check();
-            }
-        }
-        if (rx_off) {
+        vox_pass();
+        if (eco_rx_off()) {
             // the receiver off (power saving): nothing to read
-        } else if (is_analog() && !transmitting) {
+        } else if (is_analog() && !rs.transmitting) {
             squelch_check();
-        } else if (dmr_on) {
+        } else if (rs.dmr_on) {
             dmr_signal();
         }
-        if (rx_end_beep) {
-            rx_beep_end_check();
-        }
+        rx_beep_end_check();
         eco_tick();
     }
 }
 
 /* The API */
+
+void radio_wake(void)
+{
+    if (task) {
+        xTaskNotifyGive(task);
+    }
+}
 
 void radio_init(void)
 {
@@ -1506,8 +248,7 @@ void radio_start(void)
     rfsm_init(&fsm, &FSM_OPS);
     task = xTaskCreateStatic(radio_task, "radio", sizeof(task_stack) / sizeof(task_stack[0]), NULL, RADIO_TASK_PRIORITY,
                              task_stack, &task_tcb);
-    rf_task = xTaskCreateStatic(rf_task_main, "rf", sizeof(rf_task_stack) / sizeof(rf_task_stack[0]), NULL,
-                                RF_TASK_PRIORITY, rf_task_stack, &rf_task_tcb);
+    rf_start();
     dmr_start();
 }
 
@@ -1516,89 +257,34 @@ void radio_set_channel(const codeplug_channel_t *new_channel)
     bool valid = (new_channel != NULL);
 
     taskENTER_CRITICAL();
-    if ((valid != requested_valid) || (valid && (memcmp(&requested, new_channel, sizeof(requested)) != 0))) {
+    if ((valid != rs.requested_valid) || (valid && (memcmp(&rs.requested, new_channel, sizeof(rs.requested)) != 0))) {
         if (valid) {
-            memcpy(&requested, new_channel, sizeof(requested));
+            memcpy(&rs.requested, new_channel, sizeof(rs.requested));
         }
-        requested_valid = valid;
-        channel_pending = true;
+        rs.requested_valid = valid;
+        rs.channel_pending = true;
     }
     taskEXIT_CRITICAL();
-    if (channel_pending && task) {
-        xTaskNotifyGive(task);
+    if (rs.channel_pending) {
+        radio_wake();
     }
-}
-
-// trxCheckFrequencyInAmateurBand(): off, the legacy default bands (also 220 MHz), the CPS bands (VHF, UHF)
-static bool in_band_limits(uint32_t frequency)
-{
-    static const uint32_t limits[3][2] = {{14400000, 14800000}, {22200000, 22500000}, {42000000, 45000000}};
-
-    if (settings.tx_freq_limited == 0) {
-        return true;
-    }
-    for (int band = 0; band < 3; band++) {
-        if ((band == 1) && (settings.tx_freq_limited != 1)) {
-            continue;
-        }
-        if ((frequency >= limits[band][0]) && (frequency <= limits[band][1])) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static radio_tx_check_t tx_check(const codeplug_channel_t *c, bool valid)
-{
-    if (!valid) {
-        return RADIO_TX_NO_CHANNEL;
-    }
-    if (c->flag4 & FLAG4_RX_ONLY) {
-        return RADIO_TX_RX_ONLY;
-    }
-    if (!codeplug_mode_can_transmit(c->mode)) {
-        return RADIO_TX_RX_MODE;
-    }
-    if (!codeplug_frequency_can_transmit(c->tx_freq) || !in_band_limits(c->tx_freq)) {
-        return RADIO_TX_OUT_OF_BAND;
-    }
-    return RADIO_TX_OK;
-}
-
-// For the UI: the channel asked for (the radio task checks the one it tunes when the PTT comes)
-radio_tx_check_t radio_tx_check(void)
-{
-    return tx_check(&requested, requested_valid);
 }
 
 // The PTT's level, recorded: the machine decides
 void radio_transmit(bool on)
 {
     if (on) {
-        tx_plain = false;
+        rs.tx_plain = false;
     }
-    tx_wanted = on;
-    if (task) {
-        xTaskNotifyGive(task);
-    }
+    rs.tx_wanted = on;
+    radio_wake();
 }
 
 void radio_transmit_plain(void)
 {
-    tx_plain = true;
-    tx_wanted = true;
-    if (task) {
-        xTaskNotifyGive(task);
-    }
-}
-
-void radio_tx_signal(uint16_t hz1, uint16_t hz2)
-{
-    signal_wanted[0] = hz1;
-    signal_wanted[1] = hz2;
-    if (task) {
-        xTaskNotifyGive(task);
-    }
+    rs.tx_plain = true;
+    rs.tx_wanted = true;
+    radio_wake();
 }
 
 // The state machine's state (radio_fsm.h): shown by the test interface
@@ -1609,27 +295,27 @@ const char *radio_state_name(void)
 
 bool radio_is_transmitting(void)
 {
-    return transmitting;
+    return rs.transmitting;
 }
 
 uint32_t radio_tx_frequency(void)
 {
-    return requested.tx_freq;
+    return rs.requested.tx_freq;
 }
 
 uint32_t radio_rx_frequency(void)
 {
-    return requested_valid ? requested.rx_freq : 0;
+    return rs.requested_valid ? rs.requested.rx_freq : 0;
 }
 
-bool radio_get_channel(codeplug_channel_t *channel)
+bool radio_get_channel(codeplug_channel_t *out)
 {
     bool valid;
 
     taskENTER_CRITICAL();
-    valid = requested_valid;
+    valid = rs.requested_valid;
     if (valid) {
-        memcpy(channel, &requested, sizeof(*channel));
+        memcpy(out, &rs.requested, sizeof(*out));
     }
     taskEXIT_CRITICAL();
     return valid;
@@ -1637,91 +323,5 @@ bool radio_get_channel(codeplug_channel_t *channel)
 
 bool radio_channel_is_dmr(void)
 {
-    return requested_valid && (requested.mode == CODEPLUG_MODE_DMR);
-}
-
-// The DMR engine's audio amplifier (enableAudioAmp(), disableAudioAmp()): from its task or its interrupts
-void RAM_CODE radio_dmr_audio(bool on)
-{
-    uint32_t psr = irq_save();
-
-    amp_for_audio = on;
-    gpio_output(PIN_AUDIO_AMP, amp_for_audio || amp_for_beep || amp_for_broadcast);
-    irq_restore(psr);
-}
-
-void radio_beep_path(bool on)
-{
-    taskENTER_CRITICAL();
-    beep_path = on;
-    audio_switch();
-    taskEXIT_CRITICAL();
-}
-
-void radio_beep_amp(bool on)
-{
-    taskENTER_CRITICAL();
-    amp_for_beep = on;
-    gpio_output(PIN_AUDIO_AMP, amp_for_audio || amp_for_beep || amp_for_broadcast);
-    taskEXIT_CRITICAL();
-}
-
-void radio_broadcast_amp(bool on)
-{
-    taskENTER_CRITICAL();
-    amp_for_broadcast = on;
-    gpio_output(PIN_AUDIO_AMP, amp_for_audio || amp_for_beep || amp_for_broadcast);
-    taskEXIT_CRITICAL();
-}
-
-// FM: the noise under the squelch level (before the tone check)
-bool radio_has_carrier(void)
-{
-    return carrier;
-}
-
-// The speaker plays a received signal (FM squelch and tone open, or DMR audio)
-bool radio_audio_heard(void)
-{
-    return amp_for_audio;
-}
-
-// Something heard: the FM squelch (and tone) open, or DMR / P25 audio playing (the screens' green line and S meter;
-// speaker is the FM squelch's only)
-bool radio_is_receiving(void)
-{
-    return speaker || amp_for_audio;
-}
-
-uint8_t radio_signal(void)
-{
-    return signal_shown;
-}
-
-int radio_signal_dbm(void)
-{
-    return (int)signal_shown - ((channel.rx_freq >= UHF_FROM) ? 167 : 177);
-}
-
-uint8_t radio_signal_raw(void)
-{
-    return signal_raw;
-}
-
-uint8_t radio_scan_peak(uint16_t *samples)
-{
-    taskENTER_CRITICAL();
-    uint8_t peak = scan_peak;
-    uint16_t n = scan_samples;
-    taskEXIT_CRITICAL();
-
-    if (samples != NULL) {
-        *samples = n;
-    }
-    return peak;
-}
-
-uint8_t radio_noise(void)
-{
-    return noise_raw;
+    return rs.requested_valid && (rs.requested.mode == CODEPLUG_MODE_DMR);
 }
