@@ -52,8 +52,10 @@ FILES = {
     'README.en.md': 'README.en.md',
     'docs/installation.md': 'docs/installation.md',
     'docs/installation.en.md': 'docs/installation.en.md',
+    'docs/installation.es.md': 'docs/installation.es.md',
     'docs/manual.md': 'docs/manual.md',
     'docs/manual.en.md': 'docs/manual.en.md',
+    'docs/manual.es.md': 'docs/manual.es.md',
 }
 FOLDERS = {'docs/manual': 'docs/manual'}  # the screenshots of the manual
 
@@ -156,7 +158,8 @@ def notes_since_last_tag(version):
     log = git('log', '--no-merges', '--format=- %s', span).splitlines()
     head = 'Since %s:' % tags[0] if tags else 'Changes:'
     return '\n'.join(['OpenDMR %s (commit %s).' % (version, git('rev-parse', '--short', 'HEAD')), '',
-                      'Installing: docs/installation.md (中文) / docs/installation.en.md (English), in the zip too.',
+                      'Installing: docs/installation.md (中文) / docs/installation.en.md (English) / docs/installation.es.md '
+                      '(Español), in the zip too.',
                       '', head] + log[:100])
 
 
