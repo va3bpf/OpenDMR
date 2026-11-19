@@ -163,6 +163,11 @@ static bool RAM_CODE refill(void)
 
     if (wavbuffer_count <= 0) {
         agc_peak_average = AGC_DEFAULT_PEAK * AGC_WINDOW;
+        // Silence: left as it was, the modem played the last buffer again and again (a 100 Hz buzz, then a pop
+        // when the playback stopped)
+        for (int i = 0; i < WAV_BUFFER_SIZE; i++) {
+            *(SOUNDBUFRX + i) = 0;
+        }
         return false;
     }
     if ((agc != 0) && (agc <= AGC_SETTINGS) && ((wavbuffer_read_idx % AGC_EVERY) == 0) && (agc_peak_average > 0)) {

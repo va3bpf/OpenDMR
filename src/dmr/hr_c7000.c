@@ -936,8 +936,11 @@ static inline void hrc7000SysReceivedDataInt(void)
 			}
 			return;
 		}
-		else
+		else if (hrc7000CheckTimeSlotFilter() && (hrc.lastTimeCode != hrc.timeCode))
 		{
+			// Only a terminator on our time slot ends our audio (as OpenGD77 does). A repeater or a hotspot sends
+			// another slot's terminators for about 3 s after a call there: they cleared our slot's playback every
+			// 60 ms, a 3 s gap in the call we listened to.
 			disableAudioAmp(AUDIO_AMP_MODE_RF);
 			if ((voicePromptsIsPlaying() == false) && (soundMelodyIsPlaying() == false))
 			{
