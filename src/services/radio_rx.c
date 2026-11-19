@@ -130,7 +130,7 @@ static int squelch_level(void)
 
 // A carrier by the noise against the squelch level, without the squelch's side effects (the speaker, the LED, the
 // beeps): the beacon's busy check on its own frequency. A fully open squelch (level 1) can't tell: free
-bool rx_noise_carrier(void)
+bool rx_noise_busy(void)
 {
     uint8_t signal;
     uint8_t noise;
@@ -174,8 +174,8 @@ static void audio_switch(void)
 static void RAM_CODE audio_amp(bool on)
 {
     taskENTER_CRITICAL();
-    rs.amp_for_audio = on;
-    gpio_output(PIN_AUDIO_AMP, rs.amp_for_audio || rs.amp_for_beep || rs.amp_for_broadcast);
+    rs.audio_needs_amp = on;
+    gpio_output(PIN_AUDIO_AMP, rs.audio_needs_amp || rs.beep_needs_amp || rs.broadcast_needs_amp);
     taskEXIT_CRITICAL();
 }
 
@@ -193,9 +193,9 @@ void squelch_close(void)
     audio_amp(false);
     fd6818_af_out(false);
     leds_green(false);
-    if (rs.carrier || rs.speaker) {
-        rs.carrier = false;
-        rs.speaker = false;
+    if (rs.has_carrier || rs.speaker_open) {
+        rs.has_carrier = false;
+        rs.speaker_open = false;
         post_signal();
     }
     css_missing = 0;
@@ -234,8 +234,8 @@ void apply_channel(void)
 
     taskENTER_CRITICAL();
     memcpy(&next, &rs.requested, sizeof(next));
-    valid = rs.requested_valid;
-    rs.channel_pending = false;
+    valid = rs.has_requested;
+    rs.has_new_channel = false;
     taskEXIT_CRITICAL();
     tune_channel(&next, valid);
 }
@@ -249,13 +249,13 @@ void tune_channel(const codeplug_channel_t *next, bool valid)
     eco_reset(); // the channel is set up receiving: the power saving starts over
 
     // P25: the modem back to DMR while the channel changes (p25_radio.c), started again below on a P25 channel
-    if (rs.p25_on) {
+    if (rs.p25_running) {
         p25_radio_stop();
-        rs.p25_on = false;
+        rs.p25_running = false;
     }
-    if (rs.nxdn_on) {
+    if (rs.nxdn_running) {
         nxdn_radio_stop();
-        rs.nxdn_on = false;
+        rs.nxdn_running = false;
     }
 
     if (valid) {
@@ -285,9 +285,9 @@ void tune_channel(const codeplug_channel_t *next, bool valid)
     gpio_output(PIN_MIC_MUT, is_analog());
     memset(samples, 0, sizeof(samples));
     signal_shown = 0;
-    if (rs.dmr_on && (!rs.has_channel || is_analog())) {
+    if (rs.dmr_running && (!rs.has_channel || is_analog())) {
         dmr_leave();
-        rs.dmr_on = false;
+        rs.dmr_running = false;
     }
     if (!rs.has_channel) {
         lna(false, 0);
@@ -310,28 +310,28 @@ void tune_channel(const codeplug_channel_t *next, bool valid)
     } else {
         // DMR (trxSetModeAndBandwidth(), trxSetFrequency()): the FD6818 DMR table the first time, the engine stopped
         // while the frequency changes, then started on the channel
-        if (rs.dmr_on) {
+        if (rs.dmr_running) {
             dmr_retune();
         } else {
             fd6818_set_dmr();
         }
         modem_set_frequency_calibration(cal->valid, cal->osc_tune, cal->rx_adjust, factory_cal_mod_bias(rs.channel.tx_freq));
         receive_on();
-        if (rs.dmr_on) {
+        if (rs.dmr_running) {
             dmr_channel(&rs.channel);
         } else {
             dmr_enter(&rs.channel);
-            rs.dmr_on = true;
+            rs.dmr_running = true;
         }
         // P25: the DMR engine set the modem up for 4FSK; the P25 receiver takes it over (physical layer receive)
         if (rs.channel.mode == CODEPLUG_MODE_P25) {
             p25_radio_start();
-            rs.p25_on = true;
+            rs.p25_running = true;
         }
         // NXDN: the DMR engine stands aside too; the modem records the discriminator (FM) for the NXDN receiver
         if (rs.channel.mode == CODEPLUG_MODE_NXDN) {
             nxdn_radio_start();
-            rs.nxdn_on = true;
+            rs.nxdn_running = true;
         }
     }
     vox_setup();
@@ -365,17 +365,17 @@ static void RAM_CODE add_sample(uint8_t signal)
 
 void radio_set_scanning(bool on)
 {
-    rs.scanning = on;
+    rs.is_scanning = on;
 }
 
 bool radio_is_scanning(void)
 {
-    return rs.scanning;
+    return rs.is_scanning;
 }
 
 static bool rx_beeps(void)
 {
-    return !rs.scanning && (settings.beep_options & BEEP_RX_CARRIER) && (settings.audio_prompt_mode != SOUND_PROMPT_SILENT);
+    return !rs.is_scanning && (settings.beep_options & BEEP_RX_CARRIER) && (settings.audio_prompt_mode != SOUND_PROMPT_SILENT);
 }
 
 static void rx_beep_begin(void)
@@ -466,35 +466,35 @@ void RAM_CODE squelch_check(void)
         }
         close = (signal_low >= hold);
     }
-    if (!rs.carrier && open && ((int32_t)(xTaskGetTickCount() - settled_at) >= 0)) {
-        rs.carrier = true;
+    if (!rs.has_carrier && open && ((int32_t)(xTaskGetTickCount() - settled_at) >= 0)) {
+        rs.has_carrier = true;
         css_missing = 0;
         fd6818_af_out(true);
         leds_green(true);
         post_signal();
-    } else if (rs.carrier && close) {
-        if (rs.speaker) {
+    } else if (rs.has_carrier && close) {
+        if (rs.speaker_open) {
             rx_beep_end();
         }
         squelch_close();
         return;
     }
-    if (!rs.carrier) {
+    if (!rs.has_carrier) {
         return;
     }
 
     bool tone_ok = !tone || fd6818_rx_tone_detected(rs.channel.rx_tone);
 
-    if (!rs.speaker && tone_ok) {
-        rs.speaker = true;
+    if (!rs.speaker_open && tone_ok) {
+        rs.speaker_open = true;
         css_missing = 0;
         modem_fm_audio(true);
         audio_amp(true);
         rx_beep_begin();
         post_signal();
-    } else if (rs.speaker && !tone_ok) {
+    } else if (rs.speaker_open && !tone_ok) {
         if (++css_missing >= CSS_HOLD) { // a tone is often lost a moment on a strong deviation
-            rs.speaker = false;
+            rs.speaker_open = false;
             css_missing = 0;
             audio_amp(false);
             rx_beep_end();
@@ -509,7 +509,7 @@ void RAM_CODE squelch_check(void)
 // 50 ms sees it only with readings every few ms (SAMPLE_MS would give one or two, maybe in the gap)
 bool scan_sampling(void)
 {
-    return rs.scanning && rs.dmr_on && !rs.transmitting && !eco_rx_off();
+    return rs.is_scanning && rs.dmr_running && !rs.is_transmitting && !eco_rx_off();
 }
 
 void scan_sample(void)
@@ -534,8 +534,8 @@ void RAM_CODE radio_dmr_audio(bool on)
 {
     uint32_t psr = irq_save();
 
-    rs.amp_for_audio = on;
-    gpio_output(PIN_AUDIO_AMP, rs.amp_for_audio || rs.amp_for_beep || rs.amp_for_broadcast);
+    rs.audio_needs_amp = on;
+    gpio_output(PIN_AUDIO_AMP, rs.audio_needs_amp || rs.beep_needs_amp || rs.broadcast_needs_amp);
     irq_restore(psr);
 }
 
@@ -550,36 +550,36 @@ void radio_beep_path(bool on)
 void radio_beep_amp(bool on)
 {
     taskENTER_CRITICAL();
-    rs.amp_for_beep = on;
-    gpio_output(PIN_AUDIO_AMP, rs.amp_for_audio || rs.amp_for_beep || rs.amp_for_broadcast);
+    rs.beep_needs_amp = on;
+    gpio_output(PIN_AUDIO_AMP, rs.audio_needs_amp || rs.beep_needs_amp || rs.broadcast_needs_amp);
     taskEXIT_CRITICAL();
 }
 
 void radio_broadcast_amp(bool on)
 {
     taskENTER_CRITICAL();
-    rs.amp_for_broadcast = on;
-    gpio_output(PIN_AUDIO_AMP, rs.amp_for_audio || rs.amp_for_beep || rs.amp_for_broadcast);
+    rs.broadcast_needs_amp = on;
+    gpio_output(PIN_AUDIO_AMP, rs.audio_needs_amp || rs.beep_needs_amp || rs.broadcast_needs_amp);
     taskEXIT_CRITICAL();
 }
 
 // FM: the noise under the squelch level (before the tone check)
 bool radio_has_carrier(void)
 {
-    return rs.carrier;
+    return rs.has_carrier;
 }
 
 // The speaker plays a received signal (FM squelch and tone open, or DMR audio)
 bool radio_audio_heard(void)
 {
-    return rs.amp_for_audio;
+    return rs.audio_needs_amp;
 }
 
 // Something heard: the FM squelch (and tone) open, or DMR / P25 audio playing (the screens' green line and S meter;
 // speaker is the FM squelch's only)
 bool radio_is_receiving(void)
 {
-    return rs.speaker || rs.amp_for_audio;
+    return rs.speaker_open || rs.audio_needs_amp;
 }
 
 uint8_t radio_signal(void)

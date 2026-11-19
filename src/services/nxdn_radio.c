@@ -52,6 +52,7 @@
 #include "systime.h"
 #include "vocoder.h"
 #include "radio.h"
+#include "radio_hooks.h"
 #include "p25_phy.h"
 #include "nxdn_core.h"
 #include "nxdn_radio.h"

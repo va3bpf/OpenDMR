@@ -82,7 +82,7 @@ static void start_beacon(rfsm_t *m, uint16_t id)
         m->ops->notify(id, RFSM_SCANNING);
         return;
     }
-    if (!m->ops->tx_allowed(RFSM_TX_KIND_BEACON, id)) {
+    if (!m->ops->can_transmit(RFSM_TX_KIND_BEACON, id)) {
         m->ops->notify(id, RFSM_REFUSED);
         return;
     }
@@ -99,7 +99,7 @@ static void start_data(rfsm_t *m, uint16_t id)
         m->ops->notify(id, RFSM_SCANNING);
         return;
     }
-    if (!m->ops->dmr_channel() || !m->ops->tx_allowed(RFSM_TX_KIND_DATA, id)) {
+    if (!m->ops->on_dmr_channel() || !m->ops->can_transmit(RFSM_TX_KIND_DATA, id)) {
         m->ops->notify(id, RFSM_REFUSED);
         return;
     }
@@ -112,7 +112,7 @@ static void start_data(rfsm_t *m, uint16_t id)
 static void ptt_press(rfsm_t *m)
 {
     m->ptt_handled = true;
-    if (m->ops->tx_allowed(RFSM_TX_KIND_VOICE, 0)) {
+    if (m->ops->can_transmit(RFSM_TX_KIND_VOICE, 0)) {
         m->ops->tx_begin(RFSM_TX_KIND_VOICE);
         m->state = RFSM_TX_VOICE;
     } else {
@@ -216,8 +216,8 @@ static void handle(rfsm_t *m, rfsm_event_t event, uint16_t id)
                 case RFSM_DATA_REQ: enqueue(m, RFSM_TX_KIND_DATA, id); break;
                 case RFSM_TICK:
                     ops->rx_work(); // listening is receiving: the squelch reads the carrier first
-                    if (!ops->carrier()) {
-                        if (!ops->tx_allowed(m->kind, m->current)) {
+                    if (!ops->channel_busy()) {
+                        if (!ops->can_transmit(m->kind, m->current)) {
                             listen_off(m, RFSM_REFUSED);
                         } else if (m->kind == RFSM_TX_KIND_BEACON) {
                             ops->tx_begin(RFSM_TX_KIND_BEACON);

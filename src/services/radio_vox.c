@@ -125,7 +125,7 @@ static void vox_check(void)
     }
     // a sound into the mic starts it again, but not once it keyed the transmitter (the DMR start beep plays before
     // the transmission: that release cut every DMR VOX transmission at once)
-    if (!vox_keyed && (vox_heard || (!rs.transmitting && rs.amp_for_beep))) {
+    if (!vox_keyed && (vox_heard || (!rs.is_transmitting && rs.beep_needs_amp))) {
         vox_heard = false;
         vox_reset(VOX_SETTLE_MS);
         return;
@@ -134,7 +134,7 @@ static void vox_check(void)
 
     bool held = vox_sample(level, settings.vox_threshold, settings.vox_tail_units);
 
-    if (held && !vox_keyed && !rs.tx_wanted) {
+    if (held && !vox_keyed && !rs.ptt_down) {
         vox_post(true);
         vox_keyed = true;
     } else if (!held && vox_keyed) {
@@ -153,10 +153,10 @@ void radio_vox_key(bool ptt_held)
 // off as the channel and the menu say, and its check
 void vox_pass(void)
 {
-    if (!rs.transmitting && (rs.speaker || rs.amp_for_audio)) {
+    if (!rs.is_transmitting && (rs.speaker_open || rs.audio_needs_amp)) {
         vox_heard = vox_on; // flash code waits: the quiet wait while heard (vox_check() starts it again)
     } else {
-        if (!rs.transmitting && (vox_wanted() != vox_on)) {
+        if (!rs.is_transmitting && (vox_wanted() != vox_on)) {
             vox_setup(); // the VOX threshold set or cleared in the menu
         }
         if (vox_on) {

@@ -44,6 +44,7 @@
 #include "codeplug.h"
 #include "codeplug_text.h"
 #include "radio.h"
+#include "radio_hooks.h"
 #include "settings.h"
 #include "scan.h"
 #include "channel_screen.h"
@@ -232,7 +233,7 @@ static bool test_data_send(uint32_t ms, bool fail)
 {
     test_data_ms = ms;
     test_data_fail = fail;
-    return radio_data_send(&TEST_DATA);
+    return radio_data_send(&TEST_DATA) != 0;
 }
 
 /* A test APRS beacon ('D' 'a', radio.py beacon()): 400 bits of HDLC flags at 1200 baud, on the channel asked for
@@ -242,9 +243,7 @@ static const uint8_t TEST_FRAME[50] = {[0 ... 49] = 0x7E};
 
 static bool test_beacon_send(uint32_t frequency)
 {
-    static codeplug_channel_t channel;
-
-    return radio_get_channel(&channel) && radio_aprs_send(TEST_FRAME, 400, false, frequency, &channel);
+    return radio_aprs_send(TEST_FRAME, 400, false, frequency) != 0;
 }
 
 uint32_t test_link_command(volatile uint8_t *request, volatile uint8_t *reply, uint32_t reply_size)

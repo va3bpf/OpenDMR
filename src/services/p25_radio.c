@@ -46,6 +46,7 @@
 #include "dmr_compat.h"
 #include "vocoder.h"
 #include "radio.h"
+#include "radio_hooks.h"
 #include "imbe.h"
 #include "imbe_fx.h"
 #include "p25_frame.h"

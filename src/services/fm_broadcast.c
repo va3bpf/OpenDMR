@@ -38,6 +38,7 @@
 #include "task.h"
 #include "rda5807.h"
 #include "radio.h"
+#include "radio_hooks.h"
 #include "fm_broadcast.h"
 
 // Registers

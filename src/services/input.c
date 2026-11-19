@@ -48,6 +48,7 @@
 #include "power.h"
 #include "idle.h"
 #include "radio.h"
+#include "radio_hooks.h"
 #include "display.h"
 #include "aprs.h"
 #include "input.h"

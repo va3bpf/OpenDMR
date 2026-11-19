@@ -42,6 +42,7 @@
 #include "factory_cal.h"
 #include "modem.h"
 #include "radio.h"
+#include "radio_hooks.h"
 #include "dmr_compat.h"
 
 #define CALLBACKS          4

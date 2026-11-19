@@ -41,6 +41,7 @@
 #include <stdint.h>
 #include "codeplug.h"
 #include "radio.h"
+#include "radio_hooks.h"
 #include "radio_fsm.h"
 
 #define SAMPLE_MS 25 // the task's pass
@@ -72,29 +73,32 @@ typedef struct {
 typedef struct {
     // What the UI asks (radio.c's API), read by the task
     codeplug_channel_t requested;
-    volatile bool requested_valid;
-    volatile bool channel_pending;
-    volatile bool tx_wanted;
-    volatile bool tx_plain; // no start / end tones nor MDC1200 (a DTMF sequence)
+    volatile bool has_requested;    // a channel given (radio_set_channel(), not NULL)
+    volatile uint32_t channel_gen;  // counts the channels given: a request is refused once it changed
+    volatile bool has_new_channel;  // a channel given, not applied yet
+    volatile bool ptt_down;         // the PTT's level (radio_transmit())
+    volatile bool tx_without_tones; // no start / end tones nor MDC1200 (a DTMF sequence)
+
     // What the task uses
-    codeplug_channel_t channel;
+    codeplug_channel_t channel;    // the channel tuned (a beacon's own frequency while it is sent)
     bool has_channel;
-    bool dmr_on;  // the modem and the FD6818 are in DMR
-    bool p25_on;  // the P25 receiver runs (p25_radio.c)
-    bool nxdn_on; // the NXDN receiver runs (nxdn_radio.c)
-    volatile bool transmitting;
-    // The backend of each kind of transmission: the PTT's the channel's (apply_channel(), never while transmitting),
-    // the beacon's set once (radio_init()), none for data bursts yet
+    bool dmr_running;              // the modem and the FD6818 in DMR (DMR, P25, NXDN channels)
+    bool p25_running;              // the P25 receiver runs (p25_radio.c)
+    bool nxdn_running;             // the NXDN receiver runs (nxdn_radio.c)
+    volatile bool is_transmitting;
+    // The backend of each kind of transmission: the PTT's is the channel's (apply_channel(), never while
+    // transmitting), the beacon's and the data burst's set once (radio_init())
     const tx_backend_t *tx[RFSM_TX_KINDS];
-    // Receive
-    volatile bool carrier;  // the noise under the squelch level
-    volatile bool speaker;  // the audio on (the carrier, and the tone if one is set)
-    volatile bool scanning; // radio_set_scanning(): no receive beeps
-    // The speaker amplifier: on for the received audio, a beep (sound.c) or the FM broadcast receiver (its audio goes
-    // straight to the amplifier), off when none needs it
-    volatile bool amp_for_audio;
-    volatile bool amp_for_beep;
-    volatile bool amp_for_broadcast;
+
+    // Receiving
+    volatile bool has_carrier;     // FM: the noise under the squelch level
+    volatile bool speaker_open;    // the squelch open: the carrier, and the tone if one is set
+    volatile bool is_scanning;     // the UI scans (radio_set_scanning())
+
+    // The speaker amplifier: on while one of them needs it (the FM broadcast receiver's audio goes straight to it)
+    volatile bool audio_needs_amp;     // a received signal plays
+    volatile bool beep_needs_amp;      // a beep (sound.c)
+    volatile bool broadcast_needs_amp; // the FM broadcast receiver (fm_broadcast.c)
 } radio_shared_t;
 
 extern radio_shared_t rs;
@@ -106,6 +110,7 @@ void radio_wake(void); // a request recorded: the task looks at once
 #define RADIO_ID_MASK 0x3FFF
 #define RADIO_ID_APRS 0x4000
 #define RADIO_ID_DATA 0x8000
+radio_result_t radio_result_of(rfsm_result_t result);
 
 // radio_rx.c
 bool is_fm(void);
@@ -117,7 +122,7 @@ void squelch_close(void);
 void receive_on(void);
 void apply_channel(void);
 void tune_channel(const codeplug_channel_t *next, bool valid);
-bool rx_noise_carrier(void);
+bool rx_noise_busy(void);
 void rx_settle(uint32_t ms);
 void rx_beep_cancel(void);
 void rx_beep_end_check(void);
@@ -155,17 +160,21 @@ bool eco_rx_off(void);
 // radio_aprs.c
 void aprs_frame(void);
 bool aprs_take_request(uint16_t *id);
-void aprs_finished(uint16_t id, bool sent);
+void aprs_finished(uint16_t id, radio_result_t result);
+radio_result_t aprs_result(uint16_t id);
+bool aprs_pending(void);
 bool aprs_can_start(void);
 void aprs_tune(void);
 void aprs_restore(void);
 bool aprs_tuned_away(void);
-bool aprs_carrier(void);
+bool aprs_channel_busy(void);
 uint32_t aprs_listen_ms(void);
 
 // radio_data.c
 bool data_take_request(uint16_t *id);
-void data_finished(uint16_t id, bool sent);
+void data_finished(uint16_t id, radio_result_t result);
+radio_result_t data_result(uint16_t id);
+bool data_pending(void);
 void data_start(void);
 bool data_ended(void);
 bool data_failed(void);

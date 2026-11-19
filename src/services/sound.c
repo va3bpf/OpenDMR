@@ -42,6 +42,7 @@
 #include "settings.h"
 #include "modem.h"
 #include "radio.h"
+#include "radio_hooks.h"
 #include "battery.h"
 #include "custom_data.h"
 #include "sound.h"

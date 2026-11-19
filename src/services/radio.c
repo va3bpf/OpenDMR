@@ -75,7 +75,7 @@ static bool beacon_done;
 /* The machine's questions */
 
 // May this kind of transmission start? The checks on the channel tuned (receive only, mode, band), then its backend's
-static bool fsm_tx_allowed(rfsm_tx_kind_t kind, uint16_t id)
+static bool fsm_can_transmit(rfsm_tx_kind_t kind, uint16_t id)
 {
     (void)id;
     if (tx_check(&rs.channel, rs.has_channel) != RADIO_TX_OK) {
@@ -84,22 +84,22 @@ static bool fsm_tx_allowed(rfsm_tx_kind_t kind, uint16_t id)
     return (rs.tx[kind] != NULL) && rs.tx[kind]->can_start();
 }
 
-static bool fsm_dmr_channel(void)
+static bool fsm_on_dmr_channel(void)
 {
-    return rs.dmr_on;
+    return rs.dmr_running;
 }
 
 // Someone on the channel: a beacon or a burst waits for it to be free. On the beacon's own frequency the noise only
 // (radio_aprs.c); on a DMR channel a call heard or followed by the engine; else the squelch
-static bool fsm_carrier(void)
+static bool fsm_channel_busy(void)
 {
     if (aprs_tuned_away()) {
-        return aprs_carrier();
+        return aprs_channel_busy();
     }
-    if (rs.dmr_on) {
-        return rs.amp_for_audio || dmr_channel_busy();
+    if (rs.dmr_running) {
+        return rs.audio_needs_amp || dmr_channel_busy();
     }
-    return rs.carrier || rs.speaker;
+    return rs.has_carrier || rs.speaker_open;
 }
 
 // How long a beacon or a burst waits for a free channel
@@ -164,13 +164,13 @@ static void fsm_data_clear(void)
     data_cancel();
 }
 
-// The result of a request (sent, busy, refused, ...): radio_aprs_sent(), radio_data_sent(); the id tells whose
+// The result of a request (sent, busy, refused, ...) for radio_result(); the id tells whose
 static void fsm_notify(uint16_t id, rfsm_result_t result)
 {
     if (id & RADIO_ID_DATA) {
-        data_finished(id, result == RFSM_SENT);
+        data_finished(id, radio_result_of(result));
     } else {
-        aprs_finished(id, result == RFSM_SENT);
+        aprs_finished(id, radio_result_of(result));
     }
 }
 
@@ -190,9 +190,9 @@ static void read_signal(void)
     if (eco_rx_off() || aprs_tuned_away()) {
         return;
     }
-    if (is_analog() && !rs.transmitting) {
+    if (is_analog() && !rs.is_transmitting) {
         squelch_check();
-    } else if (rs.dmr_on) {
+    } else if (rs.dmr_running) {
         dmr_signal();
     }
 }
@@ -216,9 +216,9 @@ static void transmit_work(void)
 
 static const rfsm_ops_t FSM_OPS = {
     // questions
-    .tx_allowed = fsm_tx_allowed,
-    .dmr_channel = fsm_dmr_channel,
-    .carrier = fsm_carrier,
+    .can_transmit = fsm_can_transmit,
+    .on_dmr_channel = fsm_on_dmr_channel,
+    .channel_busy = fsm_channel_busy,
     .now_ms = systime_get_ms,
     .listen_ms = fsm_listen_ms,
     // a transmission
@@ -256,14 +256,14 @@ static void fsm_pass(void)
     uint16_t id;
 
     // 1. what was asked
-    rfsm_scan(&fsm, rs.scanning);
+    rfsm_scan(&fsm, rs.is_scanning);
     if (aprs_take_request(&id)) {
         rfsm_event(&fsm, RFSM_BEACON_REQ, id);
     }
     if (data_take_request(&id)) {
         rfsm_event(&fsm, RFSM_DATA_REQ, id);
     }
-    rfsm_ptt(&fsm, rs.tx_wanted);
+    rfsm_ptt(&fsm, rs.ptt_down);
 
     // 2. the tick
     rfsm_event(&fsm, RFSM_TICK, 0);
@@ -302,7 +302,7 @@ static void RAM_CODE radio_task(void *arg)
         ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(scan_sampling() ? SCAN_SAMPLE_MS : SAMPLE_MS));
 
         // 1. a new channel
-        if (rs.channel_pending) {
+        if (rs.has_new_channel) {
             rfsm_event(&fsm, RFSM_CHANNEL, 0);
         }
 
@@ -362,15 +362,16 @@ void radio_set_channel(const codeplug_channel_t *new_channel)
     bool valid = (new_channel != NULL);
 
     taskENTER_CRITICAL();
-    if ((valid != rs.requested_valid) || (valid && (memcmp(&rs.requested, new_channel, sizeof(rs.requested)) != 0))) {
+    if ((valid != rs.has_requested) || (valid && (memcmp(&rs.requested, new_channel, sizeof(rs.requested)) != 0))) {
         if (valid) {
             memcpy(&rs.requested, new_channel, sizeof(rs.requested));
         }
-        rs.requested_valid = valid;
-        rs.channel_pending = true;
+        rs.has_requested = valid;
+        rs.channel_gen++;
+        rs.has_new_channel = true;
     }
     taskEXIT_CRITICAL();
-    if (rs.channel_pending) {
+    if (rs.has_new_channel) {
         radio_wake();
     }
 }
@@ -379,17 +380,37 @@ void radio_set_channel(const codeplug_channel_t *new_channel)
 void radio_transmit(bool on)
 {
     if (on) {
-        rs.tx_plain = false;
+        rs.tx_without_tones = false;
     }
-    rs.tx_wanted = on;
+    rs.ptt_down = on;
     radio_wake();
 }
 
 void radio_transmit_plain(void)
 {
-    rs.tx_plain = true;
-    rs.tx_wanted = true;
+    rs.tx_without_tones = true;
+    rs.ptt_down = true;
     radio_wake();
+}
+
+// The machine's result as the API's
+radio_result_t radio_result_of(rfsm_result_t result)
+{
+    switch (result) {
+        case RFSM_SENT: return RADIO_SENT;
+        case RFSM_BUSY: return RADIO_BUSY;
+        case RFSM_ABANDONED: return RADIO_ABANDONED;
+        case RFSM_FAILED: return RADIO_FAILED;
+        default: return RADIO_REFUSED; // refused, scanning, the queue full
+    }
+}
+
+radio_result_t radio_result(radio_request_t request)
+{
+    if (request == 0) {
+        return RADIO_REFUSED;
+    }
+    return (request & RADIO_ID_DATA) ? data_result(request) : aprs_result(request);
 }
 
 // The state machine's state (radio_fsm.h): shown by the test interface
@@ -400,17 +421,12 @@ const char *radio_state_name(void)
 
 bool radio_is_transmitting(void)
 {
-    return rs.transmitting;
-}
-
-uint32_t radio_tx_frequency(void)
-{
-    return rs.requested.tx_freq;
+    return rs.is_transmitting;
 }
 
 uint32_t radio_rx_frequency(void)
 {
-    return rs.requested_valid ? rs.requested.rx_freq : 0;
+    return rs.has_requested ? rs.requested.rx_freq : 0;
 }
 
 bool radio_get_channel(codeplug_channel_t *out)
@@ -418,7 +434,7 @@ bool radio_get_channel(codeplug_channel_t *out)
     bool valid;
 
     taskENTER_CRITICAL();
-    valid = rs.requested_valid;
+    valid = rs.has_requested;
     if (valid) {
         memcpy(out, &rs.requested, sizeof(*out));
     }
@@ -428,5 +444,5 @@ bool radio_get_channel(codeplug_channel_t *out)
 
 bool radio_channel_is_dmr(void)
 {
-    return rs.requested_valid && (rs.requested.mode == CODEPLUG_MODE_DMR);
+    return rs.has_requested && (rs.requested.mode == CODEPLUG_MODE_DMR);
 }

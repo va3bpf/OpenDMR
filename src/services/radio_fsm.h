@@ -78,9 +78,9 @@ typedef enum { RFSM_TX_KIND_VOICE, RFSM_TX_KIND_BEACON, RFSM_TX_KIND_DATA, RFSM_
 // The radio task's side: the questions (asked when deciding, so always current), then the actions (in the order
 // the machine calls them; none may call rfsm_*() back)
 typedef struct {
-    bool (*tx_allowed)(rfsm_tx_kind_t kind, uint16_t id); // the check on the channel tuned (a beacon: its frequency)
-    bool (*dmr_channel)(void);
-    bool (*carrier)(void);  // a signal on the frequency tuned
+    bool (*can_transmit)(rfsm_tx_kind_t kind, uint16_t id); // may it start: the checks on the channel tuned
+    bool (*on_dmr_channel)(void); // is the channel tuned a DMR one (data bursts only there)
+    bool (*channel_busy)(void);   // is someone on the frequency tuned (a beacon or a burst waits)
     uint32_t (*now_ms)(void);
     uint32_t (*listen_ms)(rfsm_tx_kind_t kind); // how long a beacon or a burst waits for a free channel
 

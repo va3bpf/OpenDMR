@@ -130,7 +130,7 @@ void transmit_on(void)
     fd6818_transmit(wide);
     gpio_output((tx >= UHF_FROM) ? PIN_PA_UHF : PIN_PA_VHF, true);
     modem_pa_drive(pa_drive(tx));
-    rs.transmitting = true;
+    rs.is_transmitting = true;
     post_signal();
 }
 
@@ -140,7 +140,7 @@ void transmit_off(void)
     gpio_output(PIN_PA_VHF, false);
     gpio_output(PIN_PA_UHF, false);
     leds_red(false);
-    rs.transmitting = false;
+    rs.is_transmitting = false;
     receive_on();
     post_signal();
 }
@@ -171,7 +171,7 @@ void tx_signal_update(void)
     uint16_t hz1 = signal_wanted[0];
     uint16_t hz2 = signal_wanted[1];
 
-    if (!rs.transmitting || ((hz1 == signal_sent[0]) && (hz2 == signal_sent[1]))) {
+    if (!rs.is_transmitting || ((hz1 == signal_sent[0]) && (hz2 == signal_sent[1]))) {
         return;
     }
     if ((hz1 == 0) && (hz2 == 0)) {
@@ -247,7 +247,7 @@ static void nothing(void)
 static void tx_fm_start(void)
 {
     transmit_on();
-    if (!rs.tx_plain) {
+    if (!rs.tx_without_tones) {
         local_tone(sound_tx_tones.local_start);
         mdc1200(true);
         air_tone(sound_tx_tones.air_start);
@@ -259,13 +259,13 @@ static void tx_fm_stop(void)
     signal_wanted[0] = 0;
     signal_wanted[1] = 0;
     tx_signal_update();
-    if (!rs.tx_plain) {
+    if (!rs.tx_without_tones) {
         air_tone(sound_tx_tones.air_end);
         mdc1200(false);
     }
     tail();
     transmit_off();
-    if (!rs.tx_plain) {
+    if (!rs.tx_without_tones) {
         local_tone(sound_tx_tones.local_end);
     }
 }
@@ -275,7 +275,7 @@ static void tx_dmr_start(void)
 {
     p25_ev_log(21, 0); // the delay log (p25_radio.c)
     rf_set_drive(pa_drive(rs.channel.tx_freq));
-    rs.transmitting = true;
+    rs.is_transmitting = true;
     leds_red(true);
     dmr_transmit(true);
     post_signal();
@@ -288,7 +288,7 @@ static void tx_dmr_stop(void)
 
 static void tx_dmr_finished(void)
 {
-    rs.transmitting = false;
+    rs.is_transmitting = false;
     leds_red(false);
     // the DMR Tx stop beep once the engine has finished (uiTxScreen.c), not after a repeater that didn't answer
     if ((settings.beep_options & BEEP_DMR_TX_STOP) && (settings.audio_prompt_mode != SOUND_PROMPT_SILENT) &&
@@ -301,7 +301,7 @@ static void tx_dmr_finished(void)
 // P25 (p25_radio.c) and NXDN (nxdn_radio.c): transmitting until the last data unit / frame is sent
 static void tx_p25_start(void)
 {
-    rs.transmitting = true;
+    rs.is_transmitting = true;
     p25_radio_transmit(true);
     post_signal();
 }
@@ -313,7 +313,7 @@ static void tx_p25_stop(void)
 
 static void tx_nxdn_start(void)
 {
-    rs.transmitting = true;
+    rs.is_transmitting = true;
     nxdn_radio_transmit(true);
     post_signal();
 }
@@ -325,7 +325,7 @@ static void tx_nxdn_stop(void)
 
 static void tx_digital_finished(void)
 {
-    rs.transmitting = false;
+    rs.is_transmitting = false;
     post_signal();
 }
 
@@ -333,20 +333,20 @@ static void tx_digital_finished(void)
 // drive, the LED and the transmitting state around it
 static bool data_can_start(void)
 {
-    return rs.dmr_on && (rs.channel.mode == CODEPLUG_MODE_DMR) && !hotspot_active();
+    return rs.dmr_running && (rs.channel.mode == CODEPLUG_MODE_DMR) && !hotspot_active();
 }
 
 static void tx_data_start(void)
 {
     rf_set_drive(pa_drive(rs.channel.tx_freq));
-    rs.transmitting = true;
+    rs.is_transmitting = true;
     leds_red(true);
     post_signal();
 }
 
 static void tx_data_finished(void)
 {
-    rs.transmitting = false;
+    rs.is_transmitting = false;
     leds_red(false);
     post_signal();
 }
@@ -428,7 +428,7 @@ radio_tx_check_t tx_check(const codeplug_channel_t *c, bool valid)
 // For the UI: the channel asked for (the radio task checks the one it tunes when the PTT comes)
 radio_tx_check_t radio_tx_check(void)
 {
-    return tx_check(&rs.requested, rs.requested_valid);
+    return tx_check(&rs.requested, rs.has_requested);
 }
 
 void radio_tx_signal(uint16_t hz1, uint16_t hz2)

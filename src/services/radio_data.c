@@ -41,68 +41,75 @@
 
 #define DATA_LISTEN_MS 2000 // a busy channel: given up after this long
 
-static const radio_data_t *data;      // the burst asked for (radio_data_send())
-static volatile bool data_active = false; // asked, not done yet: radio_data_busy()
-static volatile bool data_asked = false;  // for the machine (RFSM_DATA_REQ)
-static volatile bool data_sent;
+static const radio_data_t *data;  // the burst asked for (radio_data_send())
+static uint32_t data_gen;         // the channel's generation when asked: refused once another channel is given
+static volatile bool data_asked = false;                 // for the machine (RFSM_DATA_REQ)
+static volatile radio_result_t data_res = RADIO_FAILED;  // of the last request; RADIO_PENDING while it runs
 static volatile uint16_t data_id;
 static bool start_failed; // start() refused: a fault for the machine
 
 /* The API (radio.h) */
 
-bool radio_data_send(const radio_data_t *burst)
+radio_request_t radio_data_send(const radio_data_t *burst)
 {
+    uint32_t gen = rs.channel_gen; // before the channel is read: a change after it refuses the request
     codeplug_channel_t c;
-    bool accepted = false;
+    radio_request_t id = 0;
 
     // Not now: the radio busy, not a DMR channel that can transmit
-    if (!burst || rs.transmitting || rs.tx_wanted || rs.channel_pending || rs.scanning || hotspot_active() ||
+    if (!burst || rs.is_transmitting || rs.ptt_down || rs.has_new_channel || rs.is_scanning || hotspot_active() ||
         !radio_get_channel(&c) || (c.mode != CODEPLUG_MODE_DMR) || (tx_check(&c, true) != RADIO_TX_OK)) {
-        return false;
+        return 0;
     }
     taskENTER_CRITICAL();
-    if (!data_active) {
+    if (data_res != RADIO_PENDING) {
         data = burst;
+        data_gen = gen;
         data_id = (uint16_t)(((data_id + 1) & RADIO_ID_MASK) | RADIO_ID_DATA);
-        data_active = true;
+        data_res = RADIO_PENDING;
         data_asked = true;
-        accepted = true;
+        id = data_id;
     }
     taskEXIT_CRITICAL();
-    if (accepted) {
+    if (id != 0) {
         radio_wake();
     }
-    return accepted;
-}
-
-bool radio_data_busy(void)
-{
-    return data_active;
-}
-
-bool radio_data_sent(void)
-{
-    return data_sent;
+    return id;
 }
 
 /* For the radio task (radio.c) */
 
+// A burst asked for since the last call: its request id for the machine (RFSM_DATA_REQ); refused here when the
+// channel changed since it was asked
 bool data_take_request(uint16_t *id)
 {
     if (!data_asked) {
         return false;
     }
     data_asked = false;
+    if (data_gen != rs.channel_gen) {
+        data_res = RADIO_REFUSED;
+        return false;
+    }
     *id = data_id;
     return true;
 }
 
-void data_finished(uint16_t id, bool sent)
+void data_finished(uint16_t id, radio_result_t result)
 {
     if (id == data_id) {
-        data_sent = sent;
-        data_active = false;
+        data_res = result;
     }
+}
+
+radio_result_t data_result(uint16_t id)
+{
+    return (id == data_id) ? data_res : RADIO_FAILED;
+}
+
+bool data_pending(void)
+{
+    return data_res == RADIO_PENDING;
 }
 
 // DATA_SEND begins (the transmit entry done): the engine takes the burst

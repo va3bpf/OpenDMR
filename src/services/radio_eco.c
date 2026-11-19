@@ -114,10 +114,10 @@ void eco_tick(void)
     bool active = eco_activity;
 
     eco_activity = false;
-    if (!rs.has_channel || (level == 0) || (rs.channel.libre_dmr_flag1 & ECO_FLAG1_NO_ECO) || rs.transmitting || rs.tx_wanted ||
-        rs.carrier || rs.speaker || rs.amp_for_audio || rs.amp_for_beep || rs.amp_for_broadcast || rs.scanning || vox_running() || radio_aprs_busy() || radio_data_busy() ||
+    if (!rs.has_channel || (level == 0) || (rs.channel.libre_dmr_flag1 & ECO_FLAG1_NO_ECO) || rs.is_transmitting || rs.ptt_down ||
+        rs.has_carrier || rs.speaker_open || rs.audio_needs_amp || rs.beep_needs_amp || rs.broadcast_needs_amp || rs.is_scanning || vox_running() || aprs_pending() || data_pending() ||
         hotspot_active() ||
-        (rs.dmr_on && dmr_has_sync()) || rs.nxdn_on || active) { // NXDN: the recording needs the receiver on (for now)
+        (rs.dmr_running && dmr_has_sync()) || rs.nxdn_running || active) { // NXDN: the recording needs the receiver on (for now)
         eco_stop();
         return;
     }
@@ -126,7 +126,7 @@ void eco_tick(void)
     }
 
     uint32_t rx_ms = (uint32_t)(130 - (10 * level));
-    uint32_t on_ms = (rs.p25_on && (rx_ms < ECO_P25_RX_MS)) ? ECO_P25_RX_MS : rx_ms;
+    uint32_t on_ms = (rs.p25_running && (rx_ms < ECO_P25_RX_MS)) ? ECO_P25_RX_MS : rx_ms;
 
     switch (eco) {
         case ECO_INACTIVE: // wait before shutting down

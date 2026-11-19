@@ -54,10 +54,10 @@
 static const uint8_t *aprs_bits; // the frame asked for (radio_aprs_send())
 static uint16_t aprs_bit_count;
 static bool aprs_baud300;
-static uint32_t aprs_frequency;          // 0: on the channel; else the beacon's own frequency
-static volatile bool aprs_active = false; // asked, not done yet: radio_aprs_busy()
-static volatile bool aprs_asked = false;  // for the machine (RFSM_BEACON_REQ)
-static volatile bool aprs_sent;
+static uint32_t aprs_frequency; // 0: on the channel; else the beacon's own frequency
+static uint32_t aprs_gen;       // the channel's generation when asked: refused once another channel is given
+static volatile bool aprs_asked = false;                  // for the machine (RFSM_BEACON_REQ)
+static volatile radio_result_t aprs_res = RADIO_FAILED;   // of the last request; RADIO_PENDING while it runs
 static volatile uint16_t aprs_id;
 
 // Tuned away for the beacon: the user's channel kept here meanwhile
@@ -68,80 +68,85 @@ static codeplug_channel_t saved;
 
 /* The API (radio.h) */
 
-bool radio_aprs_send(const uint8_t *bits, uint16_t bit_count, bool baud300, uint32_t frequency,
-                     const codeplug_channel_t *channel)
+radio_request_t radio_aprs_send(const uint8_t *bits, uint16_t bit_count, bool baud300, uint32_t frequency)
 {
+    uint32_t gen = rs.channel_gen; // before the channel is read: a change after it refuses the request
     codeplug_channel_t c;
-    bool accepted = false;
+    radio_request_t id = 0;
 
-    // Not now: the radio busy, the channel not the one aprs.c checked, receive only
-    if (rs.transmitting || rs.tx_wanted || rs.channel_pending || rs.scanning || hotspot_active() || !channel ||
-        !radio_get_channel(&c) || (memcmp(channel, &c, sizeof(c)) != 0) || (c.flag4 & FLAG4_RX_ONLY)) {
-        return false;
+    // Not now: the radio busy, no channel, receive only
+    if (rs.is_transmitting || rs.ptt_down || rs.has_new_channel || rs.is_scanning || hotspot_active() ||
+        !radio_get_channel(&c) || (c.flag4 & FLAG4_RX_ONLY)) {
+        return 0;
     }
     // Where it goes must be able to transmit: the beacon's frequency, or the channel itself (FM only)
     if (frequency != 0) {
         if (!tx_frequency_ok(frequency)) {
-            return false;
+            return 0;
         }
     } else if ((c.mode != CODEPLUG_MODE_FM) || !tx_frequency_ok(c.tx_freq)) {
-        return false;
+        return 0;
     }
     taskENTER_CRITICAL();
-    if (!aprs_active) {
+    if (aprs_res != RADIO_PENDING) {
         aprs_bits = bits;
         aprs_bit_count = bit_count;
         aprs_baud300 = baud300;
         aprs_frequency = frequency;
+        aprs_gen = gen;
         aprs_id = (uint16_t)(((aprs_id + 1) & RADIO_ID_MASK) | RADIO_ID_APRS);
-        aprs_active = true;
+        aprs_res = RADIO_PENDING;
         aprs_asked = true;
-        accepted = true;
+        id = aprs_id;
     }
     taskEXIT_CRITICAL();
-    if (accepted) {
+    if (id != 0) {
         radio_wake();
     }
-    return accepted;
-}
-
-bool radio_aprs_busy(void)
-{
-    return aprs_active;
-}
-
-bool radio_aprs_sent(void)
-{
-    return aprs_sent;
+    return id;
 }
 
 /* For the radio task (radio.c) */
 
-// A frame asked for since the last call: its request id for the machine (RFSM_BEACON_REQ)
+// A frame asked for since the last call: its request id for the machine (RFSM_BEACON_REQ); refused here when the
+// channel changed since it was asked
 bool aprs_take_request(uint16_t *id)
 {
     if (!aprs_asked) {
         return false;
     }
     aprs_asked = false;
+    if (aprs_gen != rs.channel_gen) {
+        aprs_res = RADIO_REFUSED;
+        return false;
+    }
     *id = aprs_id;
     return true;
 }
 
 // The machine's outcome of the request id (an older one's is left)
-void aprs_finished(uint16_t id, bool sent)
+void aprs_finished(uint16_t id, radio_result_t result)
 {
     if (id == aprs_id) {
-        aprs_sent = sent;
-        aprs_active = false;
+        aprs_res = result;
     }
+}
+
+radio_result_t aprs_result(uint16_t id)
+{
+    return (id == aprs_id) ? aprs_res : RADIO_FAILED;
+}
+
+bool aprs_pending(void)
+{
+    return aprs_res == RADIO_PENDING;
 }
 
 // The beacon may start: on its own frequency from a channel in any mode (checked again once tuned there: the FM
 // channel then), else on an FM channel
 bool aprs_can_start(void)
 {
-    return (aprs_frequency != 0) || (is_fm() && !rs.dmr_on);
+    return (aprs_frequency != 0) || (is_fm() && !rs.dmr_running);
 }
 
 // LISTEN begins: on the beacon's own frequency, the radio tuned there (FM, the channel's width, no tones, no VOX); the
@@ -186,12 +191,12 @@ bool aprs_tuned_away(void)
 // Someone on the beacon's own frequency (tuned away): busy until the noise reading has settled, then the noise
 // against the squelch level, without the squelch opening the speaker there (a digital user would hear the packet
 // noise)
-bool aprs_carrier(void)
+bool aprs_channel_busy(void)
 {
     if ((systime_get_ms() - tuned_ms) < APRS_SETTLE_MS) {
         return true;
     }
-    return rx_noise_carrier();
+    return rx_noise_busy();
 }
 
 // How long the beacon listens for a free channel

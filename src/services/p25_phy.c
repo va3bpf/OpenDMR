@@ -41,6 +41,7 @@
 #include "dmr_compat.h"
 #include "systime.h"
 #include "radio.h"
+#include "radio_hooks.h"
 #include "imbe.h"
 #include "p25_frame.h"
 #include "p25_phy.h"

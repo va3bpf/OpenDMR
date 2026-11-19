@@ -33,15 +33,25 @@
 #include <stdint.h>
 #include "codeplug.h"
 
-// The radio (FM for now): the channel of the home screen received with its squelch and tones, transmitted with the
-// PTT. A task of its own owns the FD6818 and the baseband; the UI tells it what to do and gets UI_DATA_SIGNAL events
-// (the squelch opened or closed, the shown signal changed). From OpenDM32 functions/trx.c and
-// hardware/radioHardwareInterface.c.
-//
-// The squelch as trx.c trxCheckAnalogSquelch(): every 25 ms the FD6818 noise (0x65) against 70 - 3 x (level - 1),
-// level from the channel or the band's default; it opens below and closes 3 over. With a receive tone the speaker
-// opens only with the tone, and closes after it is missing 6 times. While it is open the radio task runs from RAM
-// only (no flash or LCD bus access), as the main firmware's quiet wait: such accesses are heard.
+/* The radio, for the application (the screens, scan and the dual watch, APRS, the hotspot): it receives on the
+   channel it is given and transmits on it when asked. A task of its own owns the chips and decides (radio_fsm.h):
+   every function here only records what is asked and returns at once; what came of a beacon or a data burst is asked
+   with radio_result(). The UI hears of the signal's changes through UI_DATA_SIGNAL events. The firmware's lower
+   services (the DMR engine, P25, NXDN, the sounds, the input) use radio_hooks.h. */
+
+void radio_init(void);  // before the scheduler: the chips set up, the receiver off
+void radio_start(void); // the radio task
+
+/* The channel */
+
+// The channel to receive and transmit on (copied); the same channel again changes nothing. NULL: none (muted)
+void radio_set_channel(const codeplug_channel_t *channel);
+bool radio_get_channel(codeplug_channel_t *channel); // the channel given; false: none
+uint32_t radio_rx_frequency(void);                   // 0: no channel
+bool radio_channel_is_dmr(void);
+int radio_band_of(uint32_t frequency); // the band of the settings' squelch defaults: 0 VHF, 1 220 MHz, 2 UHF
+
+/* Transmitting with the PTT */
 
 typedef enum {
     RADIO_TX_OK,
@@ -51,80 +61,67 @@ typedef enum {
     RADIO_TX_OUT_OF_BAND, // not a frequency of the radio, or out of the band limits of the settings
 } radio_tx_check_t;
 
-void radio_init(void);  // before the scheduler: the chips set up, receiver off
-void radio_start(void); // the radio task
-
-// The channel to use (copied); the same channel again changes nothing. NULL: none (receiver muted)
-void radio_set_channel(const codeplug_channel_t *channel);
-
-radio_tx_check_t radio_tx_check(void);
-void radio_transmit(bool on); // only after RADIO_TX_OK; the task switches over
-void radio_transmit_plain(void); // FM on without the start / end tones and MDC1200 (DTMF); radio_transmit(false) ends
+radio_tx_check_t radio_tx_check(void); // can the channel given transmit (the transmit screen shows why not)
+// The PTT's level: transmitting while it is on, if the channel can (the radio checks it, and refuses otherwise)
+void radio_transmit(bool on);
+void radio_transmit_plain(void); // FM without the start / end tones and MDC1200 (DTMF); radio_transmit(false) ends
+// FM transmitting: a tone (1750 Hz) or DTMF instead of the mic; 0, 0: the mic again
+void radio_tx_signal(uint16_t hz1, uint16_t hz2);
+#define RADIO_TX_SILENT 0xFFFF // hz1: no tone and no mic (the gaps of the hotspot's CW ID)
 bool radio_is_transmitting(void);
-const char *radio_state_name(void); // the state machine's state (radio_fsm.h): rx, scan, tx_voice ...
-// APRS (aprs.c): the AX.25 frame as NRZI bits (bit 0 of byte 0 first), sent as AFSK by the radio task.
-// frequency 0: on the channel (FM channels only); else on that frequency (10 Hz units), from a channel in any mode: the
-// task tunes FM there for the frame and comes back, the channel shown by the UI unchanged. channel: the channel the
-// caller checked (radio_get_channel()); the frame goes only while it is still the channel asked for. The task waits for
-// a free channel (up to 2 s; 0.4 s when it tuned away from a DMR / P25 / NXDN channel), the PTT and a channel change
-// win over it. false: not now (transmitting, scanning, hotspot, another channel, receive only, a frequency the radio
-// can't transmit on, a frame still in progress). The bits stay in use until radio_aprs_busy() is false;
-// radio_aprs_sent() then tells if it went out.
-bool radio_aprs_send(const uint8_t *bits, uint16_t bit_count, bool baud300, uint32_t frequency,
-                     const codeplug_channel_t *channel);
-bool radio_aprs_busy(void);
-bool radio_aprs_sent(void);
-// A data burst on the current DMR channel (APRS over DMR: an LRRP report). The caller's functions drive the DMR engine;
-// the radio task calls them, in its own task, only after checking the channel and waiting for it to be free (up to
-// 2 s), with the PA drive, the red LED and the transmitting state set:
+
+/* Requests: an APRS beacon, a data burst. Each returns its id (0: refused at once); radio_result() then tells what
+   came of it. One of each kind at a time; the PTT and a channel change win over them. */
+
+typedef uint16_t radio_request_t;
+
+typedef enum {
+    RADIO_PENDING,   // not done yet
+    RADIO_SENT,
+    RADIO_REFUSED,   // the channel can't (receive only, the mode, the band), or it changed since the request
+    RADIO_BUSY,      // the channel stayed busy
+    RADIO_ABANDONED, // given up for the PTT or another channel
+    RADIO_FAILED,    // a fault while sending; also the result of an old request (another one since)
+} radio_result_t;
+
+radio_result_t radio_result(radio_request_t request);
+
+// An APRS frame (aprs.c: the AX.25 frame as NRZI bits, bit 0 of byte 0 first) as AFSK. frequency 0: on the channel
+// (an FM channel); else on that frequency (10 Hz units) from a channel in any mode: FM there for the frame, then back
+// (the channel shown unchanged). After a free channel (up to 2 s; 0.4 s when it left a DMR / P25 / NXDN channel).
+// Refused at once while transmitting, scanning, in hotspot mode, on a receive only channel, on a frequency the radio
+// can't transmit on, or with a frame still in progress. The bits stay in use until the result isn't RADIO_PENDING.
+radio_request_t radio_aprs_send(const uint8_t *bits, uint16_t bit_count, bool baud300, uint32_t frequency);
+
+// A data burst on the DMR channel (APRS over DMR: an LRRP report). The caller's functions drive the DMR engine; the
+// radio calls them in its task, after a free channel (up to 2 s), with the power, the red LED and the transmitting
+// state set. The PTT pressed during the burst waits for it.
 typedef struct {
-    bool (*start)(void);   // hand the burst to the engine; false: it couldn't (the burst fails)
+    bool (*start)(void);   // hand the burst to the engine; false: it couldn't (RADIO_FAILED)
     bool (*sending)(void); // still being sent
     bool (*failed)(void);  // the engine gave up (a repeater that didn't wake, an engine reset)
-    void (*cancel)(void);  // abort it and clear the engine's data state (after a failure, or 5 s without the end)
+    void (*cancel)(void);  // abort it, the engine's data state cleared (after a failure, or 5 s without the end)
 } radio_data_t;
-// false: not now (not a DMR channel, receive only, out of band, transmitting, scanning, hotspot, a burst still in
-// progress). The PTT pressed meanwhile waits for the burst; pressed while it waits for a free channel, it wins.
-// radio_data_busy() until it is done, radio_data_sent() then tells if it went out. burst stays in use until then.
-bool radio_data_send(const radio_data_t *burst);
-bool radio_data_busy(void);
-bool radio_data_sent(void);
-// The VOX (an FM channel with VOX, settings.vox_threshold set) posts PTT presses and releases; a key (from the input
-// task) stops it and starts it again later
-void radio_vox_key(bool ptt_held);
-void radio_eco_activity(void); // a key, the knob, a P25 sync: the receive power saving ends, starts over later
-void radio_dmr_audio(bool on); // the DMR engine's speaker (from its task or its interrupts)
-// The DMR engine's transmitter (from its timeslot interrupts): on at the start, each burst on / off, receive at the end
-void radio_dmr_tx_on(void);
-void radio_dmr_burst(bool on);
-void radio_dmr_rx_on(void);
-// The physical layer transmit (p25_phy.c): the transmitter on (low_power: 50 mW, else the channel's power), kept on /
-// back to receive
-void radio_phy_tx(bool on, bool low_power);
-void radio_tx_signal(uint16_t hz1, uint16_t hz2); // FM transmit: a tone (1750 Hz) or DTMF instead of the mic; 0, 0: off
-#define RADIO_TX_SILENT 0xFFFF // hz1: no tone and no mic (the gaps of the hotspot's CW ID)
-int radio_band_of(uint32_t frequency); // the band of the settings' squelch defaults: 0 VHF, 1 220 MHz, 2 UHF
-uint32_t radio_tx_frequency(void);
-uint32_t radio_rx_frequency(void); // 0: no channel
-bool radio_channel_is_dmr(void);
-bool radio_get_channel(codeplug_channel_t *channel); // the channel radio_set_channel() was given; false: none
 
-bool radio_has_carrier(void); // FM: a carrier (the noise squelch open)
-void radio_set_scanning(bool on); // no receive beeps while scanning (scan.c)
-bool radio_is_scanning(void);
-bool radio_audio_heard(void); // a received signal plays (FM squelch and tone, or DMR audio)
-bool radio_is_receiving(void);  // the squelch is open (the speaker on)
-void radio_broadcast_amp(bool on); // the speaker amplifier for the FM broadcast receiver (fm_broadcast.c)
-// A beep (sound.c): the audio switch to the baseband first, then the amplifier; off the other way round, each
-// switched while the amplifier is off (a switch heard as a click otherwise, mostly while transmitting)
-void radio_beep_path(bool on);
-void radio_beep_amp(bool on);
-uint8_t radio_signal(void);     // RSSI, raw (dBm = raw - 177 on VHF, raw - 167 on UHF), averaged for showing
+// Refused at once: not a DMR channel, receive only, out of band, transmitting, scanning, hotspot, a burst in
+// progress. burst stays in use until the result isn't RADIO_PENDING.
+radio_request_t radio_data_send(const radio_data_t *burst);
+
+/* Receiving */
+
+bool radio_has_carrier(void);  // FM: a carrier (the noise squelch open)
+bool radio_audio_heard(void);  // a received signal plays (FM squelch and tone, or DMR audio)
+bool radio_is_receiving(void); // the squelch open or a digital call heard (the screens' green line, S meter)
+uint8_t radio_signal(void);    // RSSI, averaged for showing (dBm = value - 177 on VHF, - 167 on UHF)
 int radio_signal_dbm(void);
-uint8_t radio_signal_raw(void); // the last reading
-// Scanning a digital channel: the strongest raw reading since the last retune settled, and how many readings (0: none
-// yet); read every few ms while scanning (radio_set_scanning())
+uint8_t radio_signal_raw(void); // the last reading (the RSSI screen)
+uint8_t radio_noise(void);      // the last noise reading (the RSSI screen)
+
+/* Scanning (scan.c, the dual watch) */
+
+void radio_set_scanning(bool on); // scanning: no receive beeps, no beacons or bursts, fast readings on DMR
+bool radio_is_scanning(void);
+// Scanning a digital channel: the strongest reading since the last retune settled, and how many (0: none yet)
 uint8_t radio_scan_peak(uint16_t *samples);
-uint8_t radio_noise(void);      // raw
 
 #endif
