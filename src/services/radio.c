@@ -124,7 +124,6 @@ static volatile bool tx_plain = false; // no start / end tones nor MDC1200 (a DT
 static codeplug_channel_t channel;
 static bool has_channel = false;
 static bool dmr_on = false; // the modem and the FD6818 are in DMR
-static bool dmr_stopping = false; // the PTT released, the engine ends its transmission
 static uint16_t dmr_drive;        // the PA drive of the DMR transmission (pa_drive() of its frequency)
 static volatile bool transmitting = false;
 
@@ -873,64 +872,148 @@ void radio_phy_tx(bool on, bool low_power)
     }
 }
 
-// P25 (p25_radio.c): the PTT to its transmission; transmitting until it has sent its last data unit
-static void p25_transmit_check(void)
+/* The PTT's transmission, on the channel's backend (step 2 of the radio task's state machine, radio_fsm.h: the transmit
+   entry and exit in one place). A backend starts it, is asked once to stop it when the PTT is released, tells while it
+   is still sending (a digital one sends its last frames), then finishes. The backend is the channel's, which doesn't
+   change while transmitting (apply_channel() waits). */
+
+typedef struct {
+    bool (*can_start)(void);
+    void (*start)(void);    // transmitting from here, the UI told
+    void (*stop)(void);     // the PTT released
+    bool (*sending)(void);  // still sending after stop()
+    void (*finished)(void); // not transmitting any more, the UI told
+} tx_backend_t;
+
+static bool tx_stopping = false; // stop() asked, sending() not over yet
+
+static bool always(void)
 {
-    if (tx_wanted && !transmitting) {
-        transmitting = true;
-        p25_radio_transmit(true);
-        post_signal();
-    } else if (!tx_wanted && transmitting) {
-        p25_radio_transmit(false);
-        if (!p25_radio_transmitting()) {
-            transmitting = false;
-            post_signal();
-        }
+    return true;
+}
+
+static bool never(void)
+{
+    return false;
+}
+
+static void nothing(void)
+{
+}
+
+// FM: the start and end tones and MDC1200 (not for a plain transmission: a DTMF sequence); the end, the tail and off
+// all within stop()
+static void tx_fm_start(void)
+{
+    transmit_on();
+    if (!tx_plain) {
+        local_tone(sound_tx_tones.local_start);
+        mdc1200(true);
+        air_tone(sound_tx_tones.air_start);
     }
 }
 
-// NXDN (nxdn_radio.c): the same as P25
-static void nxdn_transmit_check(void)
+static void tx_fm_stop(void)
 {
-    if (tx_wanted && !transmitting) {
-        transmitting = true;
-        nxdn_radio_transmit(true);
-        post_signal();
-    } else if (!tx_wanted && transmitting) {
-        nxdn_radio_transmit(false);
-        if (!nxdn_radio_transmitting()) {
-            transmitting = false;
-            post_signal();
-        }
+    signal_wanted[0] = 0;
+    signal_wanted[1] = 0;
+    tx_signal_update();
+    if (!tx_plain) {
+        air_tone(sound_tx_tones.air_end);
+        mdc1200(false);
+    }
+    tail();
+    transmit_off();
+    if (!tx_plain) {
+        local_tone(sound_tx_tones.local_end);
     }
 }
 
-// The PTT: the engine asked to transmit; released: it ends its transmission, then the radio is free again
-static void dmr_transmit_check(void)
+// DMR: the engine asked to transmit; released, it ends its transmission, then the radio is free again
+static void tx_dmr_start(void)
 {
-    if (tx_wanted && !transmitting) {
-        p25_ev_log(21, 0); // the delay log (p25_radio.c)
-        dmr_drive = pa_drive(channel.tx_freq);
-        transmitting = true;
-        dmr_stopping = false;
-        leds_red(true);
-        dmr_transmit(true);
-        post_signal();
-    } else if (!tx_wanted && transmitting && !dmr_stopping) {
-        dmr_stopping = true;
-        dmr_transmit(false);
+    p25_ev_log(21, 0); // the delay log (p25_radio.c)
+    dmr_drive = pa_drive(channel.tx_freq);
+    transmitting = true;
+    leds_red(true);
+    dmr_transmit(true);
+    post_signal();
+}
+
+static void tx_dmr_stop(void)
+{
+    dmr_transmit(false);
+}
+
+static void tx_dmr_finished(void)
+{
+    transmitting = false;
+    leds_red(false);
+    // the DMR Tx stop beep once the engine has finished (uiTxScreen.c), not after a repeater that didn't answer
+    if ((settings.beep_options & BEEP_DMR_TX_STOP) && (settings.audio_prompt_mode != SOUND_PROMPT_SILENT) &&
+        !hotspot_active() && !dmr_repeater_failed()) {
+        sound_play(SOUND_DMR_TX_STOP);
     }
-    if (dmr_stopping && !dmr_is_transmitting()) {
-        dmr_stopping = false;
-        transmitting = false;
-        leds_red(false);
-        // the DMR Tx stop beep once the engine has finished (uiTxScreen.c), not after a repeater that didn't answer
-        if ((settings.beep_options & BEEP_DMR_TX_STOP) && (settings.audio_prompt_mode != SOUND_PROMPT_SILENT) &&
-            !hotspot_active() &&
-            !dmr_repeater_failed()) {
-            sound_play(SOUND_DMR_TX_STOP);
+    post_signal();
+}
+
+// P25 (p25_radio.c) and NXDN (nxdn_radio.c): transmitting until the last data unit / frame is sent
+static void tx_p25_start(void)
+{
+    transmitting = true;
+    p25_radio_transmit(true);
+    post_signal();
+}
+
+static void tx_p25_stop(void)
+{
+    p25_radio_transmit(false);
+}
+
+static void tx_nxdn_start(void)
+{
+    transmitting = true;
+    nxdn_radio_transmit(true);
+    post_signal();
+}
+
+static void tx_nxdn_stop(void)
+{
+    nxdn_radio_transmit(false);
+}
+
+static void tx_digital_finished(void)
+{
+    transmitting = false;
+    post_signal();
+}
+
+static const tx_backend_t TX_FM = {is_fm, tx_fm_start, tx_fm_stop, never, nothing};
+static const tx_backend_t TX_DMR = {always, tx_dmr_start, tx_dmr_stop, dmr_is_transmitting, tx_dmr_finished};
+static const tx_backend_t TX_P25 = {always, tx_p25_start, tx_p25_stop, p25_radio_transmitting, tx_digital_finished};
+static const tx_backend_t TX_NXDN = {always, tx_nxdn_start, tx_nxdn_stop, nxdn_radio_transmitting, tx_digital_finished};
+
+static const tx_backend_t *tx_backend(void)
+{
+    return nxdn_on ? &TX_NXDN : (p25_on ? &TX_P25 : (dmr_on ? &TX_DMR : &TX_FM));
+}
+
+// The PTT's level to the transmission: started, asked to stop, finished
+static void transmit_step(void)
+{
+    const tx_backend_t *b = tx_backend();
+
+    if (tx_wanted && !transmitting) {
+        if (b->can_start()) {
+            b->start();
         }
-        post_signal();
+    } else if (!tx_wanted && transmitting && !tx_stopping) {
+        tx_stopping = true;
+        b->stop();
+    }
+    if (tx_stopping && !b->sending()) {
+        tx_stopping = false;
+        b->finished();
     }
 }
 
@@ -1271,35 +1354,7 @@ static void RAM_CODE radio_task(void *arg)
         if (aprs_bits && !dmr_on && !transmitting) {
             aprs_transmit();
         }
-        if (nxdn_on) {
-            nxdn_transmit_check(); // not the DMR engine underneath
-        } else if (p25_on) {
-            p25_transmit_check();
-        } else if (dmr_on) {
-            dmr_transmit_check();
-        } else if (tx_wanted != transmitting) {
-            if (tx_wanted && is_fm()) {
-                transmit_on();
-                if (!tx_plain) {
-                    local_tone(sound_tx_tones.local_start);
-                    mdc1200(true);
-                    air_tone(sound_tx_tones.air_start);
-                }
-            } else if (!tx_wanted) {
-                signal_wanted[0] = 0;
-                signal_wanted[1] = 0;
-                tx_signal_update();
-                if (!tx_plain) {
-                    air_tone(sound_tx_tones.air_end);
-                    mdc1200(false);
-                }
-                tail();
-                transmit_off();
-                if (!tx_plain) {
-                    local_tone(sound_tx_tones.local_end);
-                }
-            }
-        }
+        transmit_step();
         tx_signal_update();
         if (!transmitting && (speaker || amp_for_audio)) {
             vox_heard = vox_on; // flash code waits: the quiet wait while heard (vox_check() starts it again)
@@ -1446,7 +1501,7 @@ const char *radio_state_name(void)
     if (aprs_bits) {
         state = transmitting ? RFSM_BEACON_SEND : RFSM_BEACON_LISTEN;
     } else if (transmitting) {
-        state = tx_wanted ? RFSM_TX_VOICE : RFSM_TX_ENDING;
+        state = tx_stopping ? RFSM_TX_ENDING : RFSM_TX_VOICE;
     } else if (scanning) {
         state = RFSM_SCAN;
     }
