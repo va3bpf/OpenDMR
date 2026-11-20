@@ -35,6 +35,7 @@
 // The OpenGD77 custom data of the codeplug (the CPS writes it): "OpenGD77" and 4 bytes at the start of the flash part
 // of the codeplug, then blocks of a header (type, length) and the data; an empty block has the type and length
 // 0xFFFFFFFF.
+#define CUSTOM_DATA_TYPE_BOOT_IMAGE    1
 #define CUSTOM_DATA_TYPE_SATELLITE_TLE 3
 #define CUSTOM_DATA_TYPE_THEME_DAY     4
 #define CUSTOM_DATA_TYPE_THEME_NIGHT   5
