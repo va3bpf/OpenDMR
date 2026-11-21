@@ -71,6 +71,7 @@
 #include "extra_options.h"
 #include "pin_screen.h"
 #include "lock_screen.h"
+#include "boot_screen.h"
 #include "debug.h"
 #include "test_link.h"
 
@@ -79,7 +80,8 @@ volatile unsigned long freertos_assert_line = 0;
 // The screens that go over all others: the hotspot's (not while secured: security.h), the CPS's
 static bool screen_hooks(const ui_event_t *ev)
 {
-    if ((ev->type == UI_EVENT_DATA) && (ev->what & (UI_DATA_TIME | UI_DATA_GPS))) {
+    if ((ev->type == UI_EVENT_DATA) && (ev->what & (UI_DATA_TIME | UI_DATA_GPS)) &&
+        (ui_top_screen() != &boot_screen)) {
         display_theme_apply(); // the auto theme: light by day, dark at night
     }
     return (!security_secured() && hotspot_screen_hook(ev)) || cps_screen_hook(ev);
@@ -133,7 +135,7 @@ int main(void)
                                                                                           : &channel_screen),
              // the power-on PIN first, else the lock screen (the lock PIN), else the FM radio if it was on
              (security_boot_locked() ? &pin_screen
-                                     : (lock ? lock : (fm_radio_was_playing() ? &fm_radio_screen : NULL))));
+                                     : (lock ? lock : (fm_radio_was_playing() ? &fm_radio_screen : boot_screen_start()))));
     systime_watchdog_start(); // a stall from here on resets the radio
 
     vTaskStartScheduler();
