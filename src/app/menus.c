@@ -269,22 +269,23 @@ static const ui_list_t display_options = {
     .count = sizeof(display_options_items) / sizeof(display_options_items[0]),
 };
 
-/* Language: English / Chinese / Spanish (language.c), each named in its own language */
+/* Language: English and the language files written by the CPS (language.c), each named in its own language */
 
 static void language_format(char *buffer, size_t size)
 {
-    snprintf(buffer, size, "%s", text(TEXT_LANGUAGE_NAME));
+    snprintf(buffer, size, "%s", language_name(language_get()));
 }
 
 static void language_change(int direction, uint8_t modifiers)
 {
     uint8_t language = language_get();
+    uint8_t count = language_count();
 
     (void)modifiers;
     if (direction > 0) {
-        language = (language + 1) % LANGUAGE_COUNT;
+        language = (language + 1) % count;
     } else {
-        language = (language == 0) ? (LANGUAGE_COUNT - 1) : (language - 1);
+        language = (language == 0) ? (count - 1) : (language - 1);
     }
     language_set(language);
 }

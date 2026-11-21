@@ -31,9 +31,10 @@
  */
 
 #include "themes.h"
+#include "text.h"
 
 const theme_t theme_clear_sky = {
-    .name = {"Clear sky", "晴空", "Cielo claro"},
+    .name = TEXT_THEME_CLEAR_SKY,
     .dark = false,
     .colours = {
         0xFFFFFF, // background

@@ -31,7 +31,7 @@ import radio as testlink  # noqa: E402
 NAMES = {29: 'tx begins', 50: 'play: enough queued', 51: 'play: amp on', 52: 'play: first voice out',
          53: 'play: out of voice', 30: 'M17 transmit() / mic on', 31: 'M17 keyed', 32: 'M17 stream frame -> FIFO',
          40: 'M17 LSF received', 41: 'M17 stream frame received', 21: 'DMR tx starts', 33: 'DMR LC header -> FIFO',
-         34: 'DMR voice burst -> FIFO', 35: 'DMR keyed', 37: 'DMR frame encoded (0.1 ms)', 38: 'DMR realigned', 42: 'DMR LC header received', 43: 'DMR voice burst received',
+         34: 'DMR voice burst -> FIFO', 35: 'DMR keyed', 37: 'DMR frame encoded (0.1 ms)', 39: 'AMBE encode (0.1 ms)', 38: 'DMR realigned', 42: 'DMR LC header received', 43: 'DMR voice burst received',
          20: 'DMR playback starts', 36: 'NXDN voice frame -> FIFO', 44: 'NXDN call begins',
          45: 'NXDN voice frame received', 46: 'NXDN hunt: candidates', 47: 'NXDN false lock', 48: 'NXDN lock lost',
          1: 'P25 key', 2: 'P25 LDU -> FIFO', 3: 'P25 RF on', 10: 'P25 DU received', 11: 'P25 playback on',

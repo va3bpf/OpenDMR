@@ -55,6 +55,7 @@ typedef struct {
     void (*poll)(void);              // every few ms after the halves: timeouts (or NULL)
     void (*end_call)(void);          // a call shown ended now (stopping, transmitting; or NULL)
     void (*transmit)(void);          // the PTT held: the transmission, until the PTT is released (afrx_ptt())
+    void (*data)(void);              // a data transmission asked (afrx_data()): sent, then back (or NULL)
     afrx_stats_t stats;
 } afrx_ops_t;
 
@@ -67,6 +68,7 @@ bool afrx_running(const afrx_ops_t *ops);
 void afrx_ptt(bool on);
 bool afrx_ptt_held(void);        // for transmit(): go on while true
 bool afrx_transmitting(void);    // the PTT held or the transmission still ending
+void afrx_data(void);            // the receiver's data() to run in the task (as a transmission: the recording off)
 
 // For the transmit() of the receivers that send 4FSK through the physical layer's FIFO (NXDN, M17): the mic on, the
 // FIFO emptied, the modem's level scaled (MODEM_MOD_SCALE_ONE: as calibrated) ...

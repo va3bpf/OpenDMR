@@ -27,8 +27,8 @@
  */
 
 /*
- * OpenDMR, UI: the strings in the language of the settings. The language number comes from language.c (0 English,
- * 1 Chinese, 2 Spanish); a string a language does not have yet (NULL) is shown in English (gen_text.py).
+ * OpenDMR, UI: the strings in the current language: the language file's (language.c) or, when it has none (English,
+ * a string missing, unknown or wrong), the built-in English one (text_en.c).
  */
 
 #include <stddef.h>
@@ -36,29 +36,13 @@
 #include "language.h"
 #include "text.h"
 
-bool text_is_chinese(void)
-{
-    return language_get() == LANGUAGE_CHINESE;
-}
-
 const char *text(text_id_t id)
 {
-    const char *const *table;
+    const char *s;
 
     if (id >= TEXT_COUNT) {
         return "?";
     }
-    switch (language_get()) {
-    case LANGUAGE_CHINESE:
-        table = text_zh;
-        break;
-    case LANGUAGE_SPANISH:
-        table = text_es;
-        break;
-    default:
-        table = text_en;
-        break;
-    }
-    // A new TEXT_x without its translation must not draw nothing: the English one is shown instead
-    return (table[id] != NULL) ? table[id] : text_en[id];
+    s = language_string((uint16_t)id);
+    return (s != NULL) ? s : text_en[id];
 }

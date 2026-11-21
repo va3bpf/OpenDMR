@@ -37,13 +37,19 @@ TIMEZONE_DATA = 'src/services/timezone-data'
 FILES = {
     'opendmr.bin': 'src/build/opendmr.bin',
     'opendmr_BFUV32.bin': 'src/build/opendmr_BFUV32.bin',
-    'cjk.bin': FONT,
+    # The languages folder: the CPS's Languages page writes these to the radio (docs/i18n.md), the user choosing it
+    'languages/zh.json': 'tools/text/languages/zh.json',
+    'languages/es.json': 'tools/text/languages/es.json',
+    'languages/cjk.bin': FONT,
     'timezone-data/tzdb.bin': TIMEZONE_DATA + '/tzdb.bin',
     'timezone-data/README.md': TIMEZONE_DATA + '/README.md',
     'tools/backup/dm32_dump.py': 'tools/backup/dm32_dump.py',
     'tools/backup/dumper/dumper.bin': 'tools/backup/dumper/dumper.bin',
     'tools/fonts/ttf/RobotoCondensed-VF.ttf': 'tools/fonts/ttf/RobotoCondensed-VF.ttf',
-    'tools/fonts/upload_cjk.py': 'tools/fonts/upload_cjk.py',
+    'tools/lang/lang_tool.py': 'tools/lang/lang_tool.py',  # the same from the command line
+    'tools/text/langfile.py': 'tools/text/langfile.py',
+    'tools/text/check_lang.py': 'tools/text/check_lang.py',
+    'tools/text/languages/en.json': 'tools/text/languages/en.json',  # the reference of a new translation
     'tools/debug/fw_update.py': 'tools/debug/fw_update.py',
     'tools/debug/updater/updater.bin': 'tools/debug/updater/updater.bin',
     'tools/debug/pin_wipe.py': 'tools/debug/pin_wipe.py',  # a forgotten PIN (manual, the PIN section)
@@ -84,8 +90,8 @@ def build():
 
 def font():
     if not os.path.exists(os.path.join(ROOT, FONT)):
-        print('making the Chinese font ...')
-        subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'fonts', 'mkcjk.py')], cwd=ROOT, check=True)
+        print('making the Chinese font file ...')
+        subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'fonts', 'mkfont_pack.py')], cwd=ROOT, check=True)
 
 
 def gh_path():

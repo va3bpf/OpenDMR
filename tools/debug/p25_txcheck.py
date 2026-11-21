@@ -44,12 +44,12 @@ def test_frame(n):
 SYNC = [1, 1, 1, 1, 1, 3, 1, 1, 3, 3, 1, 1, 3, 3, 3, 3, 1, 3, 1, 3, 3, 3, 3, 3]  # 0x5575F5FF77FF
 
 
-def sent_stream(fn0, src, ldus=120, lead=0):
+def sent_stream(fn0, src, ldus=120, lead=0, tg=1):
     """What the radio sent: the preamble blocks (+3, -3, ...), HDU, the LDUs, TDU, zeros to a whole block."""
     with tempfile.TemporaryDirectory() as d:
         imbe, out = os.path.join(d, 'f.imbe'), os.path.join(d, 'f.bin')
         open(imbe, 'wb').write(b''.join(test_frame(fn0 + n) for n in range(9 * ldus)))
-        subprocess.run([BUILD, imbe, out, '0x293', '1', str(src)], check=True, capture_output=True)
+        subprocess.run([BUILD, imbe, out, '0x293', str(tg), str(src)], check=True, capture_output=True)
         tx = np.fromfile(out, np.uint8)
     d = np.stack([(tx >> 6) & 3, (tx >> 4) & 3, (tx >> 2) & 3, tx & 3], 1).ravel()
     head = np.tile(np.array([1, 3], np.uint8), 72 * lead)  # p25_radio.c p25_tx_lead: +3, -3, ... (0x77 bytes)
@@ -106,7 +106,8 @@ def main():
         got.append(struct.unpack('<II', e[:8]) + (e[8:],))
 
     lead = u32(tx, ts, 'p25_tx_lead')
-    d = sent_stream(fn0, src, ldus, lead)  # exactly what was sent
+    tg = struct.unpack('<H', tx.mem_read(ts.resolve('tx_tgid'), 2))[0]  # p25_radio.c: the channel's talk group
+    d = sent_stream(fn0, src, ldus, lead, tg)  # exactly what was sent
     W = 12
     idx = {}
     for i in range(len(d) - W):
@@ -120,7 +121,7 @@ def main():
         if data == prev:
             empty += 1
         prev = data
-        a_ = to_air(bits_of(data), kind & 3)
+        a_ = to_air(bits_of(data), kind if kind == 0x10 else kind & 3)
         if a_ is None:
             continue
         r = np.array([(a_[2 * j] << 1) | a_[2 * j + 1] for j in range(144)], np.uint8)

@@ -32,11 +32,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// Chinese font in the SPI flash (tools/fonts/mkcjk.py, written by tools/fonts/upload_cjk.py): the characters that are
-// not in the built-in fonts are drawn from it. Raw 25Q128 addresses, below the OpenGD77 window and free in the stock
-// layout too (the stock fonts and pictures end at 0x27E000).
-#define FONT_CJK_FLASH_ADDRESS 0x280000
-#define FONT_CJK_FLASH_END     0x630000
+// The font files the CPS writes to the external flash (docs/i18n.en.md, tools/fonts/mkfont_pack.py has the layout):
+// the glyphs that are not in the built-in fonts are drawn from them. A directory sector, then the files; raw 25Q128
+// addresses, after the language slots (language.h), below the OpenGD77 window and free in the stock layout too.
+#define FONT_DIRECTORY_ADDRESS 0x2A0000
+#define FONT_FLASH_ADDRESS     0x2A1000
+#define FONT_FLASH_END         0x630000
 
 typedef struct {
     uint32_t bitmap; // flash address of the compressed bitmap
@@ -47,11 +48,15 @@ typedef struct {
     uint8_t advance;
 } font_cjk_glyph_t;
 
-// Glyph of code for a built-in font with that line height (the big font for the large lines, else the small one)
+// Glyph of code for a built-in font with that line height (the large size for the large lines, else the small one),
+// from the preferred font file first
 bool font_cjk_get_glyph(uint32_t code, uint8_t line_height, font_cjk_glyph_t *glyph);
 // Draws it with its baseline at y (LCD pixels)
 void font_cjk_draw_glyph(int32_t x, int32_t baseline, const font_cjk_glyph_t *glyph, uint16_t colour);
-// Unicode of a GB2312 character (names in the codeplug), 0 when unknown or without the font file
+// Unicode of a GB2312 character (names in the codeplug), 0 when unknown or without a font file with the table
 uint16_t font_cjk_gb2312_to_unicode(uint8_t high, uint8_t low);
+bool font_cjk_has(const char *name);     // that font file is installed
+void font_cjk_prefer(const char *name);  // its glyphs first (the current language's font; "": none)
+void font_cjk_reload(void);              // the CPS wrote the fonts: the directory is read again
 
 #endif /* DM32_FONT_CJK_H */

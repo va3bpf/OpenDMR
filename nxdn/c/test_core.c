@@ -53,6 +53,12 @@ static void on_frame(void *ctx, const nxdn_frame_t *f)
 
 int main(int argc, char **argv)
 {
+    if (getenv("NXDN_OPT")) {
+        nxdn_rx_opt = atoi(getenv("NXDN_OPT"));
+    }
+    if (getenv("NXDN_LP")) {
+        nxdn_rx_lp_hz = atoi(getenv("NXDN_LP"));
+    }
     for (int a = 1; a < argc; a++) {
         if (strcmp(argv[a], "-v") == 0) {
             verbose = 1;

@@ -55,10 +55,11 @@
 #define HUNT_THRESH   3482                   // 0.85 (Q12): the correlation to take an FSW while hunting
 #define TRACK_THRESH  2458                   // 0.60: ... and while locked (near where it is due)
 #define HUNT_APART    (3 * SPS_NOMINAL)      // candidates this far apart are different peaks
-#define HUNT_SPAN     (4 * SPS_NOMINAL) // looked at after the first over it, for its peak: then its frame tried at
-                                        // once (a whole frame looked at for the best, as before, cost the call's first
-                                        // frame now and then: frame_decode()'s CRC tells content that looks like an
-                                        // FSW, and the hunt goes on after it, 2026-11-20)
+#define HUNT_SPAN     (NXDN_FRAME_SYMS * SPS_NOMINAL) // looked at after the first over it, for the best ...
+#define HUNT_FAST     3891                   // ... but one of 0.95 or more: only its peak (4 symbols), its frame tried
+#define FAST_SPAN     (4 * SPS_NOMINAL)      // at once. A whole frame cost the call's first frame now and then; that
+                                             // only, a frame's content looking like an FSW (0.88) was taken in a weak
+                                             // signal (-115 dBm) where the FSW was 0.99 (2026-11-21)
 #define MAX_MISSES    3      // frames in a row without their FSW: hunting again
 #define MAX_UNCHECKED 2      // frames in a row with their FSW but no CRC holding (frame_decode()): hunting again
 #define PAYLOAD       182
@@ -81,16 +82,23 @@ static int16_t lp[NXDN_LP_TAPS]; // Q13
 static uint8_t pn[PAYLOAD]; // the scrambler's bits: 1 inverts the symbol
 static bool tables_ready;
 
+// tests (nxdn/c/test_core.c from the environment): 1 the levels from each frame's decisions (fsk4_relevel(): the FM's
+// non-linearity and DC; DMR's and M17's 3-tap equaliser made it worse here); the input low-pass's cut-off
+volatile int nxdn_rx_opt = 1;
+int nxdn_rx_lp_hz = 2000;
+
 static void tables(void)
 {
     if (tables_ready) {
         return;
     }
-    // a Hamming-windowed sinc at 1440 Hz (0.6 x 2400) for 8 kHz, unit gain at DC
+    // a Hamming-windowed sinc at 2000 Hz for 8 kHz, unit gain at DC (1440 Hz before: the symbols' intersymbol
+    // interference cost more than the noise let in, 2026-11-21: -110 dBm 0.67 % -> 0.06 %, -115 dBm 0.82 % -> 0.29 %
+    // with the levels from the decisions, nxdn/py/tap_ber.py)
     float h[NXDN_LP_TAPS], sum = 0.0f;
     for (int i = 0; i < NXDN_LP_TAPS; i++) {
         float t = (float)i - (NXDN_LP_TAPS - 1) / 2.0f;
-        float fc = 1440.0f / 8000.0f;
+        float fc = (float)nxdn_rx_lp_hz / 8000.0f;
         h[i] = (t == 0.0f) ? 2.0f * fc : sinf(2.0f * (float)M_PI * fc * t) / ((float)M_PI * t);
         h[i] *= 0.54f - 0.46f * cosf(2.0f * (float)M_PI * (float)i / (NXDN_LP_TAPS - 1));
         sum += h[i];
@@ -346,8 +354,15 @@ static bool frame_decode(const nxdn_rx *r, int32_t t0, int polarity, int32_t c, 
     if (a <= 0) {
         return false;
     }
+    int32_t z[NXDN_FRAME_SYMS];
+    for (int k = 0; k < NXDN_FRAME_SYMS; k++) {
+        z[k] = ((v[k] - b) * 256) / a; // Q8 levels (+3: 768)
+    }
+    if (nxdn_rx_opt & 1) { // the four levels from the frame's own decisions, thresholds at their midpoints
+        fsk4_relevel(z, NXDN_FRAME_SYMS);
+    }
     for (int k = 0; k < PAYLOAD; k++) {
-        int32_t s = ((v[10 + k] - b) * 256) / a; // Q8
+        int32_t s = z[10 + k];
         s = (s > 2047) ? 2047 : ((s < -2047) ? -2047 : s);
         p[k] = (int16_t)(pn[k] ? -s : s);
     }
@@ -440,20 +455,24 @@ static void process(nxdn_rx *r)
                 r->hunt_first = -1;
             }
             while ((r->hunt_t + span + 2 * SPS_NOMINAL) < have) {
-                if ((r->hunt_first >= 0) && (r->hunt_t > r->hunt_first + HUNT_SPAN)) {
+                if ((r->hunt_first >= 0) && (r->hunt_t > r->hunt_end)) {
                     break;
                 }
                 int32_t c = corr(r, r->hunt_t, SPS_NOMINAL, HUNT_THRESH);
                 if (iabs(c) >= HUNT_THRESH) {
                     if (r->hunt_first < 0) {
                         r->hunt_first = r->hunt_t;
+                        r->hunt_end = r->hunt_t + HUNT_SPAN;
                         r->ncand = 0;
+                    }
+                    if ((iabs(c) >= HUNT_FAST) && (r->hunt_end > r->hunt_t + FAST_SPAN)) {
+                        r->hunt_end = r->hunt_t + FAST_SPAN;
                     }
                     candidate(r, r->hunt_t, c);
                 }
                 r->hunt_t += HUNT_STEP;
             }
-            if ((r->hunt_first < 0) || (r->hunt_t <= r->hunt_first + HUNT_SPAN)) {
+            if ((r->hunt_first < 0) || (r->hunt_t <= r->hunt_end)) {
                 return; // more samples first
             }
             // the candidates refined to 1/24 sample; which one is the frame: told by decoding (state 2)
@@ -594,6 +613,7 @@ void nxdn_rx_samples(nxdn_rx *r, const int16_t *x, int count)
         r->hunt_t -= (int32_t)(REBASE_BY << Q);
         if (r->hunt_first >= 0) {
             r->hunt_first -= (int32_t)(REBASE_BY << Q);
+            r->hunt_end -= (int32_t)(REBASE_BY << Q);
         }
         for (int i = 0; i < r->ncand; i++) {
             r->cand_t[i] -= (int32_t)(REBASE_BY << Q);

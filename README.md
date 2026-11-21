@@ -44,7 +44,7 @@ DMR 热点（MMDVM）、VOX、可自定义的按键……见 [使用说明书](d
 | `docs/` | [安装手册](docs/installation.md)、[使用说明书](docs/manual.md)（截图在 `docs/manual/`）；开发文档：[architecture.md](docs/architecture.md)（架构）、[ui-design.md](docs/ui-design.md)（界面设计和界面框架）、[coding-style.md](docs/coding-style.md)、[fd6818-registers.md](docs/fd6818-registers.md)（射频芯片寄存器）、[i18n.md](docs/i18n.md)（多语言设计，想加语言的看这里） |
 | `tools/backup/` | `dm32_dump.py`：走芯片引导程序的备份 / 写入工具（和它上传到电台的 `dumper/`） |
 | `tools/debug/` | 数据线升级 `fw_update.py`（和 `updater/`）、调试命令 `dm32dbg.py`、截屏 `fshot.py`、模拟按键 `fkey.py`、话筒电平 `miclevel.py` 等 |
-| `tools/fonts/` | 字体转换（`mkfont.py`）、中文字库（`mkcjk.py` → `build/cjk.bin`，`upload_cjk.py` 写入电台） |
+| `tools/fonts/` | 字体转换（`mkfont.py`）、字库文件（`mkfont_pack.py` → `build/cjk.bin`，由 CPS 写入电台） |
 | `tools/text/` | 界面文字表的生成脚本和原始语言文件（来自 OpenGD77） |
 | `tools/satellite/` | 业余卫星轨道根数写入（`write_keps.py`） |
 | `tools/ids/` | 带地址的 DMR ID 数据库（`id_db.py`：从 RadioID 名单生成、经编程线写入；固件内置的国家表） |
@@ -76,7 +76,8 @@ DMR 热点（MMDVM）、VOX、可自定义的按键……见 [使用说明书](d
    ```
 
 输出 `src/build/opendmr.bin`（另有 `.elf`、`.map`，和带原厂升级模式文件头的 `opendmr_BFUV32.bin`）。
-声码器由 `src/Makefile` 直接从 `vocoder/c/ambe/` 编进来。中文字库：`py tools/fonts/mkcjk.py` → `tools/fonts/build/cjk.bin`。
+声码器由 `src/Makefile` 直接从 `vocoder/c/ambe/` 编进来。中文字库文件：`py tools/fonts/mkfont_pack.py` → `tools/fonts/build/cjk.bin`；语言和字库由 CPS（或
+`tools/lang/lang_tool.py`）写入，见 [docs/i18n.md](docs/i18n.md)。
 
 ## 刷机（开发时）
 
@@ -87,7 +88,6 @@ DMR 热点（MMDVM）、VOX、可自定义的按键……见 [使用说明书](d
 
   ```powershell
   py -u tools\backup\dm32_dump.py COM6 program src\build\opendmr.bin --write --start 0xC000
-  py -u tools\backup\dm32_dump.py COM6 data tools\fonts\build\cjk.bin --write --start 0x280000
   ```
 
 - 平时：电台跑着 OpenDMR 时插着写频线 `py tools\debug\fw_update.py src\build\opendmr.bin --port COM6`，只写变了的扇区，约 35 秒，写完自动重启。

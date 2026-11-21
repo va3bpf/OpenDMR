@@ -36,6 +36,9 @@
 
 #include "fsk4.h"
 
+extern volatile int nxdn_rx_opt; // the receiver's options (nxdn_core.c), tests
+extern int nxdn_rx_lp_hz;
+
 #define NXDN_FS          8000
 #define NXDN_FRAME_SYMS  192
 #define NXDN_RING        2048 // filtered samples kept (256 ms; a frame is 640)
@@ -78,6 +81,7 @@ typedef struct {
     int state;                   // 0 hunting, 2 deciding between the candidates, 1 locked
     int32_t hunt_t;              // hunting: the next start to try
     int32_t hunt_first;          // the first over the threshold (-1: none yet)
+    int32_t hunt_end;            // where the hunt stops looking for a better one
     int ncand;                   // the best peaks over the threshold, apart (state 2: told by decoding)
     int32_t cand_t[NXDN_CANDIDATES], cand_c[NXDN_CANDIDATES]; // their times, correlations (Q12, signed)
     int32_t t0;                  // locked: the next frame's FSW start

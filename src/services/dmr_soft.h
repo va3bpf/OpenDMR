@@ -43,6 +43,12 @@ extern volatile uint32_t dmr_soft_tx, dmr_soft_tx_low_power, dmr_soft_tx_stats[4
 bool dmr_soft_wanted(void); // a DMR channel would be received in software now
 void dmr_soft_start(void);
 void dmr_soft_stop(void);
+// APRS over DMR with the software receiver running (dmr.c): the engine sends the bursts (hr_c7000.h), the recording
+// off meanwhile; false: not running (the engine's own way then)
+bool dmr_soft_send_data(const uint8_t *types, const uint8_t *lengths, const uint8_t (*payloads)[12], uint8_t count);
+bool dmr_soft_data_busy(void);
+bool dmr_soft_data_failed(void);
+void dmr_soft_data_cancel(void);
 bool dmr_soft_running(void);
 void dmr_soft_ptt(bool on);       // the PTT: the recording off, the engine transmits (dmr.c)
 bool dmr_soft_transmitting(void); // the PTT held, or the transmission still ending

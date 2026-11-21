@@ -26,9 +26,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// The decoded voice of the receivers that record the discriminator (NXDN, M17) to the speaker: a queue of 20 ms frames
-// (8 kHz) fed into the modem's prompt FIFO (the beeps' path, which plays while the modem records) by a task of its
-// own. The queue's RAM is the receiver's (its overlay); one receiver uses it at a time.
+// The modem's prompt FIFO and path, one task writing them: the decoded voice of the receivers that record the
+// discriminator (NXDN, M17, DMR: a queue of 20 ms frames at 8 kHz, its RAM the receiver's overlay, one receiver at a
+// time) and the beeps (sound.c), mixed.
 #ifndef VOICE_PLAY_H
 #define VOICE_PLAY_H
 
@@ -49,8 +49,8 @@ typedef struct {
 
 // The queue empty, the playback allowed (a receiver starting, or back from transmitting)
 void voice_play_start(const voice_play_cfg_t *cfg);
-// Off at once, the queue emptied; returns once the feeder has left the prompt path (a receiver stopping or about to
-// transmit; from a task)
+// The voice off at once, the queue emptied; returns once the task is done with the queue's frames (a receiver stopping
+// or about to transmit; from a task)
 void voice_play_stop(void);
 // A call begins (its header, before the voice): the speaker turned on now, its start (PATH_SETTLE_MS + AMP_START_MS)
 // while the first frames come, silence until they are enough
@@ -61,5 +61,12 @@ int16_t *voice_play_frame(void);
 void voice_play_put(void);
 // The call over: what is queued played out, then the speaker off
 void voice_play_end(void);
+// The beeps (sound.c), mixed into the voice: the source on (the speaker turned on if it is off); ready: playing (the
+// amplifier started); a block of 16 samples at a time (false: the last not taken yet; the FIFO paces them); off (the
+// speaker off once no source is left)
+void voice_play_beep_begin(void);
+bool voice_play_beep_ready(void);
+bool voice_play_beep_put(const int16_t x[16]);
+void voice_play_beep_end(void);
 
 #endif

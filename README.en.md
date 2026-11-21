@@ -50,7 +50,7 @@ Users: download the package from [Releases](../../releases) and follow the
 | `docs/` | [Installation guide](docs/installation.en.md), [user manual](docs/manual.en.md) (screenshots in `docs/manual/`); developer documents: [architecture.md](docs/architecture.md) (architecture, Chinese), [ui-design.en.md](docs/ui-design.en.md) (user interface), [coding-style.md](docs/coding-style.md), [fd6818-registers.md](docs/fd6818-registers.md) (RF chip registers), [i18n.en.md](docs/i18n.en.md) (languages: the design, read it to add one) |
 | `tools/backup/` | `dm32_dump.py`: backup / write tool through the chip's bootloader (and `dumper/`, which it uploads to the radio) |
 | `tools/debug/` | Cable update `fw_update.py` (and `updater/`), debug commands `dm32dbg.py`, screenshots `fshot.py`, simulated keys `fkey.py`, mic level `miclevel.py`, ... |
-| `tools/fonts/` | Font conversion (`mkfont.py`), the Chinese font (`mkcjk.py` → `build/cjk.bin`, `upload_cjk.py` writes it to the radio) |
+| `tools/fonts/` | Font conversion (`mkfont.py`), the font files (`mkfont_pack.py` → `build/cjk.bin`, written by the CPS) |
 | `tools/text/` | The generator of the interface text tables and the original language files (from OpenGD77) |
 | `tools/satellite/` | Writes the satellite keps (`write_keps.py`) |
 | `tools/ids/` | The DMR ID database with places (`id_db.py`: build it from RadioID's list, write it over the cable; the countries built into the firmware) |
@@ -83,8 +83,9 @@ Users: download the package from [Releases](../../releases) and follow the
    ```
 
 The output is `src/build/opendmr.bin` (and `.elf`, `.map`, and `opendmr_BFUV32.bin` with the header of the stock
-update mode). The vocoder is built straight from `vocoder/c/ambe/` by `src/Makefile`. The Chinese font:
-`py tools/fonts/mkcjk.py` → `tools/fonts/build/cjk.bin`.
+update mode). The vocoder is built straight from `vocoder/c/ambe/` by `src/Makefile`. The Chinese font file:
+`py tools/fonts/mkfont_pack.py` → `tools/fonts/build/cjk.bin`; languages and fonts are written by the CPS
+(or `tools/lang/lang_tool.py`), see [docs/i18n.en.md](docs/i18n.en.md).
 
 ## Flashing (development)
 
@@ -97,7 +98,6 @@ Ports (COM & LPT).
 
   ```powershell
   py -u tools\backup\dm32_dump.py COM6 program src\build\opendmr.bin --write --start 0xC000
-  py -u tools\backup\dm32_dump.py COM6 data tools\fonts\build\cjk.bin --write --start 0x280000
   ```
 
 - Otherwise, with OpenDMR running and the cable in: `py tools\debug\fw_update.py src\build\opendmr.bin --port COM6`.

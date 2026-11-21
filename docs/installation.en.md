@@ -14,7 +14,7 @@ the stock firmware. Español: [installation.es.md](installation.es.md) · 中文
 
 1. [What you need](#1-what-you-need)
 2. [Backup (required)](#2-backup-required)
-3. [Writing the firmware and the Chinese font](#3-writing-the-firmware-and-the-chinese-font)
+3. [Writing the firmware](#3-writing-the-firmware)
 4. [First start](#4-first-start)
 5. [Writing the codeplug](#5-writing-the-codeplug)
 6. [Updating](#6-updating)
@@ -34,11 +34,10 @@ that folder). It holds:
 |---|---|
 | `opendmr.bin` | The firmware |
 | `opendmr_BFUV32.bin` | The same firmware with the header of the stock update mode (special cases only, as in [7](#7-going-back-to-the-stock-firmware)) |
-| `cjk.bin` | The Chinese font (2.7 MB, goes into the data flash) |
+| `languages/` | The interface languages (`zh.json` Chinese, `es.json` Spanish) and the Chinese font `cjk.bin`, written to the radio by the OpenDMR CPS's Languages page, see [5](#5-writing-the-codeplug) |
 | `tools/backup/dm32_dump.py`, `tools/backup/dumper/dumper.bin` | Backup / write tool (through the chip's bootloader) |
 | `tools/fonts/ttf/RobotoCondensed-VF.ttf` | The font that tool uses for the text on the radio's screen |
 | `tools/debug/fw_update.py`, `tools/debug/updater/updater.bin` | Updates (while the radio runs OpenDMR) |
-| `tools/fonts/upload_cjk.py` | Writes the Chinese font again while the radio runs OpenDMR |
 | `tools/debug/pin_wipe.py` | Clears a forgotten power-on / lock PIN (radio off, run, switch on within 30 s; codeplug and settings kept) |
 | `tools/ids/id_db.py` | Builds and writes the DMR ID database with places (user manual, section 13) |
 | `docs/manual.md`, `docs/manual.en.md`, `docs/manual.es.md`, `docs/manual/` | User manual |
@@ -120,7 +119,7 @@ belongs to its own radio only.
 
 ---
 
-## 3. Writing the firmware and the Chinese font
+## 3. Writing the firmware
 
 As for the backup: radio off, run the command, switch on within 30 s, no key. `--write` writes only the 4 KB sectors
 that differ from the file, reads each one back, and compares everything again at the end.
@@ -131,13 +130,6 @@ py -u tools\backup\dm32_dump.py COM6 program opendmr.bin --write --start 0xC000
 
 (The bootloader, below `0xC000`, is never touched.) It should end with `... sectors written, all ... the same as the
 file`. Switch the radio off.
-
-```powershell
-py -u tools\backup\dm32_dump.py COM6 data cjk.bin --write --start 0x280000
-```
-
-The Chinese font goes into the data flash from 0x280000 (about 5 minutes). Write it even for the English interface:
-Chinese channel and contact names need it. Switch the radio off at the end.
 
 ---
 
@@ -193,6 +185,15 @@ While it reads or writes, the radio shows which part and how far: don't unplug t
 
 ---
 
+### Interface languages
+
+The firmware has English only. For a Chinese or Spanish interface: in the OpenDMR CPS, connect the radio, open the
+Languages page, Choose folder: the `languages` folder of the zip. Chinese and Spanish are ticked; Write to the radio
+(Chinese with its font about 2 minutes). Then choose it in the radio's Options -> Language. Write Chinese even for an
+English interface: Han characters in channel and contact names need its font.
+
+---
+
 ## 6. Updating
 
 With OpenDMR running, a new version needs no power cycle and no timing: radio on, cable in, then
@@ -204,11 +205,9 @@ py tools\debug\fw_update.py opendmr.bin --port COM6
 Only the changed sectors are written (about 35 s for all of them), the screen shows the progress, the radio restarts
 at the end. Settings and codeplug stay.
 
-If the release notes say the font changed, write the font again too (the radio on as usual; restart it afterwards):
-
-```powershell
-py tools\fonts\upload_cjk.py COM6 --file cjk.bin
-```
+Coming from 0.7.0 or earlier: languages and fonts have a new format, so after the update the interface is in English
+and Chinese names cannot be shown: write them once with the CPS (section 5, Interface languages). Do the same when
+a later release changes a language; what the radio has the same is not written again.
 
 If `fw_update.py` fails or the radio doesn't start, write `opendmr.bin` again as in section 3 (power off, power on
 handshake).
@@ -253,8 +252,8 @@ bootloader is in the chip, so a damaged program flash can always be written agai
 
 **Chinese text shows as boxes or nothing**
 
-The Chinese font is missing or incomplete: write `cjk.bin` as in section 3, or with `upload_cjk.py` while the radio
-runs (section 6), then restart the radio.
+Chinese and its font are missing or incomplete: write them with the CPS (section 5, Interface languages; the font
+`cjk.bin` goes with Chinese). Interface text shown as "??" has the same cause.
 
 **Which version is on the radio**
 

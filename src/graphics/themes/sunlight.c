@@ -31,9 +31,10 @@
  */
 
 #include "themes.h"
+#include "text.h"
 
 const theme_t theme_sunlight = {
-    .name = {"Sunlight", "阳光", "Luz solar"},
+    .name = TEXT_THEME_SUNLIGHT,
     .dark = false,
     .colours = {
         0xFFFFFF, // background

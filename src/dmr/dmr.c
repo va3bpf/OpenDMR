@@ -330,21 +330,26 @@ bool dmr_aprs_send_position(int32_t latitude_e7, int32_t longitude_e7, uint16_t 
         lengths[i] = tx.burst[i].length;
         memcpy(payloads[i], tx.burst[i].payload, tx.burst[i].length);
     }
+    // received in software (dmr_soft.c): its task has the engine send them, the recording off meanwhile
+    if (dmr_soft_send_data(types, lengths, (const uint8_t(*)[12])payloads, tx.count)) {
+        return true;
+    }
     return HRC7000SendDataBursts(types, lengths, payloads, tx.count);
 }
 
 bool dmr_aprs_busy(void)
 {
-    return !HRC7000DataBurstsDone();
+    return dmr_soft_data_busy() || !HRC7000DataBurstsDone();
 }
 
 bool dmr_aprs_failed(void)
 {
-    return HRC7000DataBurstsFailed();
+    return dmr_soft_data_failed() || HRC7000DataBurstsFailed();
 }
 
 void dmr_aprs_cancel(void)
 {
+    dmr_soft_data_cancel();
     HRC7000AbortDataBursts();
 }
 

@@ -29,20 +29,26 @@
 #ifndef DM32_LANGUAGE_H
 #define DM32_LANGUAGE_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
-// The interface language (docs/i18n.en.md 1). Each language has a number, and a number never changes: new ones go at
-// the end. The number is kept in OpenDMR's own custom data block of the codeplug (0x44540004, "DT" 4), as the key map
-// is ("DT" 2): the settings structure keeps the OpenGD77 layout (108 bytes) and has no room left.
-enum {
-    LANGUAGE_ENGLISH = 0,
-    LANGUAGE_CHINESE = 1,
-    LANGUAGE_SPANISH = 2,
-    LANGUAGE_COUNT
-};
+// The interface language (docs/i18n.en.md). English is built in; the others are language files the CPS writes to
+// the external flash, each in a 16 KB slot (tools/text/langfile.py has the layout), and a font file when the
+// firmware's fonts do not have their glyphs (font_cjk.h). The list: 0 English, then the installed ones in slot order.
+#define LANGUAGE_FLASH_ADDRESS 0x280000 // the slots
+#define LANGUAGE_SLOT_SIZE     0x4000
+#define LANGUAGE_SLOTS         8
+#define LANGUAGE_FLASH_END     (LANGUAGE_FLASH_ADDRESS + (LANGUAGE_SLOTS * LANGUAGE_SLOT_SIZE))
+#define LANGUAGE_CODE_SIZE     8 // "zh", "pt-BR": NUL terminated
 
-void language_load(void);            // from the codeplug block, or from bit 19 (compatibility)
-uint8_t language_get(void);          // the current language number
-void language_set(uint8_t language); // stores it; bit 19 follows Chinese (compatibility)
+void language_load(void);                          // at power-on: the installed languages, then the chosen one
+uint8_t language_count(void);                      // 1 + the installed languages
+uint8_t language_get(void);                        // the current one, an index in that list
+void language_set(uint8_t index);                  // chooses it, stored in the codeplug
+const char *language_code(uint8_t index);          // "en", "zh", ...
+const char *language_name(uint8_t index);         // in its own script; in English when its font is missing
+const char *language_string(uint16_t id);          // the current language's string of a TEXT_x, NULL: English
+void language_rescan_ask(void);                    // the CPS wrote languages or fonts (cable link task)
+void language_poll(void);                          // UI task: reads them again when asked
 
 #endif

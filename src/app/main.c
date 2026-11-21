@@ -80,6 +80,7 @@ volatile unsigned long freertos_assert_line = 0;
 // The screens that go over all others: the hotspot's (not while secured: security.h), the CPS's
 static bool screen_hooks(const ui_event_t *ev)
 {
+    language_poll(); // languages or fonts written by the CPS
     if ((ev->type == UI_EVENT_DATA) && (ev->what & (UI_DATA_TIME | UI_DATA_GPS)) &&
         (ui_top_screen() != &boot_screen)) {
         display_theme_apply(); // the auto theme: light by day, dark at night

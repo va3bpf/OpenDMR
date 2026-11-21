@@ -39,7 +39,6 @@
 #include "dmr_l2.h"
 
 #define DMR_DEMOD_RING 2048 // samples kept (256 ms; a burst's slot is 240)
-#define DMR_RRC_TAPS   21   // the receive filter: root raised cosine, alpha 0.2, +-6 symbols
 
 typedef struct {
     uint8_t bits[DMR_BURST_BYTES]; // the burst (dmr_l2.h)
@@ -54,7 +53,7 @@ typedef void (*dmr_demod_cb)(void *ctx, const dmr_burst_t *b);
 
 // Times in samples Q12
 typedef struct {
-    int32_t hist[DMR_RRC_TAPS];
+    int32_t hist[FSK4_RRC_TAPS];
     fsk4_fir rrc;
     int32_t buf[DMR_DEMOD_RING];
     fsk4_ring x;               // the filtered samples

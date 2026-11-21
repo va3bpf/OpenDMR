@@ -62,6 +62,10 @@ void fsk4_rebase(fsk4_ring *r, uint32_t by)
     r->n -= by;
 }
 
+// Q12, sum 4096: dmr_soft/py/dmr_tone.py rrc(0.2), 8 kHz, 4800 symbols/s
+const int16_t fsk4_rrc_4800[FSK4_RRC_TAPS] = {19,  -9,   -27, 76,   -57, -92,  246, -113, -451, 1167, 2578,
+                                               1167, -451, -113, 246, -92, -57, 76,   -27,  -9,   19};
+
 void fsk4_fir_init(fsk4_fir *f, const int16_t *taps, int32_t *hist, int n, int shift)
 {
     memset(hist, 0, (size_t)n * sizeof(int32_t));

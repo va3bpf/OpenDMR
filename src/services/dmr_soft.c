@@ -541,6 +541,76 @@ static void transmit(void)
     }
 }
 
+/* ---- data (APRS over DMR) ----
+   The engine sends the data bursts (HRC7000SendDataBursts()), as it does the repeater mode's voice: the recording
+   off meanwhile (afrx.c), the engine resumed, then back to receiving in software. Sent with the recording on, the engine
+   standing aside, they never went out (#107: 0.7.0's DMR APRS beacons, 2026-11-21). */
+#define DATA_MS 5000 // the bursts sent at most (a repeater woken first)
+
+static const afrx_ops_t ops;
+
+static struct {
+    uint8_t types[DMR_DATA_BURSTS_MAX], lengths[DMR_DATA_BURSTS_MAX], payloads[DMR_DATA_BURSTS_MAX][12];
+    uint8_t count;
+} data_req;
+static volatile bool data_pending, data_failed, data_cancel;
+
+static void data(void)
+{
+    dmr_engine_resume();
+    bool ok = HRC7000SendDataBursts(data_req.types, data_req.lengths, (const uint8_t(*)[12])data_req.payloads,
+                                    data_req.count);
+    TickType_t t0 = xTaskGetTickCount();
+    while (ok && !HRC7000DataBurstsDone() && !data_cancel && ((xTaskGetTickCount() - t0) < pdMS_TO_TICKS(DATA_MS))) {
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    if (ok && !HRC7000DataBurstsDone()) {
+        HRC7000AbortDataBursts(); // cancelled, or too long
+        ok = false;
+    }
+    data_failed = !ok || HRC7000DataBurstsFailed();
+    t0 = xTaskGetTickCount();
+    while (dmr_engine_transmitting() && ((xTaskGetTickCount() - t0) < pdMS_TO_TICKS(TX_END_MS))) {
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+    data_pending = false;
+}
+
+bool dmr_soft_send_data(const uint8_t *types, const uint8_t *lengths, const uint8_t (*payloads)[12], uint8_t count)
+{
+    if (data_pending) {
+        return false; // the last still going (the radio task sends one at a time)
+    }
+    data_failed = false; // also for the engine's own way (dmr.c, not received in software)
+    if (!afrx_running(&ops) || (count > DMR_DATA_BURSTS_MAX)) {
+        return false;
+    }
+    memcpy(data_req.types, types, count);
+    memcpy(data_req.lengths, lengths, count);
+    memcpy(data_req.payloads, payloads, (size_t)count * 12);
+    data_req.count = count;
+    data_failed = false;
+    data_cancel = false;
+    data_pending = true;
+    afrx_data();
+    return true;
+}
+
+bool dmr_soft_data_busy(void)
+{
+    return data_pending;
+}
+
+bool dmr_soft_data_failed(void)
+{
+    return data_failed;
+}
+
+void dmr_soft_data_cancel(void)
+{
+    data_cancel = true;
+}
+
 static const afrx_ops_t ops = {
     .bw = AFREC_BW_FLAT, // no band-pass, no de-emphasis (the RRC is ours)
     .overlay = OVERLAY_AMBE,
@@ -550,6 +620,7 @@ static const afrx_ops_t ops = {
     .poll = poll,
     .end_call = end_call,
     .transmit = transmit,
+    .data = data,
     .stats = {
         .halves = &dmr_soft_stats.halves,
         .missed = &dmr_soft_stats.missed_halves,
@@ -569,6 +640,10 @@ void dmr_soft_start(void)
 
 void dmr_soft_stop(void)
 {
+    if (data_pending) { // asked, not sent: failed
+        data_pending = false;
+        data_failed = true;
+    }
     if (afrx_running(&ops)) {
         afrx_stop();
         dmr_call_over();

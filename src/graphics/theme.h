@@ -55,10 +55,10 @@ typedef enum {
     THEME_COLOUR_COUNT
 } theme_colour_t;
 
-// A theme (graphics/themes/: a file each, listed in themes.c): its name in each language (language.h numbers), dark or
+// A theme (graphics/themes/: a file each, listed in themes.c): its name (a TEXT_x, in the current language), dark or
 // light (the auto choice takes the first light one by day, the first dark one at night), its colours (RGB888)
 typedef struct {
-    const char *name[3];
+    uint16_t name;
     bool dark;
     uint32_t colours[THEME_COLOUR_COUNT];
 } theme_t;

@@ -31,9 +31,10 @@
  */
 
 #include "themes.h"
+#include "text.h"
 
 const theme_t theme_high_contrast = {
-    .name = {"High contrast", "高对比", "Alto contraste"},
+    .name = TEXT_THEME_HIGH_CONTRAST,
     .dark = false,
     .colours = {
         0xFFFFFF, // background

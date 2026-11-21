@@ -30,10 +30,12 @@
  * OpenDMR, service: beeps and melodies. After OpenDM32 functions/sound.c (the melodies,
  * soundSetMelody(), soundTickMelody(), soundBeepTaskFunction()), on the baseband's prompt path (modem.c).
  *
- * A melody is pairs of (Hz, ms), 0 Hz a pause, ended by -1, -1. The sound task plays it as the main firmware: the
- * speaker amplifier on, a delay for it to start, then for each millisecond a block of 16 samples (2 ms at 8 kHz) into
- * the prompt FIFO when it has room (it paces the samples), from the 2048 point sine stepped by Hz / 3.915, the volume a
- * shift by settings.beep_volume_divider.
+ * A melody is pairs of (Hz, ms), 0 Hz a pause, ended by -1, -1. The sound task plays it as the main firmware: for each
+ * millisecond a block of 16 samples (2 ms at 8 kHz) when the last was taken, from the 2048 point sine stepped by
+ * Hz / 3.915, the volume a shift by settings.beep_volume_divider. The blocks go to voice_play.c, the prompt FIFO's one
+ * writer: it turns the speaker on (the path, the amplifier and its start) and off, and adds them to a receiver's voice
+ * when one plays (a key beep during a DMR call broke it up and silenced the rest of it when the beep wrote into the FIFO
+ * and switched the path itself, #107).
  */
 
 #include <string.h>
@@ -46,14 +48,9 @@
 #include "battery.h"
 #include "custom_data.h"
 #include "sound.h"
+#include "voice_play.h"
 
 #define SOUND_TASK_PRIORITY 3
-#define AMP_START_MS        75 // DELAYED_BEEP_DURATION_MS: the amplifier needs this before the first note
-#define PATH_SETTLE_MS      10 // the audio path switched, before the amplifier goes on (silence into the FIFO
-                                // meanwhile): 5 ms and the amplifier played the switching, a click at each beep (the
-                                // DMR transmit beep, 2026-11-20). Not the FIFO: it holds 4-8 ms, full after 4 blocks
-                                // one a ms, the same after a beep as after power on.
-#define AMP_STOP_MS         20 // the amplifier off, before the audio path switches back
 #define LOW_BATTERY_MS      (5 * 60 * 1000) // LOW_BATTERY_INTERVAL: the low battery beep again after this
 #define CHECK_MS            1000 // the idle task looks at the battery this often
 
@@ -252,13 +249,14 @@ static volatile bool playing = false;
 // half each (DTMF); false: stopped
 static bool note(int32_t hz, int32_t hz2, uint32_t ms, int32_t *index, int32_t *index2, int shift)
 {
-    uint8_t block[MODEM_BEEP_BLOCK];
+    int16_t x[MODEM_BEEP_BLOCK / 2];
+    bool have = false; // a block made, not taken yet
 
     for (uint32_t t = 0; t < ms; t++) {
         if (stop || next) {
             return false;
         }
-        if (!modem_beep_fifo_full()) {
+        if (!have) {
             for (int i = 0; i < (MODEM_BEEP_BLOCK / 2); i++) {
                 int16_t sample = (hz != 0) ? (int16_t)(sine[*index] >> shift) : 0; // a pause: silence, not a level
 
@@ -269,9 +267,7 @@ static bool note(int32_t hz, int32_t hz2, uint32_t ms, int32_t *index, int32_t *
                         *index2 -= 2048;
                     }
                 }
-
-                block[2 * i] = (uint8_t)sample; // low byte first (the main firmware's comments say otherwise)
-                block[(2 * i) + 1] = (uint8_t)((uint16_t)sample >> 8);
+                x[i] = sample;
                 if (hz != 0) {
                     *index += (int32_t)(hz / 3.915f);
                     while (*index >= 2048) {
@@ -279,7 +275,10 @@ static bool note(int32_t hz, int32_t hz2, uint32_t ms, int32_t *index, int32_t *
                     }
                 }
             }
-            modem_beep_write(block);
+            have = true;
+        }
+        if (voice_play_beep_put(x)) {
+            have = false;
         }
         vTaskDelay(1);
     }
@@ -326,27 +325,17 @@ static void sound_task(void *arg)
         taskEXIT_CRITICAL();
         stop = false;
         playing = true;
-        if (!amp_on) {
-            radio_beep_path(true);
-            modem_beep(true);
-            for (int ms = 0; ms < PATH_SETTLE_MS; ms++) {
-                if (!modem_beep_fifo_full()) {
-                    static const uint8_t zero[MODEM_BEEP_BLOCK];
-                    modem_beep_write(zero);
-                }
+        if (!amp_on) { // the speaker on (at once if a receiver's voice has it on already)
+            voice_play_beep_begin();
+            while (!voice_play_beep_ready()) {
                 vTaskDelay(1);
             }
-            radio_beep_amp(true);
-            vTaskDelay(pdMS_TO_TICKS(AMP_START_MS));
             amp_on = true;
         }
         for (int i = 0; (melody[i] >= 0) && note(melody[i], ((melody[i] != 0) ? hz2 : 0), (uint32_t)melody[i + 1], &index, &index2, shift); i += 2) {
         }
-        if (next == NULL) { // else another follows at once (DTMF digits): the amplifier stays on
-            radio_beep_amp(false);
-            vTaskDelay(pdMS_TO_TICKS(AMP_STOP_MS));
-            modem_beep(false);
-            radio_beep_path(false);
+        if (next == NULL) { // else another follows at once (DTMF digits): the speaker stays on
+            voice_play_beep_end();
             amp_on = false;
         }
         playing = false;

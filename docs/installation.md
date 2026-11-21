@@ -11,7 +11,7 @@
 
 1. [准备](#1-准备)
 2. [备份（必须）](#2-备份必须)
-3. [写入固件和中文字库](#3-写入固件和中文字库)
+3. [写入固件](#3-写入固件)
 4. [第一次开机](#4-第一次开机)
 5. [写码表](#5-写码表)
 6. [升级](#6-升级)
@@ -30,11 +30,10 @@
 |---|---|
 | `opendmr.bin` | 固件 |
 | `opendmr_BFUV32.bin` | 同一个固件，带原厂升级模式的文件头（只在 [7](#7-恢复原厂固件) 之类的特殊情况用） |
-| `cjk.bin` | 中文字库（2.7 MB，写进数据 Flash） |
+| `languages/` | 界面语言（`zh.json` 中文、`es.json` 西班牙文）和中文字库 `cjk.bin`，用 OpenDMR CPS 的「界面语言」页写进电台，见 [5](#5-写码表) |
 | `tools/backup/dm32_dump.py`、`tools/backup/dumper/dumper.bin` | 备份 / 写入工具（走芯片的引导程序） |
 | `tools/fonts/ttf/RobotoCondensed-VF.ttf` | 上面这个工具在电台屏幕上显示文字用的字体 |
 | `tools/debug/fw_update.py`、`tools/debug/updater/updater.bin` | 平时升级用（电台跑着 OpenDMR 时） |
-| `tools/fonts/upload_cjk.py` | 电台跑着 OpenDMR 时单独重写中文字库 |
 | `tools/debug/pin_wipe.py` | 忘了开机 / 锁屏密码时清除密码（关机、运行、30 秒内开机；码表和设置保留） |
 | `tools/ids/id_db.py` | 生成并写入带地址的 DMR ID 数据库（使用说明书第 13 节） |
 | `docs/manual.md`、`docs/manual.en.md`、`docs/manual.es.md`、`docs/manual/` | 使用说明书 |
@@ -111,7 +110,7 @@ fc.exe /b backup\data-1.bin backup\data-2.bin
 
 ---
 
-## 3. 写入固件和中文字库
+## 3. 写入固件
 
 和备份一样：先关机，运行命令，30 秒内开机，不按键。`--write` 只写和文件不同的 4 KB 扇区，每个扇区写完回读校验，最后整体再比一遍。
 
@@ -120,12 +119,6 @@ py -u tools\backup\dm32_dump.py COM6 program opendmr.bin --write --start 0xC000
 ```
 
 （`0xC000` 以下是引导程序，不会被碰。）结束时应显示 `... sectors written, all ... the same as the file`。关机。
-
-```powershell
-py -u tools\backup\dm32_dump.py COM6 data cjk.bin --write --start 0x280000
-```
-
-中文字库写在数据 Flash 的 0x280000 起（约 5 分钟）。不用中文界面也建议写：中文的信道名、联系人名要用它。结束后关机。
 
 ---
 
@@ -176,6 +169,14 @@ py -u tools\backup\dm32_dump.py COM6 data cjk.bin --write --start 0x280000
 
 ---
 
+### 界面语言
+
+固件只带英文。要用中文或西班牙文界面：在 OpenDMR CPS 里连接电台，打开「界面语言」页，点「选择文件夹」选发布包里的
+`languages` 文件夹，中文和西班牙文默认勾选，点「写入电台」（中文连同字库约 2 分钟）。然后在电台的「选项 → Language」里
+选择。界面用英文也建议写中文：信道名、联系人名里的汉字要用它的字库。
+
+---
+
 ## 6. 升级
 
 电台跑着 OpenDMR 时，新版本不用关机、不用卡开机时机，插着写频线、电台正常开着，运行：
@@ -186,11 +187,8 @@ py tools\debug\fw_update.py opendmr.bin --port COM6
 
 只写变了的扇区（全部重写约 35 秒），电台屏幕显示进度，写完自动重启。设置和码表都保留。
 
-如果新版本的说明里写着字库有变化，再更新字库（电台照常开着；完成后重启电台）：
-
-```powershell
-py tools\fonts\upload_cjk.py COM6 --file cjk.bin
-```
+从 0.7.0 或更早的版本升级上来：语言和字库换了新格式，升级后界面是英文、中文名字显示不出来，按第 5 节「界面语言」用 CPS
+写一次。以后的版本语言有变化时也一样，电台里相同的不会重写。
 
 `fw_update.py` 失败、电台起不来的时候，用第 3 节的方法（关机、开机握手）重新写 `opendmr.bin` 就行。
 
@@ -227,7 +225,8 @@ py -u tools\backup\dm32_dump.py COM6 data    backup\data-1.bin --write
 
 **中文显示成方块或空白**
 
-中文字库没写或没写完：按第 3 节写 `cjk.bin`，或电台开着时用 `upload_cjk.py`（第 6 节），完成后重启电台。
+中文和它的字库没写或没写完：按第 5 节「界面语言」用 CPS 写入（中文的字库 `cjk.bin` 和中文一起写）。界面文字显示“??”也是
+同样原因。
 
 **升级后屏幕上的版本号**
 

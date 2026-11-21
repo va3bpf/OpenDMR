@@ -27,19 +27,23 @@
  */
 
 /*
- * OpenDMR, service: the voice playback of the NXDN and M17 receivers (voice_play.h).
+ * OpenDMR, service: the prompt FIFO's one writer (voice_play.h): the software receivers' decoded voice (NXDN, M17, DMR)
+ * and the beeps (sound.c) mixed into it; the audio path and the amplifier switched here only.
  *
- * The feeder task, every tick (1 ms): off until a call begins (voice_play_prepare()) or enough frames are queued (start
- * frames, start_ms after the call's first: the bursts come with a jitter of the recording's 16 ms quarters); then the
- * speaker on as sound.c turns it on
- * for a beep: the audio switch to the baseband and the prompt path first, silence for PATH_SETTLE_MS, then the amplifier (and the
- * green LED), silence for AMP_START_MS while it starts; then one block (16 samples: twice real time) a tick while the
- * FIFO has room, silence until the voice is enough (the speaker's start while the first frames come: 85 ms less
- * delay, 2026-11-20, tools/debug/voice_delay.py). One block only: the FIFO's full flag comes late, several at once
- * overran it and samples were lost
- * (heard as the voice shaking, as pops; NXDN and M17 both, 2026-11). Out of voice while the call goes on: silence; the
- * call over and the queue played out: the amplifier off first, AMP_STOP_MS, then the path back. All at once (path and
+ * The task, every tick (1 ms): off until a source wants the speaker: a call begun (voice_play_prepare()) or enough
+ * frames queued (start frames, start_ms after the call's first: they come with a jitter of the recording's 16 ms
+ * quarters), or a beep (voice_play_beep_begin()). Then the speaker on as a beep always turned it on: the audio switch
+ * to the baseband and the prompt path, silence for PATH_SETTLE_MS, the amplifier (the voice's with the green LED, a
+ * beep's without), silence for AMP_START_MS while it starts. Then one block (16 samples: twice real time) a tick while
+ * the FIFO has room: the voice's next 16 samples (silence before they are enough, or when they ran out) plus the
+ * beep's; one source alone goes as it is. One block only: the FIFO's full flag comes late, several at once overran it
+ * and samples were lost (heard as the voice shaking, as pops; NXDN and M17 both, 2026-11). No source left (the call over
+ * and played out, the beep done): the amplifier off first, AMP_STOP_MS, then the path back. All at once (path and
  * amplifier together) the amplifier caught the switching: a pop at each call's start (2026-11-20).
+ *
+ * The beeps wrote into the FIFO themselves before and switched the path on and off on their own: while a DMR, NXDN or
+ * M17 call played, a key beep broke the voice up and switched the path off at its end, the rest of the call silent
+ * (#107, 2026-11-21).
  */
 
 #include <string.h>
@@ -52,28 +56,38 @@
 #include "radio_hooks.h"
 #include "voice_play.h"
 
-#define PATH_SETTLE_MS 10 // the audio path switched, silence into the FIFO, before the amplifier goes on (sound.c)
-#define AMP_START_MS   75 // the amplifier on before the voice
+#define PATH_SETTLE_MS 10 // the audio path switched, silence into the FIFO, before the amplifier goes on
+#define AMP_START_MS   75 // the amplifier on before the sound (DELAYED_BEEP_DURATION_MS)
 #define AMP_STOP_MS    20 // the amplifier off, before the audio path switches back
+#define BLOCK          (MODEM_BEEP_BLOCK / 2) // samples a block
 
-enum { OFF, PATH, AMP, PLAY, STOP }; // the feeder's states
+enum { OFF, PATH, AMP, PLAY, STOP }; // the task's states
 
 static StaticTask_t feed_tcb;
 static StackType_t feed_stack[192];
 static TaskHandle_t feeder;
 
+// the voice: a receiver's queue
 static voice_play_cfg_t cfg;
-static volatile bool enabled;           // a receiver's playback allowed
-static volatile bool wanted;            // enough queued: play (until the call's end)
-static volatile bool call_on;           // a call begun (voice_play_prepare()): the speaker on, waiting for its voice
-static volatile bool have_first;        // the call's first frame queued, at first_at
+static volatile bool enabled;             // a receiver's playback allowed
+static volatile bool wanted;              // enough queued: play (until the call's end)
+static volatile bool call_on;             // a call begun (voice_play_prepare()): the speaker on, waiting for its voice
+static volatile bool have_first;          // the call's first frame queued, at first_at
 static volatile TickType_t first_at;
-static volatile uint32_t pcm_in, pcm_out; // frames put in / taken out (the feeder's)
-static uint32_t pcm_pos;                // samples of frames[pcm_out] already in the FIFO (the feeder's)
-static volatile int state;              // the feeder's (OFF ... STOP)
+static volatile uint32_t pcm_in, pcm_out; // frames put in / taken out (the task's)
+static uint32_t pcm_pos;                  // samples of frames[pcm_out] already in the FIFO (the task's)
+static bool voice_out;                    // the voice playing: its queue played out after the call's end
+static bool in_underrun;                  // the delay log: an underrun going on
+static bool first_block;                  // the delay log (p25_radio.c): the first voice block not yet written
+
+// a beep (sound.c): on from voice_play_beep_begin() to _end(), one block of it at a time in the slot
+static volatile bool beep_on, beep_full;
+static int16_t beep[BLOCK];
+
+static volatile uint32_t loops; // the task's rounds (voice_play_stop() waits for them)
+static volatile int state;      // OFF ... STOP
 static TickType_t since;
-static bool in_underrun; // the delay log: an underrun going on
-static bool first_block; // the delay log (p25_radio.c): the first voice block of a playback not yet written
+static bool voice_amp, beep_amp;
 
 // the audio switch and the prompt path
 static void path(bool on)
@@ -87,11 +101,18 @@ static void path(bool on)
     }
 }
 
-// the amplifier (and the LED)
-static void amp(bool on)
+// the amplifier: the voice's (with the LED) and a beep's, either keeps it on
+static void amps(bool voice, bool b)
 {
-    radio_dmr_audio(on);
-    leds_green(on);
+    if (voice != voice_amp) {
+        voice_amp = voice;
+        radio_dmr_audio(voice);
+        leds_green(voice);
+    }
+    if (b != beep_amp) {
+        beep_amp = b;
+        radio_beep_amp(b);
+    }
 }
 
 // a new state from now
@@ -106,14 +127,6 @@ static bool waited(uint32_t ms)
     return (xTaskGetTickCount() - since) >= pdMS_TO_TICKS(ms);
 }
 
-static void silence(uint8_t *block)
-{
-    if (!modem_beep_fifo_full()) {
-        memset(block, 0, MODEM_BEEP_BLOCK);
-        modem_beep_write(block);
-    }
-}
-
 static void count(volatile uint32_t *counter)
 {
     if (counter) {
@@ -121,110 +134,142 @@ static void count(volatile uint32_t *counter)
     }
 }
 
+// the voice's next 16 samples into x; false: none now (silence)
+static bool voice_block(int16_t *x)
+{
+    if (!enabled || !voice_out) {
+        return false;
+    }
+    if (pcm_in == pcm_out) {
+        if (wanted) { // out of voice, the call going on
+            if (!in_underrun) {
+                in_underrun = true;
+                p25_ev_log(53, (uint16_t)pcm_out); // the delay log (p25_radio.c): out of voice (arg: frames played)
+            }
+            count(cfg.underruns);
+        }
+        return false;
+    }
+    if (first_block) {
+        first_block = false;
+        p25_ev_log(52, (uint16_t)(pcm_in - pcm_out)); // the first voice to the speaker (arg: queued)
+    }
+    in_underrun = false;
+    const int16_t *frame = &cfg.frames[pcm_out % cfg.count][pcm_pos];
+    memcpy(x, frame, sizeof(int16_t) * BLOCK);
+    if (cfg.tap) {
+        cfg.tap(frame, BLOCK);
+    }
+    count(cfg.writes);
+    pcm_pos += BLOCK;
+    if (pcm_pos >= VOICE_PLAY_SAMPLES) {
+        pcm_pos = 0;
+        pcm_out++;
+    }
+    return true;
+}
+
+// a block into the FIFO if it has room: silence, or (playing) the voice plus the beep
+static void write_block(bool play)
+{
+    if (modem_beep_fifo_full()) {
+        return;
+    }
+    int16_t x[BLOCK];
+    bool voice = play && voice_block(x);
+    bool b = play && beep_full;
+    uint8_t block[MODEM_BEEP_BLOCK];
+    for (int i = 0; i < BLOCK; i++) {
+        int32_t v = (voice ? x[i] : 0) + (b ? beep[i] : 0);
+        int16_t s = (int16_t)((v > 32767) ? 32767 : (v < -32768) ? -32768 : v);
+        block[2 * i] = (uint8_t)s; // low byte first
+        block[2 * i + 1] = (uint8_t)((uint16_t)s >> 8);
+    }
+    if (b) {
+        beep_full = false;
+    }
+    modem_beep_write(block);
+}
+
 static void feed_task(void *arg)
 {
-    uint8_t block[MODEM_BEEP_BLOCK];
-
     (void)arg;
     for (;;) {
         vTaskDelay(1);
-        if (!wanted && have_first && ((pcm_in - pcm_out) >= cfg.start) &&
+        loops++;
+        if (enabled && !wanted && have_first && ((pcm_in - pcm_out) >= cfg.start) &&
             ((xTaskGetTickCount() - first_at) >= pdMS_TO_TICKS(cfg.start_ms))) {
             p25_ev_log(50, (uint16_t)(pcm_in - pcm_out)); // the delay log (p25_radio.c): enough queued
             wanted = true;
         }
-        if (state == OFF) {
-            if (enabled && (wanted || call_on)) {
+        if (!enabled) {
+            voice_out = false;
+        }
+        // the sources wanting the speaker: the voice (a call on, its queue to play out), a beep
+        bool want_voice = enabled && (wanted || call_on || (voice_out && (pcm_in != pcm_out)));
+        bool want_beep = beep_on || beep_full;
+        switch (state) {
+        case OFF:
+            if (want_voice || want_beep) {
                 path(true);
                 go(PATH);
             }
-            continue;
-        }
-        if (state == STOP) { // the amplifier off: then the path back
+            break;
+        case PATH: // the path settling
+            write_block(false);
+            if (waited(PATH_SETTLE_MS)) {
+                p25_ev_log(51, (uint16_t)(pcm_in - pcm_out)); // the amplifier on (arg: frames queued)
+                amps(want_voice, want_beep);
+                go(AMP);
+            }
+            break;
+        case AMP: // the amplifier starting
+            write_block(false);
+            if (waited(AMP_START_MS)) {
+                go(PLAY);
+            }
+            break;
+        case PLAY:
+            if (!want_voice && !want_beep) { // all done: the amplifier off, then the path back
+                amps(false, false);
+                go(STOP);
+                break;
+            }
+            if (!want_voice) { // played out (a beep goes on): the next call's voice waits for enough again
+                voice_out = false;
+            } else if (wanted && !voice_out) { // the voice begins (the amplifier on already)
+                voice_out = true;
+                first_block = true;
+            }
+            amps(want_voice, want_beep);
+            write_block(true);
+            break;
+        default: // STOP: the amplifier off, then the path back
             if (waited(AMP_STOP_MS)) {
                 path(false);
                 pcm_pos = 0;
+                voice_out = false;
                 if (!enabled) {
                     pcm_out = pcm_in;
                 }
                 state = OFF;
             }
-            continue;
-        }
-        if (!enabled) { // stopped while starting or playing
-            amp(false);
-            go(STOP);
-            continue;
-        }
-        if (state == PATH) { // the path settling, the voice kept queued
-            silence(block);
-            if (waited(PATH_SETTLE_MS)) {
-                p25_ev_log(51, (uint16_t)(pcm_in - pcm_out)); // the amplifier on (arg: frames queued)
-                amp(true);
-                go(AMP);
-            }
-            continue;
-        }
-        if (state == AMP) { // the amplifier starting
-            silence(block);
-            if (waited(AMP_START_MS)) {
-                if (wanted) {
-                    first_block = true;
-                    go(PLAY);
-                } else if (!call_on) { // the call over before its voice was enough
-                    amp(false);
-                    go(STOP);
-                }
-            }
-            continue;
-        }
-        if (enabled && !modem_beep_fifo_full()) {
-            if (pcm_in == pcm_out) {
-                if (wanted) { // out of voice, the call going on
-                    if (!in_underrun) {
-                        in_underrun = true;
-                        p25_ev_log(53, (uint16_t)pcm_out); // the delay log (p25_radio.c): out of voice (arg: frames
-                    }                                      // played so far)
-                    count(cfg.underruns);
-                    memset(block, 0, sizeof(block));
-                    modem_beep_write(block);
-                }
-            } else {
-                if (first_block) {
-                    first_block = false;
-                    p25_ev_log(52, (uint16_t)(pcm_in - pcm_out)); // the first voice to the speaker (arg: queued)
-                }
-                in_underrun = false;
-                const int16_t *frame = &cfg.frames[pcm_out % cfg.count][pcm_pos];
-                for (int i = 0; i < (MODEM_BEEP_BLOCK / 2); i++) {
-                    block[2 * i] = (uint8_t)frame[i];
-                    block[2 * i + 1] = (uint8_t)((uint16_t)frame[i] >> 8);
-                }
-                modem_beep_write(block);
-                if (cfg.tap) {
-                    cfg.tap(frame, MODEM_BEEP_BLOCK / 2);
-                }
-                count(cfg.writes);
-                pcm_pos += MODEM_BEEP_BLOCK / 2;
-                if (pcm_pos >= VOICE_PLAY_SAMPLES) {
-                    pcm_pos = 0;
-                    pcm_out++;
-                }
-            }
-        }
-        if (!wanted && (pcm_in == pcm_out)) { // the call over, played out
-            amp(false);
-            go(STOP);
+            break;
         }
     }
 }
 
-void voice_play_start(const voice_play_cfg_t *c)
+static void task_start(void)
 {
     if (!feeder) {
         feeder = xTaskCreateStatic(feed_task, "voice", sizeof(feed_stack) / sizeof(feed_stack[0]), NULL,
                                    tskIDLE_PRIORITY + 4, feed_stack, &feed_tcb);
     }
+}
+
+void voice_play_start(const voice_play_cfg_t *c)
+{
+    task_start();
     voice_play_stop();
     cfg = *c;
     pcm_in = pcm_out = 0;
@@ -235,14 +280,19 @@ void voice_play_start(const voice_play_cfg_t *c)
     enabled = true;
 }
 
+// The voice off, the task done with the receiver's frames (two of its rounds) before their RAM is another's; a beep
+// going on keeps the speaker (the path and the amplifier are the task's)
 void voice_play_stop(void)
 {
     enabled = false;
     wanted = false;
     call_on = false;
     have_first = false;
-    while (state != OFF) { // the feeder off the prompt path
-        vTaskDelay(1);
+    if (feeder) {
+        uint32_t n = loops;
+        while ((uint32_t)(loops - n) < 2) {
+            vTaskDelay(1);
+        }
     }
     pcm_out = pcm_in;
 }
@@ -263,7 +313,7 @@ void voice_play_prepare(void)
 void voice_play_put(void)
 {
     pcm_in++;
-    if (!have_first) { // the call's first frame: the feeder starts the playback once enough came (start, start_ms)
+    if (!have_first) { // the call's first frame: the task starts the playback once enough came (start, start_ms)
         first_at = xTaskGetTickCount();
         have_first = true;
     }
@@ -274,4 +324,32 @@ void voice_play_end(void)
     wanted = false;
     call_on = false;
     have_first = false;
+}
+
+/* ---- the beeps (sound.c) ---- */
+
+void voice_play_beep_begin(void)
+{
+    task_start();
+    beep_on = true;
+}
+
+bool voice_play_beep_ready(void)
+{
+    return beep_on && (state == PLAY);
+}
+
+bool voice_play_beep_put(const int16_t x[16])
+{
+    if (beep_full || (state != PLAY)) {
+        return false;
+    }
+    memcpy(beep, x, sizeof(beep));
+    beep_full = true;
+    return true;
+}
+
+void voice_play_beep_end(void)
+{
+    beep_on = false;
 }

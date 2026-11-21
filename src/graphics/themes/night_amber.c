@@ -31,9 +31,10 @@
  */
 
 #include "themes.h"
+#include "text.h"
 
 const theme_t theme_night_amber = {
-    .name = {"Night amber", "夜视琥珀", "Ambar nocturno"},
+    .name = TEXT_THEME_NIGHT_AMBER,
     .dark = true,
     .colours = {
         0x050403, // background

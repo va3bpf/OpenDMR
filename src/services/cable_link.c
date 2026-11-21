@@ -31,7 +31,8 @@
  * (request framing, tick_com_request()), event driven: the UART interrupt wakes the cable link task with a notification.
  *
  *   'R' area(1) address(4) length(2)    read -> 'R' length(2) data, or '-'; area 1: the data flash window,
- *                                       area 9: radio info (dm32dbg.py info)
+ *                                       area 9: radio info (dm32dbg.py info), area 10: raw addresses of the language
+ *                                       slots and font files (language.h, font_cjk.h)
  *   'D' ...                             debug commands, see debug.c
  */
 
@@ -57,6 +58,8 @@
 #include "cps_screen.h"
 #include "security.h"
 #include "extra_options.h"
+#include "language.h"
+#include "font_cjk.h"
 
 #define CPS_REQUEST_IDLE_MS   5   // a request without a known length is complete after this silence
 #define CPS_REQUEST_LOST_MS   200 // a debug request with a known length that stopped short is handled anyway
@@ -66,6 +69,9 @@
 #define CPS_ACCESS_MCU_ROM    5 // memory, at the address + 0x8000000 (the STM32 flash base of the MD-UV380 CPS)
 #define MCU_ROM_OFFSET        0x8000000
 #define CPS_ACCESS_RADIO_INFO 9
+#define CPS_ACCESS_LANGUAGES  10       // raw addresses of the language slots and the font files (language.h, font_cjk.h)
+#define CPS_RAW_SECTOR        0x800000 // 'X' 1: a sector number with this bit is a raw sector of that area
+#define CPS_RAW_CRC           0x80000000 // 'D' 'K': an address with this bit is a raw one of that area
 #define CPS_RADIO_TYPE_DM32   11 // what the OpenDM32 releases report
 #define CPS_WRITE_PREPARE     1  // 'X': a sector into the buffer
 #define CPS_WRITE_DATA        2  // 'X': bytes into it
@@ -109,6 +115,7 @@ static uint32_t fast_since = 0;
 #define SECTOR_IGNORED (-2)
 
 static int32_t write_sector = SECTOR_NONE;
+static bool write_raw = false; // write_sector is a raw sector of the language area (CPS_RAW_SECTOR)
 static uint8_t sector_buffer[FLASH_SECTOR_SIZE]; // also the debug commands' (cable_link_sector_buffer())
 
 static StaticTask_t task_tcb;
@@ -156,9 +163,6 @@ static uint32_t expected_length(uint32_t received)
     if ((request[0] == 'D') && (received >= 2) && (request[1] == 'U')) {
         return 6; // 'D' 'U' "UPD!": the firmware update
     }
-    if ((request[0] == 'D') && (received >= 2) && (request[1] == 'F')) {
-        return 9 + 1024; // font upload: a gap in the UART must not end it early
-    }
     if ((request[0] == 'D') && (received >= 2)) {
         // the test interface (app/test_link.c): its length known, no wait for the line to go quiet
         switch (request[1]) {
@@ -201,6 +205,12 @@ static void build_date_time(char *out, size_t size)
              ((date[4] == ' ') ? 0 : ((date[4] - '0') * 10)) + (date[5] - '0'), &time[0], &time[3], &time[6]);
 }
 
+// The language slots and the font files: the only raw addresses the CPS may read and write
+static bool in_language_area(uint32_t address, uint32_t length)
+{
+    return (address >= LANGUAGE_FLASH_ADDRESS) && (address < FONT_FLASH_END) && (length <= (FONT_FLASH_END - address));
+}
+
 static uint32_t handle_read(void)
 {
     uint32_t address = ((uint32_t)request[2] << 24) | ((uint32_t)request[3] << 16) | (request[4] << 8) | request[5];
@@ -219,8 +229,10 @@ static uint32_t handle_read(void)
         return length + 3;
     }
 
-    if (((request[1] == CPS_ACCESS_FLASH) || (request[1] == CPS_ACCESS_EEPROM)) &&
-        flash_read(address, (uint8_t *)&reply[3], length)) {
+    if ((((request[1] == CPS_ACCESS_FLASH) || (request[1] == CPS_ACCESS_EEPROM)) &&
+         flash_read(address, (uint8_t *)&reply[3], length)) ||
+        ((request[1] == CPS_ACCESS_LANGUAGES) && in_language_area(address, length) &&
+         flash_read_raw(address, (uint8_t *)&reply[3], length))) {
         reply[0] = 'R';
         reply[1] = (length >> 8) & 0xFF;
         reply[2] = length & 0xFF;
@@ -271,7 +283,8 @@ uint8_t *cable_link_sector_buffer(void)
     return (write_sector == SECTOR_NONE) ? sector_buffer : NULL;
 }
 
-// 'X': the CPS writes the codeplug a 4 KB sector at a time, in the window of the flash
+// 'X': the CPS writes the codeplug a 4 KB sector at a time, in the window of the flash; with CPS_RAW_SECTOR in the
+// sector number of 'X' 1, a raw sector of the language slots and font files (its 'X' 2 addresses are raw too)
 static uint32_t handle_write(void)
 {
     bool ok = false;
@@ -282,7 +295,15 @@ static uint32_t handle_write(void)
                 uint32_t sector = ((uint32_t)request[2] << 16) | ((uint32_t)request[3] << 8) | request[4];
                 uint32_t address = sector * FLASH_SECTOR_SIZE;
 
-                if (address == CPS_CALIBRATION) {
+                write_raw = ((sector & CPS_RAW_SECTOR) != 0);
+                if (write_raw) {
+                    address = (sector & ~CPS_RAW_SECTOR) * FLASH_SECTOR_SIZE;
+                    if (in_language_area(address, FLASH_SECTOR_SIZE) &&
+                        flash_read_raw(address, sector_buffer, FLASH_SECTOR_SIZE)) {
+                        write_sector = (int32_t)(address / FLASH_SECTOR_SIZE);
+                        ok = true;
+                    }
+                } else if (address == CPS_CALIBRATION) {
                     write_sector = SECTOR_IGNORED;
                     ok = true;
                 } else if (flash_read(address, sector_buffer, FLASH_SECTOR_SIZE)) {
@@ -314,6 +335,9 @@ static uint32_t handle_write(void)
         case CPS_WRITE_SECTOR:
             if (write_sector == SECTOR_IGNORED) {
                 ok = true;
+            } else if ((write_sector >= 0) && write_raw) {
+                // a language slot or a font file sector: the CPS asks 'C' 8 after the last one
+                ok = flash_write_sector_raw((uint32_t)write_sector * FLASH_SECTOR_SIZE, sector_buffer);
             } else if ((write_sector >= 0) && (((uint32_t)write_sector * FLASH_SECTOR_SIZE) < FLASH_WINDOW_SIZE)) {
                 uint32_t address = (uint32_t)write_sector * FLASH_SECTOR_SIZE;
 
@@ -346,11 +370,14 @@ static uint32_t handle_write(void)
 
 // 'C' (cpsHandleCommand()): 0 - 5 the CPS's screen: only 5 (close) is taken, ours (cps_screen.c) opens with the first
 // codeplug data read or written and says what it is. 6: 0 / 1 the settings saved and a restart (the codeplug is read
-// again at start), 2 the settings saved, 7 the date and time
+// again at start), 2 the settings saved, 7 the date and time. 8: the language slots or font files were written
 static uint32_t handle_command(void)
 {
     if (request[1] == 5) {
         cps_screen_close();
+    }
+    if (request[1] == 8) {
+        language_rescan_ask(); // the languages and fonts written: read again by the UI task (language_poll())
     }
     if (request[1] == 6) {
         switch (request[2]) {
@@ -401,7 +428,8 @@ static uint32_t handle_update(void)
 }
 
 // 'D' 'S' divisor(2): the speed after the reply 'D' 'S' (1 ok); 'D' 'Y' at it keeps it, reply 'D' 'Y'
-// 'D' 'K' address(4): the CRC-32 (zlib's) of the 4 KB sector of the window there, reply 'D' 'K' crc(4) (big endian)
+// 'D' 'K' address(4): the CRC-32 (zlib's) of the 4 KB sector of the window there, reply 'D' 'K' crc(4) (big endian);
+// with CPS_RAW_CRC in the address, of a raw sector of the language slots and font files
 static uint32_t handle_speed(void)
 {
     uint32_t divisor = ((uint32_t)request[2] << 8) | request[3];
@@ -418,13 +446,14 @@ static uint32_t handle_speed(void)
 
 static uint32_t handle_sector_crc(void)
 {
-    uint32_t address = request_u32(2) & ~(FLASH_SECTOR_SIZE - 1);
+    bool raw = ((request_u32(2) & CPS_RAW_CRC) != 0);
+    uint32_t address = request_u32(2) & ~CPS_RAW_CRC & ~(FLASH_SECTOR_SIZE - 1);
     uint32_t crc = 0xFFFFFFFF;
     uint8_t buffer[256];
-    bool ok = (address < FLASH_WINDOW_SIZE);
+    bool ok = raw ? in_language_area(address, FLASH_SECTOR_SIZE) : (address < FLASH_WINDOW_SIZE);
 
     for (uint32_t at = 0; ok && (at < FLASH_SECTOR_SIZE); at += sizeof(buffer)) {
-        ok = flash_read(address + at, buffer, sizeof(buffer));
+        ok = raw ? flash_read_raw(address + at, buffer, sizeof(buffer)) : flash_read(address + at, buffer, sizeof(buffer));
         for (uint32_t i = 0; ok && (i < sizeof(buffer)); i++) {
             crc ^= buffer[i];
             for (int bit = 0; bit < 8; bit++) {

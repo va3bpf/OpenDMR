@@ -38,6 +38,8 @@
 #include "ambe.h"
 #include "imbe.h"
 #include "rx_capture.h"
+#include "systime.h"
+#include "p25_radio.h"
 
 extern uint8_t __vocoder_ram_start[], __vocoder_ram_end[], __vocoder_flash_start[];
 extern uint8_t __p25_ram_start[], __p25_ram_end[], __p25_flash_start[];
@@ -150,6 +152,7 @@ void vocoderDecodeFrame(const uint8_t *in9, int16_t *pcm)
 // Over the cable (tests of the receive against known content: dmr_soft/py): not 0, every frame sent is the 1031 Hz
 // tone frame of the hotspot's DMR test file instead of the mic's (DMR and NXDN transmit)
 volatile uint32_t vocoder_tx_test;
+static uint32_t enc_logged; // frames of this transmission in the delay log (p25_radio.c)
 
 void vocoderEncodeFrame(const int16_t *pcm, uint8_t *out9)
 {
@@ -161,8 +164,14 @@ void vocoderEncodeFrame(const int16_t *pcm, uint8_t *out9)
     if (!encoder_ready) {
         ambe_enc_init(&encoder);
         encoder_ready = 1;
+        enc_logged = 0;
     }
+    uint32_t t0 = systime_get_us();
     ambe_enc_frame(&encoder, pcm, out9);
+    if (enc_logged < 12) {
+        enc_logged++;
+        p25_ev_log(39, (uint16_t)((systime_get_us() - t0) / 100)); // the delay log: a frame encoded (0.1 ms)
+    }
 }
 
 void vocoderReset(void)

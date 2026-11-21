@@ -29,7 +29,7 @@ def main():
         raw = p[:-4] + '.raw'
         np.load(p).astype('<i2').tofile(raw)
         raws.append(raw)
-    env = dict(os.environ, NXDN_VCH_OUT=out, PATH='C:/msys64/ucrt64/bin' + os.pathsep + os.environ['PATH'])
+    env = dict(os.environ, NXDN_VCH_OUT=out, NXDN_OPT=os.environ.get('NXDN_OPT', '1'), PATH='C:/msys64/ucrt64/bin' + os.pathsep + os.environ['PATH'])
     subprocess.run([exe] + raws, env=env, capture_output=True)
     got = open(out, 'rb').read() if os.path.exists(out) else b''
     errs = []

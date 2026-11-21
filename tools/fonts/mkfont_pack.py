@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""Builds the Chinese font files kept in the SPI flash of the DM-32 (graphics/gfxFontExt.c), from Noto Sans SC (OFL).
-
-The firmware falls back to it for the characters that are not in its built-in (Roboto) fonts:
+"""Builds the font files the CPS writes to the DM-32 (docs/i18n.en.md 2): the glyphs the firmware's own Roboto fonts
+(ASCII, Latin-1) do not have. Today one, "cjk", from Noto Sans SC (OFL):
   17 px      all of GB2312 (6763 hanzi, 682 symbols), for the text lines
   32 px bold the 3755 common hanzi (GB2312 level 1) and the symbols, for the large names; the others fall back to 17 px
-  and the GB2312 to Unicode table for the names in the codeplug. About 2.7 MB at raw flash 0x280000 - 0x630000 (below
-  the OpenGD77 window, free in the stock layout too: the stock 12 and 24 px fonts end before 0x280000).
+  and the GB2312 to Unicode table for the names in the codeplug. About 2.6 MB.
 
-  py tools/fonts/mkcjk.py             -> tools/fonts/build/cjk.bin
-  py tools/fonts/upload_cjk.py COM6   writes it to the radio
+  py tools/fonts/mkfont_pack.py   -> tools/fonts/build/cjk.bin, written to the radio by the CPS (Languages page)
 
-File layout, little endian (keep in step with gfxFontExt.c):
-  0   "DM32CJK2"
+File layout, little endian (keep in step with src/graphics/font_cjk.c and the CPS):
+  0   "DM32FNT1"
   8   u32 file length
   12  u32 CRC-32 of the file from byte 64 on
-  16  u8 number of fonts, 3 bytes padding
-  20  4 x { u32 font offset, u16 glyph count, u8 pixel size, u8 bold }
-  52  u32 offset of the GB2312 table: 94 x 94 u16 Unicode, row 0xA1.. then column 0xA1.. (0: none); 0: no table
-  56  reserved up to 64
+  16  char name[8]       ASCII, NUL padded: the "font" of the language files that need it
+  24  char language[8]   optional: the language these glyphs are drawn for (Han forms differ in zh and ja)
+  32  u8 number of fonts, 3 bytes padding
+  36  u32 offset of the GB2312 table: 94 x 94 u16 Unicode, row 0xA1.. then column 0xA1.. (0: none); 0: no table
+  40  u32 offset of the font table
+  44  reserved up to 64
+  font table: per font { u32 font offset, u16 glyph count, u8 pixel size, u8 bold }
   font: u16 codes[count] (sorted), padded to 4 bytes, then count x 8 byte records
         { u24 bitmap offset from the font start, u8 width, u8 height, s8 x offset, s8 top of the ink from the baseline,
           u8 advance }, then the bitmaps.
@@ -36,7 +36,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TTF = os.path.join(HERE, 'ttf', 'NotoSansSC-GB2312-VF.ttf')
 BUILD = os.path.join(HERE, 'build')
 HEADER_SIZE = 64
-MAGIC = b'DM32CJK2'
+MAGIC = b'DM32FNT1'
 
 
 def gb2312_table():
@@ -108,19 +108,21 @@ def build_font(size, weight, codes):
     return codes_bytes + records + bitmap
 
 
-def write_file(name, body, entries, table):
+def write_file(file_name, pack_name, language, body, entries, table):
+    # body starts at HEADER_SIZE: the font table, then the GB2312 table
     table_offset = HEADER_SIZE + len(body)
     body += struct.pack('<%dH' % len(table), *table)
+    fonts_offset = HEADER_SIZE + len(body)
+    for off, count, size, bold in entries:
+        body += struct.pack('<IHBB', off, count, size, bold)
 
     header = bytearray(MAGIC)
     header += struct.pack('<II', HEADER_SIZE + len(body), zlib.crc32(body) & 0xFFFFFFFF)
-    header += struct.pack('<B3x', len(entries))
-    for off, count, size, bold in entries + [(0, 0, 0, 0)] * (4 - len(entries)):
-        header += struct.pack('<IHBB', off, count, size, bold)
-    header += struct.pack('<I', table_offset)
-    header += bytes(1) * (HEADER_SIZE - len(header))
+    header += pack_name.encode('ascii').ljust(8, b'\0') + language.encode('ascii').ljust(8, b'\0')
+    header += struct.pack('<B3xII', len(entries), table_offset, fonts_offset)
+    header += bytes(HEADER_SIZE - len(header))
 
-    path = os.path.join(BUILD, name)
+    path = os.path.join(BUILD, file_name)
     with open(path, 'wb') as f:
         f.write(header + body)
     print('%s: %d bytes (%.2f MB)' % (path, len(header) + len(body), (len(header) + len(body)) / 1048576))
@@ -140,7 +142,7 @@ def main():
         body += data
         body += bytes(1) * (-len(body) % 4)
         print('  %d px %s: %d glyphs, %d bytes' % (size, weight, len(codes), len(data)))
-    write_file('cjk.bin', body, entries, table)
+    write_file('cjk.bin', 'cjk', '', body, entries, table)
 
 
 if __name__ == '__main__':

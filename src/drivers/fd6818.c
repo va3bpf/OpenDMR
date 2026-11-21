@@ -319,6 +319,10 @@ void fd6818_set_demod(fd6818_demod_t new_demod)
 // AT1846sSetMode(RADIO_MODE_DIGITAL)
 void fd6818_set_dmr(void)
 {
+    // the demodulator's registers back as FM has them (as after the power on): AM or SSB left the IF (0x3D) at 0 and the
+    // AFC off, which the DMR table doesn't write; both so, a weak (-116 dBm) transmission's first DMR burst (a direct
+    // call's only voice LC header) was never received, after any visit to USB / LSB until a restart (2026-11-21)
+    fd6818_set_demod(FD6818_DEMOD_FM);
     dmr = true;
     WRITE_TABLE(dmr_settings);
 }

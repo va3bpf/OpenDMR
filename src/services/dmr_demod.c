@@ -65,9 +65,6 @@
 #define REBASE_AT  (1U << 18)        // samples: the Q12 times kept within int32
 #define REBASE_BY  (1U << 17)        // a multiple of the ring
 
-// Q12, sum 4096: dmr_soft/py/dmr_tone.py rrc(0.2), 8 kHz, 4800 symbols/s
-static const int16_t rrc_taps[DMR_RRC_TAPS] = {19,  -9,   -27, 76,   -57, -92,  246, -113, -451, 1167, 2578,
-                                               1167, -451, -113, 246, -92, -57, 76,   -27,  -9,   19};
 
 // the voice patterns' symbols (dibit 01 +3, 00 +1, 10 -1, 11 -3); the data ones are their negatives
 static const uint8_t voice_kinds[4] = {DMR_SYNC_BS_VOICE, DMR_SYNC_MS_VOICE, DMR_SYNC_TS1_VOICE, DMR_SYNC_TS2_VOICE};
@@ -119,7 +116,7 @@ void dmr_demod_init(dmr_demod *d, dmr_demod_cb cb, void *ctx)
 {
     make_patterns();
     memset(d, 0, sizeof(*d));
-    fsk4_fir_init(&d->rrc, rrc_taps, d->hist, DMR_RRC_TAPS, 12);
+    fsk4_fir_init(&d->rrc, fsk4_rrc_4800, d->hist, FSK4_RRC_TAPS, 12);
     fsk4_ring_init(&d->x, d->buf, DMR_DEMOD_RING);
     d->cb = cb;
     d->ctx = ctx;

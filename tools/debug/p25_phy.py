@@ -43,7 +43,10 @@ def bits_of(data):
 
 
 def to_air(bits, kind):
-    """The 288 bits from the modem's order back to the order on the air (HR_C7000 Figure 70)."""
+    """The 288 bits from the modem's order back to the order on the air (HR_C7000 Figure 70); kind 0x10: the software
+    receiver's tap (p25_radio.c P25_TAP_AIR), in the order on the air already."""
+    if kind == 0x10:
+        return bits
     c = bits[:24]
     if kind in (0, 1):  # CACH 24, sync 48, info 108, info 108 -> CACH, info, sync, info
         s, i1, i2 = bits[24:72], bits[72:180], bits[180:288]

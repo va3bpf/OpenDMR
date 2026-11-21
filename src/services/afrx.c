@@ -91,7 +91,10 @@ static void receive_again(const afrx_ops_t *o)
     }
 }
 
-static void transmit(const afrx_ops_t *o)
+static volatile bool data_want;
+
+// the PTT's transmission (send: o->transmit) or a data transmission (o->data): the recording and the playback off
+static void transmit(const afrx_ops_t *o, void (*send)(void))
 {
     tx_busy = true;
     if (o->end_call) {
@@ -101,7 +104,7 @@ static void transmit(const afrx_ops_t *o)
     afrec_stop();
     afrx_debug[2]++;
     debug_state();
-    o->transmit();
+    send();
     stack_check();
     if (!afrec_start(o->bw)) {
         afrx_debug[1]++;
@@ -126,7 +129,12 @@ static void task_main(void *arg)
             continue;
         }
         if (tx_want && o->transmit) {
-            transmit(o);
+            transmit(o, o->transmit);
+            last_half = 0;
+        }
+        if (data_want && o->data) {
+            data_want = false;
+            transmit(o, o->data);
             last_half = 0;
         }
         int n;
@@ -210,6 +218,11 @@ bool afrx_running(const afrx_ops_t *ops)
 void afrx_ptt(bool on)
 {
     tx_want = on;
+}
+
+void afrx_data(void)
+{
+    data_want = true;
 }
 
 bool afrx_ptt_held(void)

@@ -92,8 +92,8 @@ DM-32UV 没有橙色键。
 ### 4.2 字体
 
 - 数字和英文：Roboto Condensed，`tools/fonts/mkfont.py` 生成，16 级灰度，放在程序 flash；画的时候 22 px 及以下不用灰度（见 4.1）；
-- 中文：思源黑体（Noto Sans SC，裁到 GB2312），`tools/fonts/mkcjk.py` 生成 17 px（全部 GB2312）和
-  32 px 粗体（3755 个常用字），4 位抗锯齿，放在数据 flash 0x280000（2.6 MB），用 `tools/fonts/upload_cjk.py` 写入；
+- 中文：思源黑体（Noto Sans SC，裁到 GB2312），`tools/fonts/mkfont_pack.py` 生成 17 px（全部 GB2312）和
+  32 px 粗体（3755 个常用字），4 位抗锯齿，是一个字库文件（2.6 MB），由 CPS 写进数据 flash（docs/i18n.md）；
 - 常用字号：13（状态栏、底栏、单位）、17（列表、标签）、20（频率、通话组）、32~44 粗体（信道名、呼号、计时、大字频率）。
 
 ### 4.3 布局骨架
@@ -317,9 +317,9 @@ typedef struct {
 
 ### 6.6 文字
 
-- `src/ui/text/text_zh.c`、`text_en.c`：同一个字符串 ID 枚举（`text.h`），各自一张表；设置里的语言决定用哪张。
-- 文字最初由 `tools/text/gen_text.py` 从原工程的 `languages/chinese.h`、`english.h`（存在 `tools/text/languages/`）生成，
-  之后加的字符串直接写进这三个文件（同时记进 `gen_text.py` 的 EXTRA）。
+- 固件只编进英文：`src/ui/text/text_en.c` 和字符串 ID 枚举 `text.h`，由 `tools/text/gen_text.py` 从
+  `tools/text/languages/en.json` 生成。别的语言是 CPS 写进电台的语言文件（`zh.json`、`es.json`……，见 docs/i18n.md）。
+- 加字符串：写进 `en.json`（知道译文的也写进别的语言文件），运行 `gen_text.py`。
 - 最长 25 字节（8 个汉字），超出由控件截断。
 
 ### 6.7 任务

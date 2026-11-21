@@ -30,9 +30,10 @@
  */
 
 #include "themes.h"
+#include "text.h"
 
 const theme_t theme_graphite = {
-    .name = {"Graphite", "石墨橙", "Grafito"},
+    .name = TEXT_THEME_GRAPHITE,
     .dark = true,
     .colours = {
         0x121316, // background

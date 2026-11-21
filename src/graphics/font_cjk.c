@@ -25,11 +25,13 @@
  */
 
 /*
- * OpenDMR, graphics: the Chinese font in the data flash. From firmware/dh4570_IAP/user/SOURCE/graphics/
- * gfxFontExt.c; the file is made by tools/fonts/mkcjk.py and written by tools/fonts/upload_cjk.py.
+ * OpenDMR, graphics: the font files in the data flash (docs/i18n.en.md). From firmware/dh4570_IAP/user/SOURCE/
+ * graphics/gfxFontExt.c; the files are made by tools/fonts/mkfont_pack.py and written by the CPS, with a directory
+ * sector before them.
  *
- * RAM is short: only the header is kept, the glyphs are looked up (binary search in the sorted codes) and decoded
- * straight from the flash; a few lookups are cached, as the same characters come back on each redraw.
+ * RAM is short: only the directory and the font tables are kept, the glyphs are looked up (binary search in the
+ * sorted codes) and decoded straight from the flash; a few lookups are cached, as the same characters come back on
+ * each redraw.
  */
 
 #include <string.h>
@@ -37,11 +39,15 @@
 #include "framebuffer.h"
 #include "font_cjk.h"
 
-#define MAGIC       "DM32CJK2"
-#define FONTS_MAX   4
-#define RECORD_SIZE 8
-#define LARGE_LINE  30 // built-in fonts with lines at least this high use the large font
-#define CACHE_SIZE  16
+#define DIRECTORY_MAGIC "DM32FDIR"
+#define FILE_MAGIC      "DM32FNT1"
+#define FILES_MAX       16
+#define FONTS_MAX       32
+#define FILE_HEADER     64
+#define NAME_SIZE       8
+#define RECORD_SIZE     8
+#define LARGE_LINE      30 // built-in fonts with lines at least this high use the large size
+#define CACHE_SIZE      16
 
 typedef struct {
     uint32_t codes; // flash addresses
@@ -50,6 +56,13 @@ typedef struct {
     uint16_t count;
     uint8_t size;
 } cjk_font_t;
+
+typedef struct {
+    char name[NAME_SIZE + 1];
+    uint32_t gb2312;     // flash address of its GB2312 table, 0: none
+    uint8_t first_font;  // its fonts in fonts[]
+    uint8_t font_count;
+} font_file_t;
 
 typedef struct {
     uint16_t code;
@@ -63,9 +76,12 @@ static enum {
     PRESENT,
     ABSENT
 } state = NOT_READ;
+static font_file_t files[FILES_MAX];
+static uint8_t file_count;
 static cjk_font_t fonts[FONTS_MAX];
 static uint8_t font_count;
-static uint32_t gb2312_table;
+static char preferred_name[NAME_SIZE + 1];
+static int preferred = -1; // the file of preferred_name
 static cache_entry_t cache[CACHE_SIZE];
 
 static uint32_t get_le32(const uint8_t *p)
@@ -73,36 +89,117 @@ static uint32_t get_le32(const uint8_t *p)
     return p[0] | (p[1] << 8) | (p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
-static bool read_header(void)
+static void find_preferred(void)
+{
+    preferred = -1;
+    for (int i = 0; (i < file_count) && (preferred_name[0] != '\0'); i++) {
+        if (strcmp(files[i].name, preferred_name) == 0) {
+            preferred = i;
+        }
+    }
+}
+
+// One file of the directory: its header must agree with the entry; its fonts go to fonts[]
+static void read_file(const uint8_t *entry)
+{
+    font_file_t *f = &files[file_count];
+    uint32_t address = get_le32(&entry[8]);
+    uint32_t length = get_le32(&entry[12]);
+    uint8_t header[FILE_HEADER];
+    uint32_t table, count;
+
+    if ((address < FONT_FLASH_ADDRESS) || (address >= FONT_FLASH_END) || (length < FILE_HEADER) ||
+        (length > (FONT_FLASH_END - address)) || !flash_read_raw(address, header, sizeof(header)) ||
+        (memcmp(header, FILE_MAGIC, 8) != 0) || (get_le32(&header[8]) != length) ||
+        (memcmp(&header[16], entry, NAME_SIZE) != 0)) {
+        return;
+    }
+    memcpy(f->name, entry, NAME_SIZE);
+    f->name[NAME_SIZE] = '\0';
+    f->gb2312 = get_le32(&header[36]);
+    f->gb2312 = ((f->gb2312 != 0) && (f->gb2312 < length)) ? (address + f->gb2312) : 0;
+    f->first_font = font_count;
+    f->font_count = 0;
+    count = header[32];
+    table = get_le32(&header[40]);
+    if ((table + (count * 8)) > length) {
+        return;
+    }
+    for (uint32_t i = 0; (i < count) && (font_count < FONTS_MAX); i++) {
+        uint8_t e[8];
+        cjk_font_t *font = &fonts[font_count];
+        uint32_t offset;
+
+        if (!flash_read_raw(address + table + (i * 8), e, sizeof(e))) {
+            return;
+        }
+        offset = get_le32(e);
+        font->count = e[4] | (e[5] << 8);
+        font->size = e[6];
+        if ((offset >= length) || (font->count == 0)) {
+            continue;
+        }
+        font->base = address + offset;
+        font->codes = font->base;
+        font->records = font->base + (((font->count * 2) + 3) & ~3);
+        font_count++;
+        f->font_count++;
+    }
+    file_count++;
+}
+
+static bool read_directory(void)
 {
     if (state == NOT_READ) {
-        uint8_t header[64];
+        uint8_t header[12];
 
         state = ABSENT;
+        file_count = 0;
+        font_count = 0;
         memset(cache, 0xFF, sizeof(cache));
 
-        if (flash_read_raw(FONT_CJK_FLASH_ADDRESS, header, sizeof(header)) && (memcmp(header, MAGIC, 8) == 0) &&
-            (get_le32(&header[8]) <= (FONT_CJK_FLASH_END - FONT_CJK_FLASH_ADDRESS))) {
-            font_count = ((header[16] > FONTS_MAX) ? FONTS_MAX : header[16]);
-            for (int i = 0; i < font_count; i++) {
-                const uint8_t *e = &header[20 + (i * 8)];
-                cjk_font_t *f = &fonts[i];
+        if (flash_read_raw(FONT_DIRECTORY_ADDRESS, header, sizeof(header)) &&
+            (memcmp(header, DIRECTORY_MAGIC, 8) == 0)) {
+            uint8_t count = (header[8] > FILES_MAX) ? FILES_MAX : header[8];
 
-                f->base = FONT_CJK_FLASH_ADDRESS + get_le32(e);
-                f->count = e[4] | (e[5] << 8);
-                f->size = e[6];
-                f->codes = f->base;
-                f->records = f->base + (((f->count * 2) + 3) & ~3);
+            for (uint8_t i = 0; i < count; i++) {
+                uint8_t entry[20];
+
+                if (flash_read_raw(FONT_DIRECTORY_ADDRESS + 12 + (i * sizeof(entry)), entry, sizeof(entry))) {
+                    read_file(entry);
+                }
             }
-            gb2312_table = get_le32(&header[52]);
-            if (gb2312_table) {
-                gb2312_table += FONT_CJK_FLASH_ADDRESS;
-            }
-            state = PRESENT;
+            state = (font_count > 0) ? PRESENT : ABSENT;
         }
+        find_preferred();
     }
 
     return (state == PRESENT);
+}
+
+void font_cjk_reload(void)
+{
+    state = NOT_READ;
+}
+
+bool font_cjk_has(const char *name)
+{
+    read_directory();
+    for (int i = 0; i < file_count; i++) {
+        if (strcmp(files[i].name, name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void font_cjk_prefer(const char *name)
+{
+    strncpy(preferred_name, name, NAME_SIZE);
+    preferred_name[NAME_SIZE] = '\0';
+    if (state != NOT_READ) {
+        find_preferred();
+    }
 }
 
 static bool find(const cjk_font_t *f, uint16_t code, font_cjk_glyph_t *glyph)
@@ -158,29 +255,50 @@ static bool lookup(uint8_t font, uint16_t code, font_cjk_glyph_t *glyph)
     return entry->found;
 }
 
+// The glyph in one file: the size that suits the line first (the largest that fits a large line, the smallest for
+// the others), then its other sizes
+static bool file_glyph(const font_file_t *f, uint16_t code, uint8_t line_height, font_cjk_glyph_t *glyph)
+{
+    int best = -1;
+
+    for (int i = f->first_font; i < (f->first_font + f->font_count); i++) {
+        if (best < 0) {
+            best = i;
+        } else if (line_height >= LARGE_LINE) {
+            if (((fonts[i].size + 6) <= line_height) &&
+                (((fonts[best].size + 6) > line_height) || (fonts[i].size > fonts[best].size))) {
+                best = i;
+            }
+        } else if (fonts[i].size < fonts[best].size) {
+            best = i;
+        }
+    }
+    if (best < 0) {
+        return false;
+    }
+    if (lookup((uint8_t)best, code, glyph)) {
+        return true;
+    }
+    for (int i = f->first_font; i < (f->first_font + f->font_count); i++) {
+        if ((i != best) && lookup((uint8_t)i, code, glyph)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool font_cjk_get_glyph(uint32_t code, uint8_t line_height, font_cjk_glyph_t *glyph)
 {
-    int preferred = 0;
-
-    if ((code > 0xFFFF) || !read_header() || (font_count == 0)) {
+    if ((code > 0xFFFF) || !read_directory()) {
         return false;
     }
 
-    // The fonts are in increasing size: the largest one that suits the line, then the others from the smallest
-    for (int i = 0; i < font_count; i++) {
-        if ((fonts[i].size + 6) <= line_height) {
-            preferred = i;
-        }
-    }
-    if ((line_height < LARGE_LINE) && (preferred > 0)) {
-        preferred = 0;
-    }
-
-    if (lookup(preferred, code, glyph)) {
+    // The current language's font first: Chinese and Japanese draw the same Han code points differently
+    if ((preferred >= 0) && file_glyph(&files[preferred], (uint16_t)code, line_height, glyph)) {
         return true;
     }
-    for (int i = 0; i < font_count; i++) {
-        if ((i != preferred) && lookup(i, code, glyph)) {
+    for (int i = 0; i < file_count; i++) {
+        if ((i != preferred) && file_glyph(&files[i], (uint16_t)code, line_height, glyph)) {
             return true;
         }
     }
@@ -250,12 +368,18 @@ void font_cjk_draw_glyph(int32_t x, int32_t baseline, const font_cjk_glyph_t *gl
 uint16_t font_cjk_gb2312_to_unicode(uint8_t high, uint8_t low)
 {
     uint8_t c[2];
+    uint32_t table = 0;
 
-    if ((high < 0xA1) || (high > 0xFE) || (low < 0xA1) || (low > 0xFE) || !read_header() || (gb2312_table == 0)) {
+    if ((high < 0xA1) || (high > 0xFE) || (low < 0xA1) || (low > 0xFE)) {
         return 0;
     }
-
-    flash_read_raw(gb2312_table + (((((high - 0xA1) * 94) + (low - 0xA1))) * 2), c, 2);
+    read_directory();
+    for (int i = 0; (i < file_count) && (table == 0); i++) {
+        table = files[i].gb2312;
+    }
+    if ((table == 0) || !flash_read_raw(table + (((((high - 0xA1) * 94) + (low - 0xA1))) * 2), c, 2)) {
+        return 0;
+    }
 
     return c[0] | (c[1] << 8);
 }

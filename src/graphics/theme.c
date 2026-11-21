@@ -47,7 +47,7 @@
 #include "panel.h"
 #include "flash.h"
 #include "custom_data.h"
-#include "language.h"
+#include "text.h"
 #include "themes/themes.h"
 
 // Text on these is drawn without anti-aliasing (its edges would take the greys made for the background)
@@ -191,7 +191,7 @@ void theme_name(uint8_t id, char *buffer, uint32_t size)
     user_entry_t entry;
 
     if (id < THEMES_COUNT) {
-        snprintf(buffer, size, "%s", THEMES[id]->name[(language_get() < 3) ? language_get() : 0]);
+        snprintf(buffer, size, "%s", text((text_id_t)THEMES[id]->name));
     } else if ((u >= 0) && user_read(u, &entry) && ((uint8_t)entry.name[0] != 0xFF) && (entry.name[0] != '\0')) {
         snprintf(buffer, size, "%.*s", USER_NAME, entry.name);
     } else {

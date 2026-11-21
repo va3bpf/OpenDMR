@@ -38,10 +38,6 @@
  *   'D' 'b' addr(4) width(1) mask(4) value(4)      read-modify-write    -> 'D' 'b' old(4) new(4)
  *   'D' 'x' addr(4) r0(4) r1(4) r2(4) r3(4)        call a function      -> 'D' 'x' r0(4)
  *   'D' 'P' addr(4) len(2) data   write in the data flash window (flash_write())  -> 'D' 'P' ok(1)
- *   'D' 'F' addr(4) part(1) sum(2) data(1024)    a quarter of a 4K sector of the Chinese font (tools/fonts/upload_cjk.py),
- *                               at a raw flash address in [FONT_CJK_FLASH_ADDRESS, FONT_CJK_FLASH_END) only; sum: of the
- *                               data bytes, 16 bits (a request cut short by the UART is refused). The sector is erased,
- *                               programmed and read back with part 3                      -> 'D' 'F' ok(1)
  *   'D' 'Z' addr(4) len(2)      read in the data flash window (up to 4096 bytes), packed: a byte c < 0x80 then c + 1
  *                               bytes as they are, c >= 0x80 then one byte repeated c - 0x80 + 3 times (the codeplug
  *                               is mostly 0xFF and 0x00: the CPS reads it ten times faster)
@@ -51,7 +47,6 @@
 #include <string.h>
 #include "debug.h"
 #include "flash.h"
-#include "font_cjk.h"
 #include "cable_link.h"
 
 
@@ -208,34 +203,6 @@ uint32_t debug_handle_command(volatile uint8_t *request, volatile uint8_t *reply
             reply[3] = (uint8_t)(n >> 8);
             reply[4] = (uint8_t)n;
             reply_length = 5 + n;
-        } break;
-
-        case 'F': { // the Chinese font sector being uploaded, in the cable link's sector buffer
-            uint8_t *font_sector = cable_link_sector_buffer();
-            uint8_t part = request[6];
-            uint16_t sum = (request[7] << 8) | request[8];
-
-            reply[2] = 0;
-            reply_length = 3;
-            for (int i = 0; i < 1024; i++) {
-                sum -= request[9 + i];
-            }
-
-            if (font_sector && (sum == 0) && (address >= FONT_CJK_FLASH_ADDRESS) && (address < FONT_CJK_FLASH_END) &&
-                ((address % FLASH_SECTOR_SIZE) == 0) && (part < 4)) {
-                memcpy(&font_sector[part * 1024], (uint8_t *)&request[9], 1024);
-                reply[2] = 1;
-
-                if (part == 3) {
-                    uint8_t check[256];
-
-                    reply[2] = flash_write_sector_raw(address, font_sector) ? 1 : 0;
-                    for (uint32_t i = 0; (i < FLASH_SECTOR_SIZE) && reply[2]; i += sizeof(check)) {
-                        flash_read_raw(address + i, check, sizeof(check));
-                        reply[2] = (memcmp(check, &font_sector[i], sizeof(check)) == 0) ? 1 : 0;
-                    }
-                }
-            }
         } break;
 
         default: {

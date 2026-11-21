@@ -10,7 +10,7 @@ Reemplazar el firmware de fábrica del **Baofeng DM-32 / DM-32UV** con OpenDMR, 
 
 1. [Requisitos](#1-requisitos)
 2. [Copia de seguridad (Obligatorio)](#2-copia-de-seguridad-obligatorio)
-3. [Escribir el firmware y la fuente china](#3-escribir-el-firmware-y-la-fuente-china)
+3. [Escribir el firmware](#3-escribir-el-firmware)
 4. [Primer encendido](#4-primer-encendido)
 5. [Escribir el codeplug](#5-escribir-el-codeplug)
 6. [Actualizaciones](#6-actualizaciones)
@@ -29,11 +29,10 @@ Descarga **`OpenDMR-<versión>.zip`** desde la página de Releases y descomprím
 |---|---|
 | `opendmr.bin` | El firmware principal |
 | `opendmr_BFUV32.bin` | El mismo firmware con la cabecera requerida por el modo de actualización de fábrica (solo para casos especiales, ver [7](#7-volver-al-firmware-de-fábrica)) |
-| `cjk.bin` | La fuente china (2.7 MB, va en la memoria flash de datos) |
+| `languages/` | Los idiomas de la interfaz (`zh.json` chino, `es.json` español) y la fuente china `cjk.bin`; se escriben en el radio desde la página Idiomas de OpenDMR CPS, ver [5](#5-escribir-el-codeplug) |
 | `tools/backup/dm32_dump.py`, `tools/backup/dumper/dumper.bin` | Herramienta de volcado / escritura (a través del bootloader del chip) |
 | `tools/fonts/ttf/RobotoCondensed-VF.ttf` | Fuente tipográfica utilizada por dicha herramienta para mostrar texto en la pantalla del radio |
 | `tools/debug/fw_update.py`, `tools/debug/updater/updater.bin` | Actualizaciones posteriores (mientras el radio ya ejecuta OpenDMR) |
-| `tools/fonts/upload_cjk.py` | Escribe de nuevo la fuente china mientras el radio ejecuta OpenDMR |
 | `tools/debug/pin_wipe.py` | Borra un PIN de encendido o bloqueo olvidado (con el radio apagado, ejecutar y encender antes de 30 s; mantiene el codeplug y los ajustes) |
 | `tools/ids/id_db.py` | Compila y escribe la base de datos de IDs de DMR con ubicaciones (manual de usuario, sección 13) |
 | `docs/manual.md`, `docs/manual.en.md`, `docs/manual.es.md`, `docs/manual/` | Manual de usuario |
@@ -116,7 +115,7 @@ Guarda la carpeta `backup` en un lugar seguro (nube, memoria USB) y **etiquétal
 
 ---
 
-## 3. Escribir el firmware y la fuente china
+## 3. Escribir el firmware
 
 El proceso es idéntico al de la copia de seguridad: radio apagado, ejecutar comando, encender antes de 30 segundos, sin tocar ninguna tecla. El parámetro `--write` escribe únicamente los sectores de 4 KB que difieren del archivo, los verifica releyéndolos y realiza una comprobación final completa.
 
@@ -125,12 +124,6 @@ py -u tools\backup\dm32_dump.py COM6 program opendmr.bin --write --start 0xC000
 ```
 
 *(El bootloader, por debajo de `0xC000`, nunca se sobreescribe).* Debe finalizar indicando `... sectors written, all ... the same as the file`. Apaga el radio.
-
-```powershell
-py -u tools\backup\dm32_dump.py COM6 data cjk.bin --write --start 0x280000
-```
-
-La fuente china se ubica en la memoria flash de datos a partir de la dirección `0x280000` (tarda unos 5 minutos). Se recomienda escribirla aunque vayas a utilizar el idioma Español o Inglés: los nombres de contactos o canales que contengan caracteres orientales la necesitan para mostrarse bien. Apaga el radio al finalizar.
 
 ---
 
@@ -180,6 +173,16 @@ Durante la lectura o escritura, la pantalla del radio indicará la sección y el
 
 ---
 
+### Idiomas de la interfaz
+
+El firmware solo trae inglés. Para la interfaz en español o chino: en OpenDMR CPS conecta el radio, abre la página
+Idiomas y pulsa Elegir carpeta: la carpeta `languages` del zip. Chino y español quedan marcados; pulsa Escribir en la
+radio (el chino con su fuente tarda unos 2 minutos). Después elígelo en Opciones -> Language del radio. Conviene
+escribir el chino aunque uses otro idioma: los caracteres chinos de los nombres de canales y contactos necesitan su
+fuente.
+
+---
+
 ## 6. Actualizaciones
 
 Una vez que OpenDMR ya está instalado en el equipo, actualizar a una nueva versión no requiere ciclos de apagado ni tiempos de espera estrictos: enciende el radio de forma normal, conecta el cable y ejecuta:
@@ -196,11 +199,10 @@ python3 tools/debug/fw_update.py opendmr.bin --port /dev/cu.usbserial-xxxx
 
 Solo se sobreescribirán los sectores modificados (alrededor de 35 s si cambia por completo), la pantalla mostrará una barra de progreso y el radio se reiniciará automáticamente. Todos tus ajustes y el codeplug se conservan intactos.
 
-Si las notas de la versión indican que la fuente tipográfica ha cambiado, actualízala también (con el radio encendido normalmente; reinícialo después):
-
-```powershell
-py tools\fonts\upload_cjk.py COM6 --file cjk.bin
-```
+Si vienes de la versión 0.7.0 o anterior: los idiomas y las fuentes tienen un formato nuevo, así que tras la
+actualización la interfaz queda en inglés y los nombres en chino no se ven: escríbelos una vez con el CPS (sección 5,
+Idiomas de la interfaz). Haz lo mismo cuando una versión cambie un idioma; lo que el radio ya tiene igual no se
+vuelve a escribir.
 
 Si por alguna razón `fw_update.py` fallara o el equipo no arrancase, simplemente vuelve a escribir `opendmr.bin` siguiendo el procedimiento de la sección 3 (con el radio apagado y encendiéndolo en los primeros 30 segundos).
 
@@ -239,7 +241,7 @@ No te preocupes: vuelve a ejecutar el mismo comando. Solo se escribirán los sec
 
 **Los textos en caracteres chinos se ven como cajas vacías o no aparecen**
 
-La fuente oriental falta o está incompleta: vuelve a escribir `cjk.bin` según la sección 3, o usando `upload_cjk.py` con el radio encendido (sección 6), y reinicia el equipo.
+El chino y su fuente faltan o están incompletos: escríbelos con el CPS (sección 5, Idiomas de la interfaz; la fuente `cjk.bin` va con el chino). Los textos que se ven como "??" tienen la misma causa.
 
 **Cómo comprobar la versión instalada**
 

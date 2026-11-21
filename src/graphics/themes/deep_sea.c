@@ -31,9 +31,10 @@
  */
 
 #include "themes.h"
+#include "text.h"
 
 const theme_t theme_deep_sea = {
-    .name = {"Deep sea", "深海", "Mar profundo"},
+    .name = TEXT_THEME_DEEP_SEA,
     .dark = true,
     .colours = {
         0x07131F, // background

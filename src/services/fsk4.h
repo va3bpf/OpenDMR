@@ -72,6 +72,8 @@ static inline int32_t fsk4_sym_t(int32_t t, int k, int32_t num, int32_t den)
 void fsk4_rebase(fsk4_ring *r, uint32_t by);
 
 // An FIR on the input: taps Q(shift), the history in hist (taps long)
+#define FSK4_RRC_TAPS 21 // the receive filter at 4800 symbols/s (DMR, P25): root raised cosine, alpha 0.2, +-6 symbols
+extern const int16_t fsk4_rrc_4800[FSK4_RRC_TAPS]; // Q12, sum 4096
 typedef struct {
     const int16_t *taps;
     int32_t *hist;
