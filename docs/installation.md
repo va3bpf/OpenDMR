@@ -30,7 +30,7 @@
 |---|---|
 | `opendmr.bin` | 固件 |
 | `opendmr_BFUV32.bin` | 同一个固件，带原厂升级模式的文件头（只在 [7](#7-恢复原厂固件) 之类的特殊情况用） |
-| `languages/` | 界面语言（`zh.json` 中文、`es.json` 西班牙文）和中文字库 `cjk.bin`，用 OpenDMR CPS 的「界面语言」页写进电台，见 [5](#5-写码表) |
+| `languages/` | 界面语言（`zh.json` 中文、`es.json` 西班牙文、`tr.json` 土耳其文）及其附加字库（中文 `cjk.bin`、土耳其文 `turkish.bin`），用 OpenDMR CPS 的「界面语言」页写进电台，见 [5](#5-写码表) |
 | `tools/backup/dm32_dump.py`、`tools/backup/dumper/dumper.bin` | 备份 / 写入工具（走芯片的引导程序） |
 | `tools/fonts/ttf/RobotoCondensed-VF.ttf` | 上面这个工具在电台屏幕上显示文字用的字体 |
 | `tools/debug/fw_update.py`、`tools/debug/updater/updater.bin` | 平时升级用（电台跑着 OpenDMR 时） |

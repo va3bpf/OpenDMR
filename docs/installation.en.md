@@ -34,7 +34,7 @@ that folder). It holds:
 |---|---|
 | `opendmr.bin` | The firmware |
 | `opendmr_BFUV32.bin` | The same firmware with the header of the stock update mode (special cases only, as in [7](#7-going-back-to-the-stock-firmware)) |
-| `languages/` | The interface languages (`zh.json` Chinese, `es.json` Spanish) and the Chinese font `cjk.bin`, written to the radio by the OpenDMR CPS's Languages page, see [5](#5-writing-the-codeplug) |
+| `languages/` | Interface languages (`zh.json` Chinese, `es.json` Spanish, `tr.json` Turkish) and their extra fonts (`cjk.bin` for Chinese, `turkish.bin` for Turkish). Use the OpenDMR CPS's Languages page, see [5](#5-writing-the-codeplug). |
 | `tools/backup/dm32_dump.py`, `tools/backup/dumper/dumper.bin` | Backup / write tool (through the chip's bootloader) |
 | `tools/fonts/ttf/RobotoCondensed-VF.ttf` | The font that tool uses for the text on the radio's screen |
 | `tools/debug/fw_update.py`, `tools/debug/updater/updater.bin` | Updates (while the radio runs OpenDMR) |

@@ -29,7 +29,7 @@ Descarga **`OpenDMR-<versión>.zip`** desde la página de Releases y descomprím
 |---|---|
 | `opendmr.bin` | El firmware principal |
 | `opendmr_BFUV32.bin` | El mismo firmware con la cabecera requerida por el modo de actualización de fábrica (solo para casos especiales, ver [7](#7-volver-al-firmware-de-fábrica)) |
-| `languages/` | Los idiomas de la interfaz (`zh.json` chino, `es.json` español) y la fuente china `cjk.bin`; se escriben en el radio desde la página Idiomas de OpenDMR CPS, ver [5](#5-escribir-el-codeplug) |
+| `languages/` | Los idiomas de la interfaz (`zh.json` chino, `es.json` español, `tr.json` turco) y sus fuentes adicionales (`cjk.bin` para chino, `turkish.bin` para turco). Se escriben desde la página Idiomas de OpenDMR CPS, ver [5](#5-escribir-el-codeplug). |
 | `tools/backup/dm32_dump.py`, `tools/backup/dumper/dumper.bin` | Herramienta de volcado / escritura (a través del bootloader del chip) |
 | `tools/fonts/ttf/RobotoCondensed-VF.ttf` | Fuente tipográfica utilizada por dicha herramienta para mostrar texto en la pantalla del radio |
 | `tools/debug/fw_update.py`, `tools/debug/updater/updater.bin` | Actualizaciones posteriores (mientras el radio ya ejecuta OpenDMR) |

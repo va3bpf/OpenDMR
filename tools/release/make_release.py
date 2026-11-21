@@ -31,6 +31,7 @@ DEFAULT_REPO = 'va3bpf/OpenDMR'
 CPS_REPO = 'va3bpf/opendmr-cps'
 CPS_FILE = 'opendmr-cps.html'
 FONT = 'tools/fonts/build/cjk.bin'
+TURKISH_FONT = 'tools/fonts/build/turkish.bin'
 TIMEZONE_DATA = 'src/services/timezone-data'
 
 # In the zip -> from the repository. Keep in step with the table of docs/installation.md
@@ -41,6 +42,8 @@ FILES = {
     'languages/zh.json': 'tools/text/languages/zh.json',
     'languages/es.json': 'tools/text/languages/es.json',
     'languages/cjk.bin': FONT,
+    'languages/tr.json': 'tools/text/languages/tr.json',
+    'languages/turkish.bin': TURKISH_FONT,
     'timezone-data/tzdb.bin': TIMEZONE_DATA + '/tzdb.bin',
     'timezone-data/README.md': TIMEZONE_DATA + '/README.md',
     'tools/backup/dm32_dump.py': 'tools/backup/dm32_dump.py',
@@ -89,9 +92,11 @@ def build():
 
 
 def font():
-    if not os.path.exists(os.path.join(ROOT, FONT)):
-        print('making the Chinese font file ...')
-        subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'fonts', 'mkfont_pack.py')], cwd=ROOT, check=True)
+    generator = os.path.join(ROOT, 'tools', 'fonts', 'mkfont_pack.py')
+    for path, name, args in ((FONT, 'Chinese', ()), (TURKISH_FONT, 'Turkish', ('--turkish',))):
+        if not os.path.exists(os.path.join(ROOT, path)):
+            print('making the %s font file ...' % name)
+            subprocess.run([sys.executable, generator, *args], cwd=ROOT, check=True)
 
 
 def gh_path():

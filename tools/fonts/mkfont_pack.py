@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Builds the font files the CPS writes to the DM-32 (docs/i18n.en.md 2): the glyphs the firmware's own Roboto fonts
-(ASCII, Latin-1) do not have. Today one, "cjk", from Noto Sans SC (OFL):
+(ASCII, Latin-1) do not have. The default "cjk" pack uses Noto Sans SC (OFL):
   17 px      all of GB2312 (6763 hanzi, 682 symbols), for the text lines
   32 px bold the 3755 common hanzi (GB2312 level 1) and the symbols, for the large names; the others fall back to 17 px
   and the GB2312 to Unicode table for the names in the codeplug. About 2.6 MB.
 
   py tools/fonts/mkfont_pack.py   -> tools/fonts/build/cjk.bin, written to the radio by the CPS (Languages page)
+  py tools/fonts/mkfont_pack.py --turkish -> tools/fonts/build/turkish.bin (Roboto Condensed, OFL)
 
 File layout, little endian (keep in step with src/graphics/font_cjk.c and the CPS):
   0   "DM32FNT1"
@@ -26,6 +27,7 @@ File layout, little endian (keep in step with src/graphics/font_cjk.c and the CP
         0x80 - 0xFF  (n & 0x7F) + 1 pixels with their own values, 2 per byte (first in the high nibble), in the bytes
                      that follow
 """
+import argparse
 import os
 import struct
 import zlib
@@ -34,6 +36,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TTF = os.path.join(HERE, 'ttf', 'NotoSansSC-GB2312-VF.ttf')
+ROBOTO = os.path.join(HERE, 'ttf', 'RobotoCondensed-VF.ttf')
 BUILD = os.path.join(HERE, 'build')
 HEADER_SIZE = 64
 MAGIC = b'DM32FNT1'
@@ -79,8 +82,8 @@ def compress(levels):
     return out
 
 
-def build_font(size, weight, codes):
-    font = ImageFont.truetype(TTF, size)
+def build_font(font_path, size, weight, codes):
+    font = ImageFont.truetype(font_path, size)
     font.set_variation_by_name(weight)
     glyphs = []
     bitmap = bytearray()
@@ -110,8 +113,10 @@ def build_font(size, weight, codes):
 
 def write_file(file_name, pack_name, language, body, entries, table):
     # body starts at HEADER_SIZE: the font table, then the GB2312 table
-    table_offset = HEADER_SIZE + len(body)
-    body += struct.pack('<%dH' % len(table), *table)
+    table_offset = 0
+    if table:
+        table_offset = HEADER_SIZE + len(body)
+        body += struct.pack('<%dH' % len(table), *table)
     fonts_offset = HEADER_SIZE + len(body)
     for off, count, size, bold in entries:
         body += struct.pack('<IHBB', off, count, size, bold)
@@ -128,21 +133,34 @@ def write_file(file_name, pack_name, language, body, entries, table):
     print('%s: %d bytes (%.2f MB)' % (path, len(header) + len(body), (len(header) + len(body)) / 1048576))
 
 
-def main():
-    os.makedirs(BUILD, exist_ok=True)
-    table = gb2312_table()
-    all_codes = sorted(set(c for c in table if c))
-    # GB2312 level 1: rows 0xB0 - 0xD7 (the symbols are rows 0xA1 - 0xA9)
-    common = sorted(set(c for i, c in enumerate(table) if c and ((i // 94) + 0xA1) < 0xD8))
+def build_pack(name, language, font_path, sizes, table):
     body = bytearray()
     entries = []
-    for size, weight, codes in ((17, 'Regular', all_codes), (32, 'Bold', common)):
-        data = build_font(size, weight, codes)
+    for size, weight, codes in sizes:
+        data = build_font(font_path, size, weight, codes)
         entries.append((HEADER_SIZE + len(body), len(codes), size, weight == 'Bold'))
         body += data
         body += bytes(1) * (-len(body) % 4)
         print('  %d px %s: %d glyphs, %d bytes' % (size, weight, len(codes), len(data)))
-    write_file('cjk.bin', 'cjk', '', body, entries, table)
+    write_file(name + '.bin', name, language, body, entries, table)
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Build a language font pack for OpenDMR.')
+    parser.add_argument('--turkish', action='store_true', help='build the Turkish font pack instead of CJK')
+    args = parser.parse_args()
+    os.makedirs(BUILD, exist_ok=True)
+
+    if args.turkish:
+        codes = sorted(map(ord, 'ĞğİıŞş'))  # other Turkish letters are already in Latin-1
+        build_pack('turkish', 'tr', ROBOTO, ((12, 'Regular', codes), (32, 'Bold', codes)), ())
+        return
+
+    table = gb2312_table()
+    all_codes = sorted(set(c for c in table if c))
+    # GB2312 level 1: rows 0xB0 - 0xD7 (the symbols are rows 0xA1 - 0xA9)
+    common = sorted(set(c for i, c in enumerate(table) if c and ((i // 94) + 0xA1) < 0xD8))
+    build_pack('cjk', '', TTF, ((17, 'Regular', all_codes), (32, 'Bold', common)), table)
 
 
 if __name__ == '__main__':
