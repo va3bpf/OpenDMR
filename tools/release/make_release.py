@@ -23,6 +23,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
@@ -117,10 +118,9 @@ def sha256(path):
     return h.hexdigest()
 
 
-def pack(version, cps_path, cps_version):
-    os.makedirs(DIST, exist_ok=True)
+def pack_assets(version, cps_path, cps_version, output_dir):
     name = 'OpenDMR-%s' % version
-    zip_path = os.path.join(DIST, name + '.zip')
+    zip_path = os.path.join(output_dir, name + '.zip')
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
         for inside, source in FILES.items():
             path = os.path.join(ROOT, source)
@@ -136,19 +136,29 @@ def pack(version, cps_path, cps_version):
         z.write(cps_path, '%s/%s' % (name, CPS_FILE))
         z.writestr('%s/VERSION.txt' % name, 'OpenDMR %s\ncommit %s\nbuilt %s\nCPS %s\n' % (
             version, git('rev-parse', 'HEAD'), datetime.datetime.now().strftime('%Y-%m-%d %H:%M'), cps_version))
-    cps_asset = os.path.join(DIST, CPS_FILE)
-    if os.path.abspath(cps_path) != os.path.abspath(cps_asset):
-        shutil.copyfile(cps_path, cps_asset)
-    timezone_asset = os.path.join(DIST, name + '-timezone-data.zip')
+    cps_asset = os.path.join(output_dir, CPS_FILE)
+    shutil.copyfile(cps_path, cps_asset)
+    timezone_asset = os.path.join(output_dir, name + '-timezone-data.zip')
     with zipfile.ZipFile(timezone_asset, 'w', zipfile.ZIP_DEFLATED) as z:
         for filename in ('tzdb.bin', 'README.md'):
             z.write(os.path.join(ROOT, TIMEZONE_DATA, filename), filename)
     assets = [zip_path, cps_asset, timezone_asset]
-    sums = os.path.join(DIST, 'SHA256SUMS.txt')
+    sums = os.path.join(output_dir, 'SHA256SUMS.txt')
     with open(sums, 'w', newline='\n') as f:
         for a in assets:
             f.write('%s  %s\n' % (sha256(a), os.path.basename(a)))
     assets.append(sums)
+    return assets
+
+
+def pack(version, cps_path, cps_version):
+    os.makedirs(DIST, exist_ok=True)
+    # Finish packaging and checksumming before replacing a previous release.
+    with tempfile.TemporaryDirectory(prefix='.release-', dir=DIST) as staging:
+        staged = pack_assets(version, cps_path, cps_version, staging)
+        assets = [os.path.join(DIST, os.path.basename(path)) for path in staged]
+        for source, target in zip(staged, assets):
+            os.replace(source, target)
     for a in assets:
         print('%10d  %s' % (os.path.getsize(a), os.path.relpath(a, ROOT)))
     return assets
