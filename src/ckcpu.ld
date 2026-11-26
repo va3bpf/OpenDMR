@@ -181,12 +181,14 @@ SECTIONS
 		. = ALIGN(0x4) ;
 		__m17_ram_end = . ;
 	}
-	/* The software receivers' state that goes with the vocoder (NXDN, DMR: services/afrx.c runs one at a time): after
-	   the vocoder's own RAM, both at the same address, valid while the AMBE overlay is claimed; not loaded (each
-	   receiver sets its own up). */
+	/* The software receivers' state that goes with the vocoder (NXDN, YSF, DMR: services/afrx.c runs one at a time):
+	   after the vocoder's own RAM, all at the same address, valid while the AMBE overlay is claimed; not loaded
+	   (each receiver sets its own up). */
 	.nxdn_rx __vocoder_ram_end (NOLOAD) : { *(.nxdn_bss*) }
+	.ysf_rx  __vocoder_ram_end (NOLOAD) : { *(.ysf_bss*) }
 	.dmrs_rx __vocoder_ram_end (NOLOAD) : { *(.dmrs_bss*) }
 	ASSERT(ADDR(.nxdn_rx) + SIZEOF(.nxdn_rx) <= 0x00057000, "the NXDN receiver's RAM runs into the start stack")
+	ASSERT(ADDR(.ysf_rx) + SIZEOF(.ysf_rx) <= 0x00057000, "the YSF receiver's RAM runs into the start stack")
 	ASSERT(ADDR(.dmrs_rx) + SIZEOF(.dmrs_rx) <= 0x00057000, "the DMR receiver's RAM runs into the start stack")
 	__vocoder_flash_start = LOADADDR(.vocoder_overlay);
 	__p25_flash_start = LOADADDR(.p25_overlay);

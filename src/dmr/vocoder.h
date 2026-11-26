@@ -47,6 +47,11 @@ void overlay_use(int which);
 // vocoder then pulled the RAM from under the running task. Refused loads are counted (overlay_refused, over the cable).
 void overlay_claim(int which);
 void overlay_release(int which);
+// YSF VW needs the IMBE code while the AMBE overlay is claimed by afrx. Load only the P25 code and hot tables:
+// its BSS (ckcpu.ld .p25_bss) overlaps the YSF receiver's live buffers (.ysf_rx) and must NOT be cleared. The caller's
+// IMBE state must therefore live outside .p25_bss. The afrx task only; exit() puts the vocoder back for DMR/AMBE.
+bool overlay_imbe_enter(void);
+void overlay_imbe_exit(void);
 extern volatile uint32_t overlay_refused;
 // Copies it into the RAM again (after a test overwrote it: vocoder/py/ram_test.py); its state starts afresh
 void vocoder_load(void);

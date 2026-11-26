@@ -147,6 +147,29 @@ void overlay_release(int which)
     }
 }
 
+bool overlay_imbe_enter(void)
+{
+    if (overlay == OVERLAY_P25) {
+        return true;
+    }
+    if (overlay != OVERLAY_AMBE) {
+        overlay_refused++;
+        return false;
+    }
+    // Only the code and the hot tables. overlay_load() would also clear .p25_bss, which shares its RAM with
+    // .ysf_rx: the demodulator, the dibit/frame buffers and the PCM queue would all disappear mid-call.
+    memcpy(__p25_ram_start, __p25_flash_start, (size_t)(__p25_load_end - __p25_ram_start));
+    overlay = OVERLAY_P25; // owner stays OVERLAY_AMBE: the switch is brief and inside the afrx task
+    return true;
+}
+
+void overlay_imbe_exit(void)
+{
+    if (overlay == OVERLAY_P25) {
+        vocoder_load(); // AMBE code back, its state zeroed; .ysf_rx starts after __vocoder_ram_end, untouched
+    }
+}
+
 void vocoderDecodeFrame(const uint8_t *in9, int16_t *pcm)
 {
     if (!decoder_ready) {

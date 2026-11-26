@@ -446,7 +446,10 @@ static void draw_bottom(void)
 
     bottom.mode = codeplug_mode_name(tx.channel.mode);
     bottom.item1 = bottom_bar_power_label(power);
-    bottom.item2 = (tx.channel.mode == CODEPLUG_MODE_NXDN) ? "6.25K" : ((tx.channel.flag4 & FLAG4_WIDE) ? "25K" : "12.5K");
+    bottom.item2 = (tx.channel.mode == CODEPLUG_MODE_NXDN) ? "6.25K"
+                   : ((tx.channel.mode == CODEPLUG_MODE_YSF) ||
+                      !(tx.channel.flag4 & FLAG4_WIDE)) ? "12.5K"
+                                                        : "25K";
     bottom_bar_draw(&bottom);
 }
 
@@ -571,6 +574,10 @@ static void draw(void)
                       THEME_COLOUR_TEXT_LABEL);
         } else if (tx.channel.mode == CODEPLUG_MODE_M17) { // the CAN there
             snprintf(cc, sizeof(cc), "CAN %u", (unsigned)codeplug_m17_can(&tx.channel));
+            draw_text(FB_WIDTH - WIDGET_MARGIN, DETAIL_Y + 2, cc, &font_roboto17, FONT_ALIGN_RIGHT,
+                      THEME_COLOUR_TEXT_LABEL);
+        } else if (tx.channel.mode == CODEPLUG_MODE_YSF) { // the DG-ID there
+            snprintf(cc, sizeof(cc), "DG-ID %u", (unsigned)codeplug_ysf_dgid(&tx.channel));
             draw_text(FB_WIDTH - WIDGET_MARGIN, DETAIL_Y + 2, cc, &font_roboto17, FONT_ALIGN_RIGHT,
                       THEME_COLOUR_TEXT_LABEL);
         }

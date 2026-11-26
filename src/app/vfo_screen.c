@@ -456,7 +456,8 @@ static void scan_range(uint32_t *low, uint32_t *high)
 static scan_kind_t scan_kind(void)
 {
     return (vfo()->mode == CODEPLUG_MODE_DMR) ? SCAN_DMR : (vfo()->mode == CODEPLUG_MODE_P25) ? SCAN_P25
-         : (vfo()->mode == CODEPLUG_MODE_NXDN) ? SCAN_NXDN : SCAN_ANALOG;
+         : (vfo()->mode == CODEPLUG_MODE_NXDN) ? SCAN_NXDN
+         : (vfo()->mode == CODEPLUG_MODE_YSF) ? SCAN_YSF : SCAN_ANALOG;
 }
 
 static uint32_t scan_dwell(void)
@@ -985,6 +986,7 @@ static void draw(void)
     dmr_call_t call;
     p25_call_t p25;
     nxdn_call_t nxdn;
+    ysf_call_t ysf;
     m17_call_t m17;
 
     if ((v->mode == CODEPLUG_MODE_DMR) && !digit_entry_active(&entry) && dmr_call(&call)) {
@@ -1005,6 +1007,11 @@ static void draw(void)
     if ((v->mode == CODEPLUG_MODE_M17) && !digit_entry_active(&entry) && m17_radio_call(&m17) && m17.src[0]) {
         snprintf(buffer, sizeof(buffer), "VFO %c", (vfo_screen_current() == 0) ? 'A' : 'B');
         qso_panel_draw_m17(&m17, buffer, power_text(v));
+        return;
+    }
+    if ((v->mode == CODEPLUG_MODE_YSF) && !digit_entry_active(&entry) && ysf_radio_call(&ysf)) {
+        snprintf(buffer, sizeof(buffer), "VFO %c", (vfo_screen_current() == 0) ? 'A' : 'B');
+        qso_panel_draw_ysf(&ysf, buffer, power_text(v));
         return;
     }
     draw_status_bar(v);
@@ -1070,6 +1077,14 @@ static void draw(void)
         icons_draw(WIDGET_MARGIN, TONE_Y + 3, ICONS_TALKGROUP, THEME_COLOUR_TEXT_LABEL);
         draw_text(VALUE_X, TONE_Y, text(TEXT_ALL), &font_roboto20, FONT_ALIGN_LEFT, THEME_COLOUR_TEXT);
         snprintf(buffer, sizeof(buffer), "CAN %u", (unsigned)codeplug_m17_can(v));
+        draw_text(FB_WIDTH - WIDGET_MARGIN, TONE_Y + 2, buffer, &font_roboto17, FONT_ALIGN_RIGHT,
+                  THEME_COLOUR_TEXT_LABEL);
+    } else if (v->mode == CODEPLUG_MODE_YSF) {
+        // YSF Fusion: the destination (a contact's callsign, or ALL), the DG-ID on its line, right
+        icons_draw(WIDGET_MARGIN, TONE_Y + 3, ICONS_TALKGROUP, THEME_COLOUR_TEXT_LABEL);
+        draw_text(VALUE_X, TONE_Y, target.name[0] ? target.name : "ALL", &font_roboto20, FONT_ALIGN_LEFT,
+                  THEME_COLOUR_TEXT);
+        snprintf(buffer, sizeof(buffer), "DG-ID %u", (unsigned)codeplug_ysf_dgid(v));
         draw_text(FB_WIDTH - WIDGET_MARGIN, TONE_Y + 2, buffer, &font_roboto17, FONT_ALIGN_RIGHT,
                   THEME_COLOUR_TEXT_LABEL);
     } else {

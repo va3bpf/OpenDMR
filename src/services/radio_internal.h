@@ -85,6 +85,7 @@ typedef struct {
     bool dmr_running;              // the modem and the FD6818 in DMR (DMR, P25, NXDN channels)
     bool p25_running;              // the P25 receiver runs (p25_radio.c)
     bool nxdn_running;             // the NXDN receiver runs (nxdn_radio.c)
+    bool ysf_running;              // the YSF receiver runs (ysf/ysf_radio.c)
     bool m17_running;              // the M17 receiver runs (m17_radio.c)
     bool dmrs_running;             // the DMR receiver in software runs (dmr_soft.c)
     volatile bool is_transmitting;

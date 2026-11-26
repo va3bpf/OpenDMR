@@ -41,6 +41,7 @@
 #define LAST_HEARD_PC_FLAG    0x03 // in the top byte of tg_or_pc: a private call (HR_C7000 PC_CALL_FLAG)
 #define LAST_HEARD_TS_UNKNOWN 0xFF // no timeslot: P25
 #define LAST_HEARD_TS_NXDN    0xFE // no timeslot: NXDN (told from P25 by the channel screen's recent callers)
+#define LAST_HEARD_TS_YSF     0xFD // no timeslot: YSF
 
 typedef struct {
     uint32_t id;                             // the caller's DMR ID

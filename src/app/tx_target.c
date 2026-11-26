@@ -41,6 +41,7 @@
 #include "tx_target.h"
 #include "p25_radio.h"
 #include "nxdn_radio.h"
+#include "ysf/ysf_radio.h"
 #include "m17_radio.h"
 #include "nxdn_id.h"
 
@@ -171,6 +172,16 @@ void tx_target_apply(codeplug_channel_t *channel, tx_target_t *target)
             id = 1;
         }
         nxdn_radio_set_target(codeplug_nxdn_ran(channel), nxdn_id_get(), (uint16_t)id, pc);
+        return;
+    }
+    if (channel->mode == CODEPLUG_MODE_YSF) {
+        // YSF Fusion: the channel's DG-ID, and the target's name as the callsign to call (ALL when none).
+        tx_target_get(channel, target);
+        if (target->id == CODEPLUG_CONTACT_ID_MAX) {
+            // The # entry's All Call: on the air YSF's group call is "ALL", not the localized UI string.
+            snprintf(target->name, sizeof(target->name), "ALL");
+        }
+        ysf_radio_set_target(codeplug_ysf_dgid(channel), target->name[0] ? target->name : "ALL");
         return;
     }
     if (channel->mode == CODEPLUG_MODE_M17) {

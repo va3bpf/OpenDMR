@@ -34,6 +34,7 @@
 #include "p25_radio.h"
 #include "nxdn_radio.h"
 #include "m17_radio.h"
+#include "ysf/ysf_radio.h"
 
 // The DMR caller on the channel and VFO screens (docs/ui-design.md 5.3, uiUtilities.c renderQSODataDM32()): the channel
 // (or VFO) name and the caller's ID, the callsign large (the ID when not known), the name, the city and state, the
@@ -47,5 +48,7 @@ void qso_panel_draw_nxdn(const nxdn_call_t *call, const char *channel_name, cons
 // An M17 caller (once the LSF or the LICH told it, as P25's and NXDN's once the caller is known): its callsign
 // large, the destination over the S meter ("ALL" for a broadcast), "M17" in the bottom bar
 void qso_panel_draw_m17(const m17_call_t *call, const char *channel_name, const char *power);
+// A YSF Fusion caller: its callsign large, the destination over the S meter, the DG-ID in the status bar
+void qso_panel_draw_ysf(const ysf_call_t *call, const char *channel_name, const char *power);
 
 #endif

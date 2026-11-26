@@ -50,6 +50,7 @@
 #include "dmr.h"
 #include "p25_radio.h"
 #include "nxdn_radio.h"
+#include "ysf/ysf_radio.h"
 #include "m17_radio.h"
 #include "dmr_soft.h"
 #include "radio_internal.h"
@@ -290,6 +291,10 @@ void tune_channel(const codeplug_channel_t *next, bool valid)
         nxdn_radio_stop();
         rs.nxdn_running = false;
     }
+    if (rs.ysf_running) {
+        ysf_radio_stop();
+        rs.ysf_running = false;
+    }
     if (rs.m17_running) {
         m17_radio_stop();
         rs.m17_running = false;
@@ -373,6 +378,11 @@ void tune_channel(const codeplug_channel_t *next, bool valid)
         if (rs.channel.mode == CODEPLUG_MODE_NXDN) {
             nxdn_radio_start();
             rs.nxdn_running = true;
+        }
+        // YSF Fusion: the discriminator recorded and the C4FM frames found in software, as NXDN (ysf_radio.c)
+        if (rs.channel.mode == CODEPLUG_MODE_YSF) {
+            ysf_radio_start();
+            rs.ysf_running = true;
         }
         // M17: the discriminator recorded and demodulated in software, as NXDN (m17_radio.c)
         if (rs.channel.mode == CODEPLUG_MODE_M17) {

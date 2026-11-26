@@ -38,6 +38,7 @@
 #include "dmr.h"
 #include "p25_radio.h"
 #include "nxdn_radio.h"
+#include "ysf/ysf_radio.h"
 #include "scan.h"
 #include "custom_data.h"
 
@@ -79,6 +80,8 @@ static bool found(const scan_t *scan, scan_kind_t kind, uint32_t now)
             return p25_radio_heard_within(now - scan->step_ms);
         case SCAN_NXDN:
             return nxdn_radio_heard_within(now - scan->step_ms);
+        case SCAN_YSF:
+            return ysf_radio_heard_within(now - scan->step_ms);
         default:
             return radio_has_carrier();
     }

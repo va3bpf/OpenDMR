@@ -296,6 +296,52 @@ void qso_panel_draw_m17(const m17_call_t *call, const char *channel_name, const 
     bottom_bar_draw(&bottom);
 }
 
+void qso_panel_draw_ysf(const ysf_call_t *call, const char *channel_name, const char *power)
+{
+    const int32_t x = WIDGET_MARGIN;
+    const int32_t width = FB_WIDTH - (2 * WIDGET_MARGIN);
+    const font_t *call_font; // callsign_font()
+    status_bar_data_t status = {.state = STATUS_BAR_RECEIVING};
+    s_meter_data_t meter = {.active = true, .open = true, .compact = true};
+    bottom_bar_data_t bottom = {.mode = "YSF", .item1 = power, .item2 = "12.5K"};
+    char src[YSF_CALLSIGN_LEN + 1], dst[YSF_CALLSIGN_LEN + 1], dgid[16];
+    const char *callsign, *to;
+
+    memcpy(src, call->src, YSF_CALLSIGN_LEN);
+    src[YSF_CALLSIGN_LEN] = '\0';
+    memcpy(dst, call->dst, YSF_CALLSIGN_LEN);
+    dst[YSF_CALLSIGN_LEN] = '\0';
+    while (src[0] && (src[strlen(src) - 1] == ' ')) {
+        src[strlen(src) - 1] = '\0';
+    }
+    while (dst[0] && (dst[strlen(dst) - 1] == ' ')) {
+        dst[strlen(dst) - 1] = '\0';
+    }
+    callsign = src[0] ? src : "YSF";
+    to = (!strcmp(dst, "ALL") || !strcmp(dst, "**********")) ? text(TEXT_ALL_CALL) : dst;
+
+    s_meter_set_signal(&meter, radio_signal_dbm());
+    status.signal_bars = s_meter_bars(&meter);
+    snprintf(dgid, sizeof(dgid), "DG-ID %u", (unsigned)call->dgid);
+    status.item1 = dgid;
+    status_bar_draw(&status);
+
+    if (channel_name && channel_name[0]) {
+        draw_text_fitted(x, TOP_Y, channel_name, &font_roboto17_bold, width, THEME_COLOUR_TEXT);
+    }
+    call_font = callsign_font(callsign, width);
+    draw_text(x, CALLSIGN_Y + (font_roboto44_bold.ascent - call_font->ascent), callsign, call_font, FONT_ALIGN_LEFT,
+              src[0] ? THEME_COLOUR_TEXT : THEME_COLOUR_TEXT_LABEL);
+
+    draw_hline(x, SEPARATOR_Y, width, THEME_COLOUR_LINE);
+    int32_t lx = x + icons_draw(x, TG_Y + 5, ICONS_TALKGROUP, THEME_COLOUR_TEXT_LABEL) + 8;
+    if (to[0]) {
+        draw_text_fitted(lx, TG_Y, to, &font_roboto20, x + width - lx, THEME_COLOUR_TEXT);
+    }
+    s_meter_draw(S_METER_Y, &meter);
+    bottom_bar_draw(&bottom);
+}
+
 void qso_panel_draw_nxdn(const nxdn_call_t *call, const char *channel_name, const char *power)
 {
     dmr_call_t shown = {.source = call->src, .tg_or_pc = nxdn_call_tg_or_pc(call)};

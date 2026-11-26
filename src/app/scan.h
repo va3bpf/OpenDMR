@@ -41,7 +41,7 @@
 
 #define SCAN_TICK_MS 10
 
-typedef enum { SCAN_ANALOG, SCAN_DMR, SCAN_P25, SCAN_NXDN } scan_kind_t;
+typedef enum { SCAN_ANALOG, SCAN_DMR, SCAN_P25, SCAN_NXDN, SCAN_YSF } scan_kind_t;
 
 typedef enum {
     SCAN_KEY_NONE,    // not the scan's: the screen handles it

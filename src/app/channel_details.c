@@ -27,7 +27,7 @@
  */
 
 /*
- * OpenDMR, screen: the channel details (menuChannelDetails.c, docs/ui-design.md 5.6). The 26 items of the
+ * OpenDMR, screen: the channel details (menuChannelDetails.c, docs/ui-design.md 5.6). The 27 items of the
  * channel (or VFO) of the home screen, in a list as the settings: UP / DOWN move, LEFT / RIGHT (and the rotary) change
  * the value of the channel itself (the home screen's, channel_screen_edit() / vfo_screen_vfo()): the radio follows after
  * the event (ui_tune()). A change is kept only with OK (the left key: written to the codeplug, a VFO saved, home);
@@ -67,6 +67,8 @@ enum {
     ITEM_MODE,
     ITEM_DMR_ID,
     ITEM_COLOUR_CODE,
+    ITEM_YSF_SSID,
+    ITEM_YSF_MODE,
     ITEM_TIMESLOT,
     ITEM_TG_LIST,
     ITEM_CONTACT,
@@ -172,6 +174,11 @@ static bool is_nxdn(void)
 static bool is_m17(void)
 {
     return edit->mode == CODEPLUG_MODE_M17;
+}
+
+static bool is_ysf(void)
+{
+    return edit->mode == CODEPLUG_MODE_YSF;
 }
 
 // P25's NAC (codeplug.h): LEFT / RIGHT 1, held 0x10 (0x000 - 0xFFF; 0xF7E receives any)
@@ -322,7 +329,7 @@ static void change(int item, int direction, bool fast, uint8_t modifiers)
         case ITEM_MODE: // FM, AM, USB, LSB, DMR (DMR is 12.5 kHz)
             edit->mode = codeplug_mode_step(edit->mode, direction);
             if ((edit->mode == CODEPLUG_MODE_DMR) || (edit->mode == CODEPLUG_MODE_NXDN) ||
-                (edit->mode == CODEPLUG_MODE_M17)) {
+                (edit->mode == CODEPLUG_MODE_M17) || (edit->mode == CODEPLUG_MODE_YSF)) {
                 set_bit(&edit->flag4, FLAG4_BANDWIDTH_25K, false);
             }
             if (edit->mode == CODEPLUG_MODE_NXDN) {
@@ -330,6 +337,11 @@ static void change(int item, int direction, bool fast, uint8_t modifiers)
             }
             if (edit->mode == CODEPLUG_MODE_M17) {
                 codeplug_set_m17_can(edit, codeplug_m17_can(edit)); // another mode's byte: a CAN
+            }
+            if (edit->mode == CODEPLUG_MODE_YSF) {
+                codeplug_set_ysf_dgid(edit, codeplug_ysf_dgid(edit)); // another mode's byte: a DG-ID
+                codeplug_set_ysf_ssid(edit, codeplug_ysf_ssid(edit)); // and the unused byte: an SSID
+                codeplug_set_ysf_mode(edit, codeplug_ysf_mode(edit)); // flag3: V/D-1, DN or VW
             }
             break;
         case ITEM_COLOUR_CODE:
@@ -343,10 +355,38 @@ static void change(int item, int direction, bool fast, uint8_t modifiers)
                 uint8_t can = codeplug_m17_can(edit);
                 step_value(&can, direction, 0, CODEPLUG_M17_CAN_MAX);
                 codeplug_set_m17_can(edit, can);
+            } else if (is_ysf()) {
+                uint8_t dgid = codeplug_ysf_dgid(edit);
+                step_value(&dgid, direction, 0, CODEPLUG_YSF_DGID_MAX);
+                codeplug_set_ysf_dgid(edit, dgid);
             } else if (!fm) {
                 uint8_t cc = codeplug_colour_code(edit); // from the colour code in use (the byte may hold a NAC)
                 step_value(&cc, direction, 0, COLOUR_CODE_MAX);
                 edit->tx_colour = cc;
+            }
+            break;
+        case ITEM_YSF_SSID:
+            if (is_ysf()) {
+                uint8_t ssid = codeplug_ysf_ssid(edit);
+
+                step_value(&ssid, direction, 0, CODEPLUG_YSF_SSID_MAX);
+                codeplug_set_ysf_ssid(edit, ssid);
+            }
+            break;
+        case ITEM_YSF_MODE:
+            if (is_ysf()) {
+                static const uint8_t modes[] = { CODEPLUG_YSF_MODE_VD1, CODEPLUG_YSF_MODE_DN, CODEPLUG_YSF_MODE_VW };
+                uint8_t mode = codeplug_ysf_mode(edit);
+                unsigned i = 0;
+
+                while ((i < sizeof(modes)) && (modes[i] != mode)) {
+                    i++;
+                }
+                if (i == sizeof(modes)) {
+                    i = 0;
+                }
+                i = (i + (direction > 0 ? 1 : sizeof(modes) - 1)) % sizeof(modes);
+                codeplug_set_ysf_mode(edit, modes[i]);
             }
             break;
         case ITEM_TIMESLOT:
@@ -356,7 +396,7 @@ static void change(int item, int direction, bool fast, uint8_t modifiers)
             break;
         case ITEM_RX_CSS:
         case ITEM_TX_CSS:
-            if (fm && !aprs && !is_nxdn() && !is_m17()) {
+            if (fm && !aprs && !is_nxdn() && !is_m17() && !is_ysf()) {
                 {
                     uint16_t *tone = ((item == ITEM_RX_CSS) ? &edit->rx_tone : &edit->tx_tone);
 
@@ -365,7 +405,7 @@ static void change(int item, int direction, bool fast, uint8_t modifiers)
             }
             break;
         case ITEM_BANDWIDTH:
-            if (fm && !is_nxdn() && !is_m17()) {
+            if (fm && !is_nxdn() && !is_m17() && !is_ysf()) {
                 set_bit(&edit->flag4, FLAG4_BANDWIDTH_25K, on);
             }
             break;
@@ -463,6 +503,8 @@ static void format_item(int item, char *label, size_t label_size, char *out, siz
         [ITEM_DMR_ID] = TEXT_DMR_ID,
         [ITEM_COLOUR_CODE] = TEXT_COLOUR_CODE,
         [ITEM_TIMESLOT] = TEXT_TIMESLOT,
+        [ITEM_YSF_SSID] = TEXT_N_A,
+        [ITEM_YSF_MODE] = TEXT_N_A,
         [ITEM_TG_LIST] = TEXT_TG_LIST,
         [ITEM_CONTACT] = TEXT_CONTACT,
         [ITEM_BANDWIDTH] = TEXT_BANDWIDTH,
@@ -535,10 +577,34 @@ static void format_item(int item, char *label, size_t label_size, char *out, siz
             } else if (is_m17()) {
                 snprintf(label, label_size, "CAN");
                 snprintf(out, size, "%u", codeplug_m17_can(edit));
+            } else if (is_ysf()) {
+                snprintf(label, label_size, "DG-ID");
+                snprintf(out, size, "%u", codeplug_ysf_dgid(edit));
             } else if (fm) {
                 snprintf(out, size, "%s", na);
             } else {
                 snprintf(out, size, "%u", codeplug_colour_code(edit));
+            }
+            break;
+        case ITEM_YSF_SSID:
+            snprintf(label, label_size, "SSID");
+            if (!is_ysf()) {
+                snprintf(out, size, "%s", na);
+            } else if (codeplug_ysf_ssid(edit)) {
+                snprintf(out, size, "-%u", codeplug_ysf_ssid(edit));
+            } else {
+                snprintf(out, size, "%s", text(TEXT_NONE));
+            }
+            break;
+        case ITEM_YSF_MODE:
+            snprintf(label, label_size, "YSF Mode");
+            if (!is_ysf()) {
+                snprintf(out, size, "%s", na);
+            } else {
+                uint8_t mode = codeplug_ysf_mode(edit);
+
+                snprintf(out, size, "%s", (mode == CODEPLUG_YSF_MODE_VD1) ? "V/D-1" :
+                                          (mode == CODEPLUG_YSF_MODE_DN) ? "DN" : "VW");
             }
             break;
         case ITEM_TIMESLOT:
@@ -577,13 +643,13 @@ static void format_item(int item, char *label, size_t label_size, char *out, siz
         }
         case ITEM_RX_CSS:
             format_css(text(TEXT_RX), edit->rx_tone, label, label_size, out, size);
-            if (is_nxdn() || is_m17()) {
+            if (is_nxdn() || is_m17() || is_ysf()) {
                 snprintf(out, size, "%s", na);
             }
             break;
         case ITEM_TX_CSS:
             format_css(text(TEXT_TX), edit->tx_tone, label, label_size, out, size);
-            if (is_nxdn() || is_m17()) {
+            if (is_nxdn() || is_m17() || is_ysf()) {
                 snprintf(out, size, "%s", na);
             }
             break;
@@ -592,7 +658,7 @@ static void format_item(int item, char *label, size_t label_size, char *out, siz
                 snprintf(out, size, "6.25kHz");
                 break;
             }
-            snprintf(out, size, "%s", ((!fm || is_m17()) ? (is_m17() ? "12.5kHz" : na)
+            snprintf(out, size, "%s", ((!fm || is_m17() || is_ysf()) ? ((is_m17() || is_ysf()) ? "12.5kHz" : na)
                                                        : ((edit->flag4 & FLAG4_BANDWIDTH_25K) ? "25kHz" : "12.5kHz")));
             break;
         case ITEM_STEP: {

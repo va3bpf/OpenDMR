@@ -361,7 +361,8 @@ codeplug_channel_t *channel_screen_edit(void)
 static scan_kind_t scan_kind(void)
 {
     return (channel.mode == CODEPLUG_MODE_DMR) ? SCAN_DMR : (channel.mode == CODEPLUG_MODE_P25) ? SCAN_P25
-         : (channel.mode == CODEPLUG_MODE_NXDN) ? SCAN_NXDN : SCAN_ANALOG;
+         : (channel.mode == CODEPLUG_MODE_NXDN) ? SCAN_NXDN
+         : (channel.mode == CODEPLUG_MODE_YSF) ? SCAN_YSF : SCAN_ANALOG;
 }
 
 static uint32_t scan_dwell(void)
@@ -905,6 +906,7 @@ static void draw(void)
     dmr_call_t call;
     p25_call_t p25;
     nxdn_call_t nxdn;
+    ysf_call_t ysf;
     m17_call_t m17;
 
     if ((channel.mode == CODEPLUG_MODE_DMR) && dmr_call(&call)) {
@@ -925,6 +927,11 @@ static void draw(void)
     if ((channel.mode == CODEPLUG_MODE_M17) && m17_radio_call(&m17) && m17.src[0]) {
         format_names(zone_text, sizeof(zone_text), name, sizeof(name));
         qso_panel_draw_m17(&m17, name, power_text());
+        return;
+    }
+    if ((channel.mode == CODEPLUG_MODE_YSF) && ysf_radio_call(&ysf)) {
+        format_names(zone_text, sizeof(zone_text), name, sizeof(name));
+        qso_panel_draw_ysf(&ysf, name, power_text());
         return;
     }
     meter.active = true;
@@ -1014,6 +1021,14 @@ static void draw(void)
         panel.line_text = text(TEXT_ALL);
         panel.line_right = cc_text;
         bottom.mode = "M17";
+        bottom.item2 = "12.5K";
+    } else if (channel.mode == CODEPLUG_MODE_YSF) {
+        // YSF Fusion: the destination (a contact's callsign, or ALL) on the line, the DG-ID on the right
+        snprintf(cc_text, sizeof(cc_text), "DG-ID %u", (unsigned)codeplug_ysf_dgid(&channel));
+        panel.line_icon = ICONS_TALKGROUP;
+        panel.line_text = target.name[0] ? target.name : "ALL";
+        panel.line_right = cc_text;
+        bottom.mode = "YSF";
         bottom.item2 = "12.5K";
     } else {
         uint16_t tone = (channel.rx_tone != CODEPLUG_CSS_NONE) ? channel.rx_tone : channel.tx_tone;

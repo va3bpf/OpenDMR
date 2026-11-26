@@ -44,7 +44,7 @@
 // The codeplug knows FM (0) and DMR (1). AM, USB and LSB (receive only) are stored as an analog channel (0, what the
 // CPS shows) with the mode in the byte the OpenGD77 format leaves unused (opendmr_mode: 0xA1 AM, 0xA2 USB, 0xA3 LSB,
 // anything else FM); P25 as a digital one (1: the CPS shows DMR) with opendmr_mode 0xA4, NXDN (NXDN48, receive only)
-// the same with 0xA5, M17 (receive only for now) with 0xA6
+// the same with 0xA5, M17 (receive only for now) with 0xA6, YSF (Fusion/C4FM) with 0xA7
 typedef enum {
     CODEPLUG_MODE_FM = 0,
     CODEPLUG_MODE_DMR = 1,
@@ -54,17 +54,18 @@ typedef enum {
     CODEPLUG_MODE_P25 = 5,
     CODEPLUG_MODE_NXDN = 6,
     CODEPLUG_MODE_M17 = 7,
+    CODEPLUG_MODE_YSF = 8,
     CODEPLUG_MODES
 } codeplug_mode_t;
 
 static inline bool codeplug_mode_is_analog(uint8_t mode)
 {
     return (mode != CODEPLUG_MODE_DMR) && (mode != CODEPLUG_MODE_P25) && (mode != CODEPLUG_MODE_NXDN) &&
-           (mode != CODEPLUG_MODE_M17);
+           (mode != CODEPLUG_MODE_M17) && (mode != CODEPLUG_MODE_YSF);
 }
 
-// DMR, P25, NXDN and M17: the FD6818 set up as for DMR (the HR_C7000 demodulates 4FSK; NXDN: it records the
-// discriminator)
+// DMR, P25, NXDN, M17 and YSF: the FD6818 set up as for DMR (the HR_C7000 demodulates 4FSK; NXDN and YSF: it records
+// the discriminator)
 static inline bool codeplug_mode_is_digital(uint8_t mode)
 {
     return !codeplug_mode_is_analog(mode);
@@ -79,11 +80,11 @@ static inline bool codeplug_mode_is_ssb(uint8_t mode)
 static inline bool codeplug_mode_can_transmit(uint8_t mode)
 {
     return (mode == CODEPLUG_MODE_FM) || (mode == CODEPLUG_MODE_DMR) || (mode == CODEPLUG_MODE_P25) ||
-           (mode == CODEPLUG_MODE_NXDN) || (mode == CODEPLUG_MODE_M17);
+           (mode == CODEPLUG_MODE_NXDN) || (mode == CODEPLUG_MODE_M17) || (mode == CODEPLUG_MODE_YSF);
 }
 
-const char *codeplug_mode_name(uint8_t mode);  // "FM", "DMR", "AM", "USB", "LSB", "P25", "NXDN", "M17"
-uint8_t codeplug_mode_step(uint8_t mode, int direction); // the mode key's order: FM, AM, USB, LSB, DMR, P25, NXDN, M17
+const char *codeplug_mode_name(uint8_t mode);  // "FM", "DMR", "AM", "USB", "LSB", "P25", "NXDN", "M17", "YSF"
+uint8_t codeplug_mode_step(uint8_t mode, int direction); // the mode key's order: FM, AM, USB, LSB, DMR, P25, NXDN, M17, YSF
 
 // A channel as stored (56 bytes), then two values worked out when it is read
 typedef struct {
@@ -170,6 +171,58 @@ static inline uint8_t codeplug_m17_can(const codeplug_channel_t *channel)
 static inline void codeplug_set_m17_can(codeplug_channel_t *channel, uint8_t can)
 {
     channel->tx_colour = (can <= CODEPLUG_M17_CAN_MAX) ? can : 0;
+}
+
+// YSF channels: the DG-ID (0 = none, 1 .. 126 = a code, 127 = break out), in DMR's colour code byte as NXDN's RAN.
+// The CPS does not write it: a channel made from a CPS record starts with no DG-ID
+#define CODEPLUG_YSF_DGID_DEFAULT 0
+#define CODEPLUG_YSF_DGID_MAX     127
+static inline uint8_t codeplug_ysf_dgid(const codeplug_channel_t *channel)
+{
+    return (channel->tx_colour <= CODEPLUG_YSF_DGID_MAX) ? channel->tx_colour : CODEPLUG_YSF_DGID_DEFAULT;
+}
+static inline void codeplug_set_ysf_dgid(codeplug_channel_t *channel, uint8_t dgid)
+{
+    channel->tx_colour = (dgid <= CODEPLUG_YSF_DGID_MAX) ? dgid : CODEPLUG_YSF_DGID_DEFAULT;
+}
+
+// The YSF SSID appended to the callsign as the source ("LU8HPA-1"), 0 = none, 1 .. 15 = "-N". It goes in the byte
+// the GD-77 format leaves unused, tagged with 0xB0 (P25 uses 0xA0 there for its NAC): a CPS channel (0x00 / 0xFF)
+// starts with no SSID. Like the DG-ID, the CPS does not write it.
+#define CODEPLUG_YSF_SSID_DEFAULT 0
+#define CODEPLUG_YSF_SSID_MAX     15
+#define CODEPLUG_YSF_SSID_TAG     0xB0
+static inline uint8_t codeplug_ysf_ssid(const codeplug_channel_t *channel)
+{
+    return ((channel->unused2 & 0xF0) == CODEPLUG_YSF_SSID_TAG) ? (uint8_t)(channel->unused2 & 0x0F)
+                                                                : CODEPLUG_YSF_SSID_DEFAULT;
+}
+static inline void codeplug_set_ysf_ssid(codeplug_channel_t *channel, uint8_t ssid)
+{
+    channel->unused2 = (uint8_t)(CODEPLUG_YSF_SSID_TAG | ((ssid <= CODEPLUG_YSF_SSID_MAX) ? ssid : 0));
+}
+
+// The YSF voice/data mode: the FICH DT itself (0 = V/D-1, 2 = DN, 3 = VW), tagged with 0xC0 in flag3, a byte
+// nothing else in the firmware or the CPS writes. A blank/CPS channel starts in V/D-1. Data FR (DT 1) carries no
+// voice and is not offered; an unknown value falls back to V/D-1.
+#define CODEPLUG_YSF_MODE_TAG     0xC0
+#define CODEPLUG_YSF_MODE_VD1     0 // YSF_DT_VD_MODE1
+#define CODEPLUG_YSF_MODE_DN      2 // YSF_DT_VD_MODE2
+#define CODEPLUG_YSF_MODE_VW      3 // YSF_DT_VOICE_FR
+#define CODEPLUG_YSF_MODE_DEFAULT CODEPLUG_YSF_MODE_VD1
+static inline uint8_t codeplug_ysf_mode(const codeplug_channel_t *channel)
+{
+    uint8_t mode = (channel->flag3 & 0xF0) == CODEPLUG_YSF_MODE_TAG ? (uint8_t)(channel->flag3 & 0x0F) : 0;
+
+    return (mode == CODEPLUG_YSF_MODE_VD1 || mode == CODEPLUG_YSF_MODE_DN || mode == CODEPLUG_YSF_MODE_VW)
+               ? mode : CODEPLUG_YSF_MODE_DEFAULT;
+}
+static inline void codeplug_set_ysf_mode(codeplug_channel_t *channel, uint8_t mode)
+{
+    if (mode != CODEPLUG_YSF_MODE_DN && mode != CODEPLUG_YSF_MODE_VW) {
+        mode = CODEPLUG_YSF_MODE_DEFAULT;
+    }
+    channel->flag3 = (uint8_t)(CODEPLUG_YSF_MODE_TAG | mode);
 }
 
 typedef struct {

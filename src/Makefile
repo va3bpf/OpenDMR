@@ -45,7 +45,7 @@ LDFLAGS := $(CPU) -nostartfiles -Wl,--gc-sections -Wl,--undefined=serial_update_
 LIBS    := -lm -lc -lgcc
 
 # Layers, see docs/architecture.md
-SRCDIRS := startup freertos freertos/portable/CK803 hal drivers dmr graphics graphics/fonts graphics/themes ui ui/text ui/widgets services app
+SRCDIRS := startup freertos freertos/portable/CK803 hal drivers dmr graphics graphics/fonts graphics/themes ui ui/text ui/widgets services services/ysf app
 C_SRCS  := $(foreach d,$(SRCDIRS),$(wildcard $(d)/*.c))
 S_SRCS  := $(foreach d,$(SRCDIRS),$(wildcard $(d)/*.S))
 OBJS    := $(addprefix $(BUILD)/,$(C_SRCS:.c=.o) $(S_SRCS:.S=.o))            $(patsubst $(VOCODER)/%.c,$(BUILD)/vocoder/%.o,$(wildcard $(VOCODER)/*.c)) \
