@@ -665,7 +665,8 @@ static void format_item(int item, char *label, size_t label_size, char *out, siz
         }
         case ITEM_APRS:
             if (!fm) {
-                snprintf(out, size, "%s", na);
+                // DMR: the channel is set from the CPS; show whether it names an APRS configuration
+                snprintf(out, size, "%s", yes_no(edit->aprs_config_index != 0));
             } else if (edit->aprs_config_index == 0) {
                 snprintf(out, size, "%s", text(TEXT_NONE));
             } else {

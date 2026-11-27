@@ -41,7 +41,8 @@
  * Transmit (transmit(), the PTT): the recording stopped, the mic's 20 ms frames through our AMBE+2 encoder, five a
  * frame: the preamble (+3 -3), a header, V/D mode 2 frames (FN 0 .. 6, FT 6: the destination ALL as ten '*', our
  * callsign, ...), the last finished with silence, a terminator; the dibits through the P25 physical layer's transmit
- * FIFO (4800 symbols/s), the modem's 4FSK level scaled to YSF's +-2.7 kHz (ysf_tx_dev).
+ * FIFO (4800 symbols/s), the modem's 4FSK level scaled to YSF's +-2.7 kHz wide (ysf_tx_dev), as in v0.10.0. A Pi-Star
+ * configured for YSF wide needs this; narrow only works there with LoDev=1 in MMDVMHost.
  *
  * The receiver's state lives in the AMBE overlay's RAM after the vocoder's (ckcpu.ld .ysf_rx, as NXDN's).
  */
@@ -64,22 +65,24 @@
 #include "afrx.h"
 
 #define PCM_FRAMES    16  // 320 ms of decoded voice
-#define PLAY_START    1   // frames queued before the playback starts, and the time from the first: the voice segments
-#define PLAY_START_MS 40  // come 15 ms apart within a frame, 40 ms between frames, read in halves of 32 ms (decoded as
-                          // they come, ysf_core.c); simulated: 40 ms leave ~12 ms (a frame's 5 at once and 10 ms ran
-                          // out every ~0.8 s)
+#define PLAY_START    4   // frames queued before the playback starts, and the time from the first: the voice segments
+#define PLAY_START_MS 80  // come 15 ms apart within a frame, 40 ms between frames, read in halves of 32 ms (decoded as
+                          // they come, ysf_core.c); 40 ms ran dry every ~0.8 s, 60 ms with 3 frames left one micro-cut
+                          // in the field; 80 ms with 4 frames adds ~20 ms more headroom for the remaining jitter
 #define CALL_TIMEOUT  350 // ms without a frame: the call ended (a frame is 100 ms)
 #define VOICE_BAD     9   // V/D mode 2: a voice frame with more triplets split than this (of 27) played as silence
-#define TX_LEAD_MAX   480 // dibits of preamble at most
+#define TX_LEAD_MAX   960 // dibits of preamble at most: 200 ms of 0x77, as MMDVM/Yaesu key up
 
 #define OVERLAY_BSS __attribute__((section(".ysf_bss"))) // after the vocoder's RAM (ckcpu.ld), not zeroed
 
 volatile ysf_radio_stats_t ysf_radio_stats;
-// the 4FSK level (MODEM_MOD_SCALE_ONE 1024: P25's +-1.8 kHz) for YSF's +-2.7 kHz (wide; the standard's narrow is half)
+// the 4FSK level (MODEM_MOD_SCALE_ONE 1024: P25's +-1.8 kHz) for YSF's +-2.7 kHz wide (FICH Dev=0), as in v0.10.0.
+// MMDVM/Pi-Star hotspots configured for YSF wide only decode this; narrow (768, Dev=1) needs LoDev=1 in MMDVMHost.
 volatile uint32_t ysf_tx_dev = 1536;
-// dibits of preamble (+3 -3) before the header: 40 ms (an FTM-400D: ~42 ms). The first V/D frame is ready ~126 ms after
-// the PTT and must be in the FIFO a block (30 ms) before the header has gone: 20 ms ran it dry (frames shifted, lost)
-volatile uint32_t ysf_tx_lead = 192;
+// 200 ms of +3 -3 (0x77) before the first sync, as MMDVM/Yaesu key up: receivers need it to find sync before the
+// header, which is the frame carrying CSD1 (our callsign). With only 40 ms some reflected calls were heard without
+// the callsign on the original radios.
+volatile uint32_t ysf_tx_lead = 960;
 volatile uint32_t ysf_tx_low_power;    // not 0: 50 mW (tests with the radios side by side)
 volatile uint32_t ysf_tx_stats[4];     // calls, frames, the longest AMBE encoding (us), underruns (the last call's)
 
@@ -319,11 +322,15 @@ static void transmit(void)
     codeplug_get_radio_name(src);
     src[YSF_CALL_LEN] = 0;
     const char *dst = "**********"; // ALL (group / CQ)
-    ysf_fich_t f = {.fi = YSF_FI_HC, .cs = 2, .cm = 0, .ft = 6, .dt = YSF_DT_VD2, .sc = (uint8_t)(tx_dgid & 0x7F)};
+    ysf_fich_t f = {.fi = YSF_FI_HC, .cs = 2, .cm = 0, .ft = 6, .dev = 0, .dt = YSF_DT_VD2,
+                    .sc = (uint8_t)(tx_dgid & 0x7F)};
 
     uint32_t lead = (ysf_tx_lead > TX_LEAD_MAX) ? TX_LEAD_MAX : ysf_tx_lead;
     while (lead > 0) {
         uint32_t k = (lead > YSF_FRAME_DIBITS) ? YSF_FRAME_DIBITS : lead;
+        while (p25_phy_tx_room() < YSF_FRAME_DIBITS + 144) {
+            vTaskDelay(pdMS_TO_TICKS(2));
+        }
         ysf_tx_preamble(tx_dibits, (int)k);
         p25_phy_tx_put(tx_dibits, (int)k);
         lead -= k;
